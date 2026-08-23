@@ -173,106 +173,135 @@ the user, is specified in §5 under **Refresh**.
 
 ## 5. API surface
 
-DRF, JWT via SimpleJWT. Every endpoint below exists because a screen needs it; the table at the
-end maps them back.
+DRF, JWT via SimpleJWT. Every endpoint exists because a screen needs it; the map at the end ties
+them back. Nothing here assumes a collection is small enough to send whole.
 
 ### Identifiers
 
 **UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
-everywhere except one place: `Service` also carries a unique `slug`, and public catalog routes
-take that instead.
+everywhere except one: `Service` also carries a unique `slug`, and public catalog routes take it.
 
 The reason is the logged-out view. Someone sends you `statusboard.app/service/twilio` during an
-outage and it has to be readable and guessable; a UUID there would be hostile for the one surface
-built to be shared. Everything the user owns — dashboards, items — stays UUID, so nothing personal
-is enumerable.
+outage and it has to be readable; a UUID would be hostile on the one surface built to be shared.
+Everything the user owns stays UUID, so nothing personal is enumerable.
 
-- Slug exists on `Service` only. No other model gets one.
-- It is unique and stable. Renaming keeps the old slug as a redirect rather than breaking links.
-- Services created through `resolve/` get a slug derived from the host, de-duplicated on
-  collision (`linear`, `linear-2`).
-- Writes and anything requiring auth address the UUID, never the slug.
+- Slug exists on `Service` only, is unique, and is stable — renaming keeps the old slug as a
+  redirect rather than breaking shared links.
+- `resolve/` derives a slug from the host and de-duplicates on collision (`linear`, `linear-2`).
+- Writes and authed routes address the UUID, never the slug.
+
+### Conventions
+
+Applied to every collection, so there is one thing to learn.
+
+**Envelope.** Lists return the same shape, always:
+
+```json
+{ "counts": { … }, "next": "cursor|null", "results": [ … ] }
+```
+
+`counts` is a grouped aggregate over the whole collection, not the page — so a chip reading
+`Outages 3` is right on page four. `next` is a keyset cursor; page size is 50 and not client
+controlled.
+
+**Filtering** is `?status=any|outages|maintenance`, mapped to severity bands: `outages` is
+`severity <= 3`, `maintenance` is `severity = 4`, `any` is unfiltered. The same parameter drives
+the chips on Home, the catalog and the public view.
+
+**Sorting** is `?sort=smart|severity|name|updated`, default `smart` — tracked first, then severity
+ascending, then name. `-` prefix reverses.
+
+**Freshness.** Every list carries `oldest_refreshed_at` across the whole collection, which is what
+the header renders. `2 MIN AGO` means everything is at most two minutes old, not just something.
+
+**Caching.** `GET`s are `ETag`ed. The client sends `If-None-Match`; a `304` is what makes polling
+the board cheap.
+
+**Errors** are DRF-standard with a `code` for anything the UI branches on:
+`throttled` (429, with `Retry-After`), `provider_unreachable`, `no_status_page_found`,
+`invalid_or_expired_token`.
 
 ### Account
 
 ```
-POST   /api/auth/magic-link/    {email} → 202; rate-limited per email and per IP
-POST   /api/auth/verify/        {token} → access (15m) + refresh (30d, rotating)
-POST   /api/auth/refresh/       rotate the refresh token
-GET    /api/me/                 email, preferences
-PATCH  /api/me/                 {theme, refresh_interval}
-DELETE /api/me/                 deletes dashboard, items, user; catalog and status untouched
+POST   /api/auth/magic-link/     {email} → 202; throttled per email and per IP
+POST   /api/auth/verify/         {token} → access (15m) + refresh (30d, rotating)
+POST   /api/auth/refresh/        rotate
+POST   /api/auth/logout/         blacklist the refresh token
+GET    /api/me/                  email, preferences, counts of what you track
+PATCH  /api/me/                  {theme, refresh_interval}
+DELETE /api/me/                  deletes dashboard, items, user; catalog and status untouched
 ```
 
-Preferences live on `User`, not in local storage, so a second device inherits them.
+Preferences live on `User`, not local storage, so a second device inherits them.
 
 ### Catalog
 
-One list endpoint serves Discover, the suggested lists, and the public "down right now" view.
-They are the same query with different parameters — there is no separate outages endpoint.
+One list serves Discover, the suggested lists and the public "down right now" view — the same
+query with different parameters.
 
 ```
-GET /api/catalog/services/
-      ?q=                   free text; omit for the suggested list
-      &status=outages       outages | maintenance | any     (severity bands)
-      &cursor=              keyset pagination, 30 per page
-GET /api/catalog/services/{slug}/            service detail, including the component tree
-GET /api/catalog/services/{slug}/incidents/  ?state=active|resolved|all
-POST /api/catalog/resolve/                   {url} → sniff provider, create-or-return
+GET  /api/catalog/services/
+       ?q=          free text; omit for the suggested list
+       &status=     any | outages | maintenance
+       &tracked=    true | false        (authed only)
+       &sort=       smart | severity | name | featured
+       &cursor=
+GET  /api/catalog/services/{slug}/
+GET  /api/catalog/services/{slug}/components/
+       ?tracked=    true | false        drives Showing All / Tracked / Untracked
+       &status=     &sort= &cursor=
+GET  /api/catalog/services/{slug}/incidents/
+       ?state=      active | resolved | all
+       &cursor=
+POST /api/catalog/resolve/        {url} → sniff provider, create-or-return
 ```
 
-**Ordering.** With `q`, relevance. Without `q`, `featured_rank` ascending — that *is* the
-suggested list, so "suggestions" is not a separate concept or endpoint. On the Maintenance tab,
-`status=maintenance` restricts it to services with an upcoming window, which is why a suggestion
-there always has a time to show.
+**Suggestions are not a separate concept.** The catalog list with no `q`, sorted `featured`, *is*
+the suggested list. On the Maintenance tab `status=maintenance` restricts it to services with an
+upcoming window, which is why a suggestion there always has a time to show.
 
-**Service list item** carries everything a row needs, so the client never fetches per row:
+**Components are their own paginated collection.** Cloudflare publishes 109 and nothing caps that,
+so the service detail does not inline them — it reports `component_count` and the tab pages
+through this endpoint. Its `counts` gives the tab labels (`All 42`, `Tracked 5`).
+
+**Service list item** — everything a row needs, so no per-row fetches:
 
 ```json
 { "slug": "twilio", "name": "Twilio", "logo": "…",
-  "status": "major_outage", "severity": 0, "since": "2026-08-23T14:02:00Z",
+  "status": "major_outage", "severity": 0, "since": "…",
   "component_count": 42,
-  "tracked": { "service": true, "components": 5 },   // null when signed out
+  "tracked": { "service": true, "components": 5 },
   "maintenance_window": null }
 ```
 
-**Service detail** adds what the service screen needs — the About fields and per-component status:
+`tracked` is `null` when unauthenticated, so the client renders `＋` without a second code path.
+
+**Service detail** — the About fields plus current state:
 
 ```json
 { "slug": "twilio", "name": "Twilio", "description": "…",
-  "status_page_url": "https://status.twilio.com", "provider": "statuspage",
+  "status_page_url": "…", "provider": "statuspage",
   "in_catalog_since": "2026-08-12", "refresh_interval_seconds": 300,
   "status": "major_outage", "severity": 0, "since": "…",
-  "active_incident_count": 2,
-  "components": [
-    { "id": "uuid", "name": "Programmable Messaging", "parent": null, "is_group": true,
-      "child_count": 6, "status": "major_outage", "severity": 0, "since": "…",
-      "tracked": false },
-    { "id": "uuid", "name": "SMS", "parent": "uuid", "is_group": false,
-      "status": "degraded", "severity": 2, "since": "…", "tracked": true }
-  ] }
+  "component_count": 42, "active_incident_count": 2,
+  "tracked": { "service": true, "components": 5 } }
 ```
-
-The whole tree comes in one response, so the Components tab and its `Showing All / Tracked /
-Untracked` filter need no further requests.
 
 ### Board
 
 ```
-GET    /api/dashboards/{uuid}/          every item, with resolved status
-POST   /api/dashboards/{uuid}/items/    {service_id, component_id?}
+GET    /api/dashboards/{uuid}/          ?status= &sort= &cursor=
+POST   /api/dashboards/{uuid}/items/    {service_id} | {component_id}
 DELETE /api/dashboards/items/{uuid}/
 PATCH  /api/dashboards/items/{uuid}/    {position}
+POST   /api/dashboards/{uuid}/items/bulk/    {service_id, scope: "all_components"}
+DELETE /api/dashboards/{uuid}/items/bulk/    {service_id}   — the "Remove all" control
 ```
 
-**Filtering and sorting are client-side, deliberately.** A board is five to fifty rows and the
-whole payload is already in the browser, so `All / Outages / Maintenance` and Smart sort are
-instant and work offline from the cached response. Server-side parameters would add round trips,
-make the chip counts a second request, and break filtering when the network is down — which is
-exactly when someone is filtering to outages. The response therefore includes every item
-regardless of state, and the chip counts are computed from it.
-
-If a board ever outgrows that, `?status=` and `?cursor=` can be added without changing the shape.
+**Filtering, sorting and pagination are server-side, without exception.** There is no cap on board
+size — one service can contribute 109 components — so the API never assumes the board fits in one
+response, and there is exactly one implementation of each rule.
 
 **Board item** resolves to whichever thing it points at:
 
@@ -282,7 +311,7 @@ If a board ever outgrows that, `?status=` and `?cursor=` can be added without ch
   "component": { "id": "uuid", "name": "SMS", "path": "Twilio › Programmable Messaging" },
   "status": "degraded", "severity": 2, "since": "…",
   "component_count": 42, "maintenance_window": null,
-  "last_refreshed_at": "2026-08-23T14:38:00Z" }
+  "position": 3, "last_refreshed_at": "…" }
 ```
 
 ### Refresh
@@ -293,49 +322,46 @@ POST /api/refresh/{service_id}/    → one service, refreshed
 ```
 
 **One call, not two.** The endpoint nudges every service the caller tracks — skipping any inside
-its global cooldown — waits up to three seconds for those polls, then returns the same payload
-`GET /api/dashboards/{uuid}/` would. Whatever has not landed in three seconds is returned at its
-stored value and arrives on the next scheduled poll.
+its global cooldown — waits up to three seconds, then returns the same payload the board `GET`
+would, honouring the caller's current `status` and `sort`. Whatever has not landed is returned at
+its stored value and arrives on the next scheduled poll.
 
-That keeps the button honest: one press, one request, and the screen either changed or it did
-not. The alternative — POST then GET — makes the client guess how long to wait before refetching,
-and usually refetches too early.
+That keeps the button honest: one press, one request, and the screen either changed or it did not.
+POST-then-GET forces the client to guess a wait, and it guesses too early.
 
-`last_refreshed_at` on each item is what the header renders; the header shows the oldest across
-the board, so `2 MIN AGO` means *everything here* is at most two minutes old, not just something.
+**The cooldown is on the service, globally.** The thing needing protection is somebody else's
+status page. A per-user or per-board limit would guard our endpoint while leaving theirs exposed,
+and would poll one service twice for two boards that both track it. A per-user rate limit sits on
+top only to stop one client hammering us.
+
+Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
+our request budget on other people's servers.
 
 ### Public access
 
-Catalog and status endpoints are readable without a token, because that data is not personal.
-`tracked` is `null` rather than absent, so the client renders `＋` without a second code path.
-
-Adding, refreshing and anything under `/api/me/` or `/api/dashboards/` require auth. Public
-endpoints get their own caching and rate limits — an unauthenticated refresh is a way for
-strangers to make us hammer other people's status pages.
+Catalog and status endpoints are readable without a token; that data is not personal. Adding,
+refreshing, `/api/me/` and `/api/dashboards/` require auth. Public endpoints carry their own
+caching and rate limits.
 
 ### Screen-to-endpoint map
 
 | Screen | Calls |
 | --- | --- |
-| Home, all three tabs | `GET /api/dashboards/{uuid}/` once; tabs, sort and counts are client-side |
-| Home, signed out | `GET /api/catalog/services/?status=…` — the same list the tabs filter |
+| Home · All / Outages / Maintenance | `GET /api/dashboards/{uuid}/?status=&sort=` — counts ride along |
+| Home, signed out | `GET /api/catalog/services/?status=` — same list, different source |
 | Header refresh | `POST /api/refresh/` |
-| Row menu → Refresh now | `POST /api/refresh/{service_id}/` |
-| Discover, suggested | `GET /api/catalog/services/` |
-| Discover, typing | `GET /api/catalog/services/?q=` |
-| Discover, no results | same call, empty page |
+| Row ⋮ → Refresh now | `POST /api/refresh/{service_id}/` |
+| Row ⋮ → Stop tracking | `DELETE /api/dashboards/items/{uuid}/` |
+| Discover, suggested | `GET /api/catalog/services/?sort=featured` |
+| Discover, typing / no results | `GET /api/catalog/services/?q=` |
 | Add by URL | `POST /api/catalog/resolve/` |
-| Service · Components | `GET /api/catalog/services/{slug}/` |
-| Service · Incidents | `GET /api/catalog/services/{slug}/incidents/` |
-| Service · About | already in the detail response |
-| ＋ / ⋮ on any row | `POST` / `DELETE` on `items` |
-| Sign in | `magic-link` then `verify` |
-| Settings | `GET` / `PATCH /api/me/` |
-
-### Magic-link rate limiting
-
-Not a nicety. The endpoint sends mail to any address given to it, so it is throttled per email
-and per IP, matching the resend countdown in the UI.
+| Service · Components + its filter | `GET …/{slug}/components/?tracked=` |
+| Service · Incidents | `GET …/{slug}/incidents/?state=` |
+| Service · About | `GET /api/catalog/services/{slug}/` |
+| Service · Add / Remove all | `POST` / `DELETE …/items/bulk/` |
+| ＋ on any row | `POST /api/dashboards/{uuid}/items/` |
+| Sign in | `magic-link` → `verify` |
+| Settings | `GET` / `PATCH /api/me/`; `DELETE /api/me/` |
 
 ## 6. Frontend
 
@@ -354,7 +380,7 @@ differ.
 
 | Screen | States |
 | --- | --- |
-| Home | All · Outages · Maintenance; empty, offline, row menu |
+| Home | All · Outages · Maintenance; empty, unreachable, row menu |
 | Discover | suggested, typing, no results |
 | Add by URL | detected, not found |
 | Service | Components · Incidents · About; not tracked, outage, unknown |
@@ -370,11 +396,17 @@ because nothing is yours.
 
 Sort is **Smart** by default: tracked first, then severity ascending (worst first), then name.
 
-### Offline
+### No offline mode
 
-Workbox precaches the shell and serves a stale copy of the last dashboard response. Opening
-offline shows last-known statuses, dimmed, under a banner saying how old they are. Never a blank
-screen — bad signal is exactly when you check whether something is down.
+Statusboard reports on remote services. With no network there is nothing true to report — a cached
+board would show yesterday's answer to today's question, which is worse than saying nothing.
+
+So there is no stale-cache mode, no offline banner and no dimmed rows. A failed request shows a
+plain "can't reach statusboard" state with a retry. The service worker exists only to make the app
+installable; it does not cache API responses.
+
+The `unknown` status is a different thing and stays: that is *our* server failing to reach a
+provider, which we can report accurately because we are online and they are not.
 
 ### Install
 
