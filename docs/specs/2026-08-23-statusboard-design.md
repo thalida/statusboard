@@ -117,17 +117,20 @@ A null component means the whole service. Unique on `(dashboard, service, compon
 
 | Status | Severity | Colour |
 | --- | --- | --- |
-| `major_outage` | 5 | `#E51F00` |
-| `partial_outage` | 4 | `#E58900` |
-| `degraded` | 3 | `#E58900` |
-| `unknown` | 2 | `#808080` |
-| `maintenance` | 1 | `#00A0E5` |
-| `operational` | 0 | `#00E54D` |
+| `major_outage` | 0 | `#E51F00` |
+| `partial_outage` | 1 | `#E58900` |
+| `degraded` | 2 | `#E58900` |
+| `unknown` | 3 | `#808080` |
+| `maintenance` | 4 | `#00A0E5` |
+| `operational` | 5 | `#00E54D` |
 
-Severity is an integer column, which is what makes sorting a plain `ORDER BY`.
+**Lower is worse**, matching the SEV0/SEV1 convention people arrive with. Sorting worst-first is
+`ORDER BY severity ASC`, and the Outages filter is `severity <= 3` — which is also why `unknown`
+sits at 3 rather than beside `operational`: a service we cannot reach belongs with the problems,
+not with the healthy ones.
 
-**An "All services" row uses the provider's own top-level indicator, never a max of its
-components.** A max-severity rollup leaves Cloudflare permanently orange, because something among
+**An "All services" row uses the provider's own top-level indicator, never the worst of its
+components.** A worst-of-components rollup leaves Cloudflare permanently orange, because something among
 109 components almost always is.
 
 ---
@@ -236,7 +239,7 @@ differ.
 shows: the catalog when signed out, your tracked set when signed in. Signed out shows no counts,
 because nothing is yours.
 
-Sort is **Smart** by default: tracked first, then severity, then name.
+Sort is **Smart** by default: tracked first, then severity ascending (worst first), then name.
 
 ### Offline
 
