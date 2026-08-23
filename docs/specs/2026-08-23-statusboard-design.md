@@ -133,12 +133,34 @@ time something is promoted, and a value of 37 carries no meaning to whoever inhe
 ### dashboards
 
 - `Dashboard` — owner, name, position. Exactly one per user in v1.
-- `DashboardItem` — dashboard, service, nullable component
+- `DashboardItem` — dashboard, **component**
+
+  Every row is a component. There is no nullable service field and no "is this a service or a
+  component" discriminator, because a service's overall status is itself a component — see below.
 
   No `position`: nothing in the design lets you hand-order a board. Rows are sorted by severity or
   name, server-side. If manual ordering is ever wanted it arrives with the UI that needs it.
 
-A null component means the whole service. Unique on `(dashboard, service, component)`.
+Unique on `(dashboard, component)`.
+
+### Every service has an overall component
+
+Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
+"All services". It carries **the provider's own top-level indicator** — not an aggregate of its
+siblings, because a worst-of rollup leaves Cloudflare permanently orange when one of 109
+components is always degraded.
+
+This is why the board model is as simple as it is. "Track Twilio" and "track Twilio SMS" are the
+same operation with a different id, so:
+
+- `DashboardItem` points at one thing, not one-of-two
+- `POST /board/items/` takes `component_ids` and nothing else — one id or forty, no bulk variant
+  to choose between
+- A board row has no `kind` to branch on, and the client never picks an endpoint by row type
+
+An earlier draft had items point at *either* a service or a component. That forced a
+discriminator on every row, an either/or request body, a separate bulk endpoint, and a client that
+had to decide which shape to send. The overall component removes all four.
 
 ### status
 
