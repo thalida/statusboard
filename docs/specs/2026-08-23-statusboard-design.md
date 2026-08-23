@@ -168,31 +168,13 @@ Twilio produce one poll every five minutes, not two hundred.
 A failed fetch sets `unknown` and **never clobbers the last known value**. The UI shows the grey
 state plus how long it has been stale.
 
-### What the refresh button does
-
-The header control is two things at once, and only one of them touches the network beyond us:
-
-1. **Refetch** `GET /api/dashboards/{uuid}/` — reads our database, returns instantly. This is what
-   the press is usually for: "has anything changed since I last looked?"
-2. **Nudge** `POST /api/refresh/` — enqueues a poll for each service the caller tracks, and each
-   one is dropped if that service is inside its global cooldown.
-
-So pressing refresh during an outage re-polls Twilio at most once a minute no matter how many
-people press it, and everyone else pressing it gets the result of that same poll.
-
-**The throttle lives on the service, not the dashboard or the user.** The thing that needs
-protecting is somebody else's status page. A per-dashboard limit would have guarded our endpoint
-while leaving theirs exposed — and would have polled the same service twice for two boards that
-both track it. A modest per-user rate limit sits on top, but only to stop one client hammering us.
-
-Signed out, the button is present but routes to sign-in: an unauthenticated nudge is a way for
-strangers to spend our request budget on other people's servers.
-
----
+The manual refresh path, and why the cooldown lives on the service rather than the dashboard or
+the user, is specified in §5 under **Refresh**.
 
 ## 5. API surface
 
-DRF, JWT via SimpleJWT.
+DRF, JWT via SimpleJWT. Every endpoint below exists because a screen needs it; the table at the
+end maps them back.
 
 ### Identifiers
 
@@ -205,52 +187,155 @@ outage and it has to be readable and guessable; a UUID there would be hostile fo
 built to be shared. Everything the user owns — dashboards, items — stays UUID, so nothing personal
 is enumerable.
 
-Rules that keep the two from drifting:
-
 - Slug exists on `Service` only. No other model gets one.
-- It is unique and treated as stable. Renaming keeps the old slug as a redirect rather than
-  breaking shared links.
+- It is unique and stable. Renaming keeps the old slug as a redirect rather than breaking links.
 - Services created through `resolve/` get a slug derived from the host, de-duplicated on
   collision (`linear`, `linear-2`).
 - Writes and anything requiring auth address the UUID, never the slug.
 
+### Account
+
 ```
-POST /api/auth/magic-link/           send link; rate-limited per email and per IP
-POST /api/auth/verify/               token → access (15m) + refresh (30d, rotating)
-GET  /api/me/
-
-GET  /api/dashboards/                list; POST/PATCH/DELETE
-GET  /api/dashboards/{uuid}/         items + nested service/component/current status
-POST /api/dashboards/{uuid}/items/   add; DELETE, PATCH (reorder)
-POST /api/refresh/                   202; nudge the caller's tracked services
-POST /api/refresh/{service_id}/      202; nudge one service (UUID — authed write)
-
-GET  /api/catalog/services/?q=       search; ordered by featured_rank
-GET  /api/catalog/services/{slug}/   component tree with group flags (public — slug)
-POST /api/catalog/services/resolve/  {url} → sniff provider, create-or-return
-GET  /api/status/services/{slug}/incidents/          (public — slug)
-GET  /api/status/outages/            currently broken across the catalog — powers the public view
+POST   /api/auth/magic-link/    {email} → 202; rate-limited per email and per IP
+POST   /api/auth/verify/        {token} → access (15m) + refresh (30d, rotating)
+POST   /api/auth/refresh/       rotate the refresh token
+GET    /api/me/                 email, preferences
+PATCH  /api/me/                 {theme, refresh_interval}
+DELETE /api/me/                 deletes dashboard, items, user; catalog and status untouched
 ```
 
-One dashboard read is one query against `ComponentStatus`. No upstream calls on the request path.
+Preferences live on `User`, not in local storage, so a second device inherits them.
+
+### Catalog
+
+One list endpoint serves Discover, the suggested lists, and the public "down right now" view.
+They are the same query with different parameters — there is no separate outages endpoint.
+
+```
+GET /api/catalog/services/
+      ?q=                   free text; omit for the suggested list
+      &status=outages       outages | maintenance | any     (severity bands)
+      &cursor=              keyset pagination, 30 per page
+GET /api/catalog/services/{slug}/            service detail, including the component tree
+GET /api/catalog/services/{slug}/incidents/  ?state=active|resolved|all
+POST /api/catalog/resolve/                   {url} → sniff provider, create-or-return
+```
+
+**Ordering.** With `q`, relevance. Without `q`, `featured_rank` ascending — that *is* the
+suggested list, so "suggestions" is not a separate concept or endpoint. On the Maintenance tab,
+`status=maintenance` restricts it to services with an upcoming window, which is why a suggestion
+there always has a time to show.
+
+**Service list item** carries everything a row needs, so the client never fetches per row:
+
+```json
+{ "slug": "twilio", "name": "Twilio", "logo": "…",
+  "status": "major_outage", "severity": 0, "since": "2026-08-23T14:02:00Z",
+  "component_count": 42,
+  "tracked": { "service": true, "components": 5 },   // null when signed out
+  "maintenance_window": null }
+```
+
+**Service detail** adds what the service screen needs — the About fields and per-component status:
+
+```json
+{ "slug": "twilio", "name": "Twilio", "description": "…",
+  "status_page_url": "https://status.twilio.com", "provider": "statuspage",
+  "in_catalog_since": "2026-08-12", "refresh_interval_seconds": 300,
+  "status": "major_outage", "severity": 0, "since": "…",
+  "active_incident_count": 2,
+  "components": [
+    { "id": "uuid", "name": "Programmable Messaging", "parent": null, "is_group": true,
+      "child_count": 6, "status": "major_outage", "severity": 0, "since": "…",
+      "tracked": false },
+    { "id": "uuid", "name": "SMS", "parent": "uuid", "is_group": false,
+      "status": "degraded", "severity": 2, "since": "…", "tracked": true }
+  ] }
+```
+
+The whole tree comes in one response, so the Components tab and its `Showing All / Tracked /
+Untracked` filter need no further requests.
+
+### Board
+
+```
+GET    /api/dashboards/{uuid}/          every item, with resolved status
+POST   /api/dashboards/{uuid}/items/    {service_id, component_id?}
+DELETE /api/dashboards/items/{uuid}/
+PATCH  /api/dashboards/items/{uuid}/    {position}
+```
+
+**Filtering and sorting are client-side, deliberately.** A board is five to fifty rows and the
+whole payload is already in the browser, so `All / Outages / Maintenance` and Smart sort are
+instant and work offline from the cached response. Server-side parameters would add round trips,
+make the chip counts a second request, and break filtering when the network is down — which is
+exactly when someone is filtering to outages. The response therefore includes every item
+regardless of state, and the chip counts are computed from it.
+
+If a board ever outgrows that, `?status=` and `?cursor=` can be added without changing the shape.
+
+**Board item** resolves to whichever thing it points at:
+
+```json
+{ "id": "uuid", "kind": "service" | "component",
+  "service": { "slug": "twilio", "name": "Twilio", "logo": "…" },
+  "component": { "id": "uuid", "name": "SMS", "path": "Twilio › Programmable Messaging" },
+  "status": "degraded", "severity": 2, "since": "…",
+  "component_count": 42, "maintenance_window": null,
+  "last_refreshed_at": "2026-08-23T14:38:00Z" }
+```
+
+### Refresh
+
+```
+POST /api/refresh/                 → the caller's board, refreshed
+POST /api/refresh/{service_id}/    → one service, refreshed
+```
+
+**One call, not two.** The endpoint nudges every service the caller tracks — skipping any inside
+its global cooldown — waits up to three seconds for those polls, then returns the same payload
+`GET /api/dashboards/{uuid}/` would. Whatever has not landed in three seconds is returned at its
+stored value and arrives on the next scheduled poll.
+
+That keeps the button honest: one press, one request, and the screen either changed or it did
+not. The alternative — POST then GET — makes the client guess how long to wait before refetching,
+and usually refetches too early.
+
+`last_refreshed_at` on each item is what the header renders; the header shows the oldest across
+the board, so `2 MIN AGO` means *everything here* is at most two minutes old, not just something.
 
 ### Public access
 
 Catalog and status endpoints are readable without a token, because that data is not personal.
-Adding and refreshing require auth. Public endpoints get their own caching and rate limits — an
-unauthenticated refresh is a way for strangers to make us hammer other people's status pages.
+`tracked` is `null` rather than absent, so the client renders `＋` without a second code path.
+
+Adding, refreshing and anything under `/api/me/` or `/api/dashboards/` require auth. Public
+endpoints get their own caching and rate limits — an unauthenticated refresh is a way for
+strangers to make us hammer other people's status pages.
+
+### Screen-to-endpoint map
+
+| Screen | Calls |
+| --- | --- |
+| Home, all three tabs | `GET /api/dashboards/{uuid}/` once; tabs, sort and counts are client-side |
+| Home, signed out | `GET /api/catalog/services/?status=…` — the same list the tabs filter |
+| Header refresh | `POST /api/refresh/` |
+| Row menu → Refresh now | `POST /api/refresh/{service_id}/` |
+| Discover, suggested | `GET /api/catalog/services/` |
+| Discover, typing | `GET /api/catalog/services/?q=` |
+| Discover, no results | same call, empty page |
+| Add by URL | `POST /api/catalog/resolve/` |
+| Service · Components | `GET /api/catalog/services/{slug}/` |
+| Service · Incidents | `GET /api/catalog/services/{slug}/incidents/` |
+| Service · About | already in the detail response |
+| ＋ / ⋮ on any row | `POST` / `DELETE` on `items` |
+| Sign in | `magic-link` then `verify` |
+| Settings | `GET` / `PATCH /api/me/` |
 
 ### Magic-link rate limiting
 
 Not a nicety. The endpoint sends mail to any address given to it, so it is throttled per email
 and per IP, matching the resend countdown in the UI.
-
-### Delete account
-
-Deletes the dashboard, its items and the user. Catalog and status data are untouched — they are
-not personal.
-
----
 
 ## 6. Frontend
 
