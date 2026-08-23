@@ -1,0 +1,501 @@
+openapi: 3.1.0
+info:
+  title: Statusboard API
+  version: 1.0.0
+  description: |
+    One place to see whether the services you depend on are working.
+
+    ## Conventions
+
+    **Envelope.** Every collection returns `{ counts, next, results }`. `counts` aggregates the
+    whole collection, not the page, so a chip reading `Outages 3` is correct on page four.
+    `next` is an opaque keyset cursor. Page size is 50 and is not client-controlled.
+
+    **Severity is a number, 0–5, and lower is worse** — matching the SEV0/SEV1 convention.
+    Filter it numerically: `severity_lte=3` is everything needing attention, `severity=4` is
+    maintenance. There is no named-band parameter; the UI's Outages chip is simply
+    `severity_lte=3`.
+
+    | severity | status |
+    |---|---|
+    | 0 | major_outage |
+    | 1 | partial_outage |
+    | 2 | degraded |
+    | 3 | unknown |
+    | 4 | maintenance |
+    | 5 | operational |
+
+    **Status vs incidents.** They are different things and are not derived from each other.
+    A *status* is the current state of a service or component, as the provider reports it.
+    An *incident* is the provider's narrative record — a title and a running log — with a
+    workflow phase of `investigating`, `identified`, `monitoring` or `resolved`.
+
+    A provider can have an active incident while every component reads `operational` (they are
+    monitoring a fix), and can report `degraded` with no incident open at all. Statusboard shows
+    both and never infers one from the other.
+
+    **Identity.** Every resource is a UUID. `Service` additionally has a stable `slug` used on
+    public catalog routes, because those URLs get shared during an outage.
+
+    **Freshness.** List responses carry `oldest_refreshed_at` across the whole collection. The
+    header renders it, so "2 min ago" means *everything* is at most two minutes old.
+
+    **Caching.** GETs are ETagged; send `If-None-Match`.
+servers:
+  - url: https://statusboard.app/api
+tags:
+  - name: auth
+  - name: me
+  - name: catalog
+    description: Public. Services, their components, and incidents.
+  - name: board
+    description: What the signed-in user tracks.
+  - name: refresh
+
+paths:
+  /auth/magic-link/:
+    post:
+      tags: [auth]
+      summary: Send a sign-in link
+      description: Throttled per email and per IP. Always returns 202, even for unknown addresses.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '202': { description: Accepted }
+        '429': { $ref: '#/components/responses/Throttled' }
+  /auth/verify/:
+    post:
+      tags: [auth]
+      summary: Exchange a link token for a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } }
+          description: OK
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/refresh/:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh token
+      security: []
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } }
+  /auth/logout/:
+    post:
+      tags: [auth]
+      summary: Blacklist the refresh token
+      responses: { '204': { description: No content } }
+
+  /me/:
+    get:
+      tags: [me]
+      summary: Account and preferences
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } }
+    patch:
+      tags: [me]
+      summary: Update preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                theme: { type: string, enum: [system, light, dark] }
+                refresh_interval: { type: integer, description: Seconds; client refetch cadence, not the server poll }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } }
+    delete:
+      tags: [me]
+      summary: Delete the account
+      description: Removes the dashboard, its items and the user. Catalog and status data are untouched — they are not personal.
+      responses: { '204': { description: No content } }
+
+  /catalog/services/:
+    get:
+      tags: [catalog]
+      summary: List services
+      description: |
+        Serves Discover, the suggested lists and the public "down right now" view — the same query
+        with different parameters.
+
+        With `q`, ordering is relevance. Without it, `sort=suggested` is the default and means
+        `(-is_featured, severity, -watcher_count, name)` — so a mid-popularity service that is
+        currently broken outranks a more popular one that is fine.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: severity_lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip is severity_lte=3' }
+        - { name: severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is severity=4' }
+        - { name: tracked, in: query, schema: { type: boolean }, description: Authenticated only }
+        - { name: sort, in: query, schema: { type: string, enum: [suggested, severity, name, updated], default: suggested } }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/ServiceListItem' } }
+
+  /catalog/services/{slug}/:
+    get:
+      tags: [catalog]
+      summary: Service detail
+      description: About fields and current state. Components are a separate collection — Cloudflare publishes 109 and nothing caps that.
+      security: [{}, { bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/Slug' }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ServiceDetail' } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /catalog/services/{slug}/components/:
+    get:
+      tags: [catalog]
+      summary: List a service's components
+      description: |
+        The component tree, flattened, with `parent` linking children to groups. `counts` gives the
+        tab labels — `All 42`, `Tracked 5`.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { name: tracked, in: query, schema: { type: boolean }, description: Drives Showing All / Tracked / Untracked }
+        - { name: severity_lte, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string, enum: [provider, severity, name], default: provider }, description: '`provider` preserves the order the provider publishes' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+
+  /catalog/services/{slug}/incidents/:
+    get:
+      tags: [catalog]
+      summary: List a service's incidents
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { name: state, in: query, schema: { type: string, enum: [active, resolved, all], default: active } }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/Incident' } }
+
+  /catalog/resolve/:
+    post:
+      tags: [catalog]
+      summary: Resolve a pasted status page URL
+      description: |
+        Sniffs the provider, creates the service if it is new, and returns it. Deduped on a
+        normalised URL, so two people pasting the same page share one service and one poll.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [url], properties: { url: { type: string, format: uri } } }
+      responses:
+        '200':
+          description: Found or created
+          content: { application/json: { schema: { $ref: '#/components/schemas/ServiceDetail' } } }
+        '422':
+          description: No supported status page found
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /dashboards/{uuid}/:
+    get:
+      tags: [board]
+      summary: The board
+      description: Filtering, sorting and pagination are server-side without exception — nothing assumes the board is small.
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { name: severity_lte, in: query, schema: { type: integer } }
+        - { name: severity, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string, enum: [severity, name, updated], default: severity } }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/BoardItem' } }
+
+  /dashboards/{uuid}/items/:
+    post:
+      tags: [board]
+      summary: Track a service or a component
+      description: Exactly one of `service_id` or `component_id`.
+      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                service_id: { type: string, format: uuid }
+                component_id: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/BoardItem' } } }
+        '409': { description: Already tracked }
+
+  /dashboards/{uuid}/items/bulk/:
+    post:
+      tags: [board]
+      summary: Track every component of a service
+      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [service_id], properties: { service_id: { type: string, format: uuid } } }
+      responses: { '201': { description: Created } }
+    delete:
+      tags: [board]
+      summary: Stop tracking a service and all its components
+      description: The Remove all control on the service screen.
+      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      responses: { '204': { description: No content } }
+
+  /dashboards/items/{uuid}/:
+    delete:
+      tags: [board]
+      summary: Stop tracking one row
+      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      responses: { '204': { description: No content } }
+
+  /refresh/:
+    post:
+      tags: [refresh]
+      summary: Refresh the caller's board
+      description: |
+        Nudges every service the caller tracks, skipping any inside its global per-service
+        cooldown, waits up to three seconds, then returns the board exactly as `GET /dashboards/`
+        would — honouring the same filter and sort parameters.
+
+        One call, not a POST followed by a GET, so the client never has to guess a wait.
+      parameters:
+        - { name: severity_lte, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: The refreshed board
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/BoardItem' } }
+        '429': { $ref: '#/components/responses/Throttled' }
+  /refresh/{service_id}/:
+    post:
+      tags: [refresh]
+      summary: Refresh one service
+      description: The row menu's Refresh now. Obeys the same global cooldown.
+      parameters: [{ name: service_id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/ServiceDetail' } } }
+        '429': { $ref: '#/components/responses/Throttled' }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque keyset cursor from `next` }
+    Slug: { name: slug, in: path, required: true, schema: { type: string }, example: twilio }
+    Uuid: { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Throttled:
+      description: Rate limited
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string, enum: [throttled, provider_unreachable, no_status_page_found, invalid_or_expired_token, not_found] }
+        detail: { type: string }
+    TokenPair:
+      type: object
+      properties:
+        access: { type: string, description: 15 minutes }
+        refresh: { type: string, description: 30 days, rotating }
+    Me:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        theme: { type: string, enum: [system, light, dark] }
+        refresh_interval: { type: integer }
+        dashboard_id: { type: string, format: uuid }
+        tracked_count: { type: integer }
+    Envelope:
+      type: object
+      properties:
+        counts:
+          type: object
+          description: Aggregated over the whole collection, not the page.
+          properties:
+            total: { type: integer }
+            by_severity:
+              type: object
+              additionalProperties: { type: integer }
+              description: Keys are severities 0–5, so the client can compose any chip.
+            tracked: { type: integer, nullable: true }
+        oldest_refreshed_at: { type: string, format: date-time, nullable: true }
+        next: { type: string, nullable: true }
+    Status:
+      type: object
+      description: The current state of a service or component, as the provider reports it. Unrelated to incident phase.
+      properties:
+        status: { type: string, enum: [major_outage, partial_outage, degraded, unknown, maintenance, operational] }
+        severity: { type: integer, minimum: 0, maximum: 5 }
+        since: { type: string, format: date-time, description: When it entered this state }
+        last_refreshed_at: { type: string, format: date-time }
+    Tracked:
+      type: object
+      nullable: true
+      description: Null when unauthenticated, so the client renders ＋ without a second code path.
+      properties:
+        service: { type: boolean }
+        components: { type: integer }
+    ServiceListItem:
+      allOf:
+        - $ref: '#/components/schemas/Status'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            slug: { type: string }
+            name: { type: string }
+            logo: { type: string, format: uri, nullable: true }
+            component_count: { type: integer }
+            active_incident_count: { type: integer }
+            maintenance_window: { $ref: '#/components/schemas/MaintenanceWindow' }
+            tracked: { $ref: '#/components/schemas/Tracked' }
+    ServiceDetail:
+      allOf:
+        - $ref: '#/components/schemas/ServiceListItem'
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            status_page_url: { type: string, format: uri }
+            provider: { type: string, enum: [statuspage, instatus, betterstack, rss] }
+            in_catalog_since: { type: string, format: date }
+            refresh_interval_seconds: { type: integer }
+            components_url: { type: string, format: uri }
+            incidents_url: { type: string, format: uri }
+    Component:
+      allOf:
+        - $ref: '#/components/schemas/Status'
+        - type: object
+          properties:
+            id: { type: string, format: uuid, description: The ServiceComponent UUID. Use it in items/ to track this component. }
+            name: { type: string }
+            path: { type: string, example: 'Twilio › Programmable Messaging' }
+            parent: { type: string, format: uuid, nullable: true }
+            child_count: { type: integer, description: A component is a group when this is greater than zero. There is no separate is_group flag. }
+            maintenance_window: { $ref: '#/components/schemas/MaintenanceWindow' }
+            tracked: { type: boolean, nullable: true }
+    MaintenanceWindow:
+      type: object
+      nullable: true
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    Incident:
+      type: object
+      description: |
+        A provider's narrative record. Its `phase` is workflow, not state — a service can have an
+        active incident while every component reads operational.
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
+        started_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        affected_component_ids: { type: array, items: { type: string, format: uuid } }
+        updates:
+          type: array
+          items:
+            type: object
+            properties:
+              phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
+              body: { type: string }
+              posted_at: { type: string, format: date-time }
+    BoardItem:
+      allOf:
+        - $ref: '#/components/schemas/Status'
+        - type: object
+          properties:
+            id: { type: string, format: uuid, description: The DashboardItem UUID. Use it to stop tracking this row. }
+            kind: { type: string, enum: [service, component] }
+            service: { $ref: '#/components/schemas/ServiceRef' }
+            component: { $ref: '#/components/schemas/ComponentRef' }
+            component_count: { type: integer, description: Present when kind is service }
+            maintenance_window: { $ref: '#/components/schemas/MaintenanceWindow' }
+    ServiceRef:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        logo: { type: string, nullable: true }
+    ComponentRef:
+      type: object
+      nullable: true
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        path: { type: string }

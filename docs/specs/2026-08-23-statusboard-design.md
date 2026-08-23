@@ -90,7 +90,12 @@ is a different concept from a permission role.
 
 - `Service` — slug, name, logo, homepage URL, status page URL, `adapter`, `api_url`,
   `is_curated`, `added_by` (null for catalog entries), `is_featured`, `watcher_count`
-- `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `position`, `is_group`
+- `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `provider_order`,
+  `archived_at`
+
+  There is no `is_group` flag: a component is a group when it has children, so the flag would be a
+  second copy of a fact the tree already holds. `provider_order` preserves the order the provider
+  publishes, which is the order the component tab shows by default.
 
 Custom URLs dedupe into the catalog on a normalised URL, so two users pasting the same status
 page share one `Service` and one poll. A popular custom entry becomes curated by flipping a flag
@@ -128,7 +133,10 @@ time something is promoted, and a value of 37 carries no meaning to whoever inhe
 ### dashboards
 
 - `Dashboard` — owner, name, position. Exactly one per user in v1.
-- `DashboardItem` — dashboard, service, nullable component, position
+- `DashboardItem` — dashboard, service, nullable component
+
+  No `position`: nothing in the design lets you hand-order a board. Rows are sorted by severity or
+  name, server-side. If manual ordering is ever wanted it arrives with the UI that needs it.
 
 A null component means the whole service. Unique on `(dashboard, service, component)`.
 
@@ -141,6 +149,22 @@ A null component means the whole service. Unique on `(dashboard, service, compon
 - `Incident` — upstream id, title, phase, started/resolved; `IncidentUpdate` child for the log
 - `PollRun` — per-attempt success/error, so "everything is fine" is distinguishable from
   "we have not successfully checked in six hours"
+
+### Status and incidents are different things
+
+They are not derived from each other and neither is computed from the other.
+
+A **status** is the current state of a service or component, as the provider reports it —
+`operational`, `degraded`, and so on.
+
+An **incident** is the provider's narrative record: a title, a start time, affected components,
+and a running log of updates. Its `phase` is workflow — `investigating`, `identified`,
+`monitoring`, `resolved`.
+
+They move independently. A provider can be `monitoring` a fix while every component already reads
+`operational`, and can report `degraded` with no incident open at all. Statusboard shows both and
+never infers one from the other — which is why the service screen has separate Components and
+Incidents tabs rather than one merged list.
 
 ### Normalised status
 
@@ -180,6 +204,24 @@ Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one
 
 `GET /api/catalog/services/resolve/` sniffs a pasted URL and picks an adapter.
 
+### Keeping names and component trees current
+
+Providers rename services, add components and retire them. A poll is therefore a reconciliation,
+not just a status read.
+
+Each successful poll:
+
+1. **Upserts components by `upstream_id`.** New ones are created, renames are applied, and the
+   parent/child structure and `provider_order` are refreshed.
+2. **Marks vanished components `archived_at`** rather than deleting them. Someone may be tracking
+   one, and deleting the row would silently remove it from their board. An archived component
+   still renders, reads `unknown`, and says the provider no longer publishes it.
+3. **Refreshes the service's own metadata** — name, description, logo — for curated and custom
+   entries alike, so a rename upstream does not leave a stale name on someone's board.
+
+Component identity is the provider's `upstream_id`, never the display name. Names change; ids do
+not, and matching on names would orphan a tracked row the first time a provider edits its wording.
+
 ### Polling
 
 **There is one global schedule, not a schedule per user or per dashboard.** A service is polled
@@ -202,161 +244,58 @@ the user, is specified in §5 under **Refresh**.
 
 ## 5. API surface
 
-DRF, JWT via SimpleJWT. Every endpoint exists because a screen needs it; the map at the end ties
-them back. Nothing here assumes a collection is small enough to send whole.
+**The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 19 operations, 14 schemas,
+with every parameter and response shape. It is the single source of truth; drf-spectacular will
+generate it from the code, and it is served through Scalar at `/admin/api-docs/` like your other
+projects. This section records only the decisions behind it, so the two cannot drift.
 
 ### Identifiers
 
 **UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
-everywhere except one: `Service` also carries a unique `slug`, and public catalog routes take it.
+everywhere except one: `Service` also carries a stable `slug`, used on public catalog routes,
+because those URLs get shared during an outage and a UUID would be hostile there. Anything the
+user owns stays UUID, so nothing personal is enumerable. Writes always address the UUID.
 
-The reason is the logged-out view. Someone sends you `statusboard.app/service/twilio` during an
-outage and it has to be readable; a UUID would be hostile on the one surface built to be shared.
-Everything the user owns stays UUID, so nothing personal is enumerable.
+`resolve/` derives a slug from the host and de-duplicates on collision (`linear`, `linear-2`).
+Renaming keeps the old slug as a redirect rather than breaking shared links.
 
-- Slug exists on `Service` only, is unique, and is stable — renaming keeps the old slug as a
-  redirect rather than breaking shared links.
-- `resolve/` derives a slug from the host and de-duplicates on collision (`linear`, `linear-2`).
-- Writes and authed routes address the UUID, never the slug.
+### Severity is filtered as a number
 
-### Conventions
+`severity_lte=3` is everything needing attention; `severity=4` is maintenance. There is no named
+band parameter — the Outages chip is just `severity_lte=3`, and a client can compose any threshold
+without waiting for a new enum value. `counts.by_severity` returns the raw histogram for the same
+reason.
 
-Applied to every collection, so there is one thing to learn.
+### One list, several screens
 
-**Envelope.** Lists return the same shape, always:
+Discover, the suggested lists and the public "down right now" view are the same catalog query with
+different parameters. Suggestions are not a separate concept: they are the list with no `q`, sorted
+`(-is_featured, severity, -watcher_count, name)`.
 
-```json
-{ "counts": { … }, "next": "cursor|null", "results": [ … ] }
-```
+Severity sits ahead of popularity deliberately — a mid-popularity service that is currently broken
+is more worth surfacing than a more popular one that is fine, which is the whole premise of the
+public view.
 
-`counts` is a grouped aggregate over the whole collection, not the page — so a chip reading
-`Outages 3` is right on page four. `next` is a keyset cursor; page size is 50 and not client
-controlled.
+### Components are their own collection
 
-**Filtering** is `?status=any|outages|maintenance`, mapped to severity bands: `outages` is
-`severity <= 3`, `maintenance` is `severity = 4`, `any` is unfiltered. The same parameter drives
-the chips on Home, the catalog and the public view.
+Cloudflare publishes 109 and nothing caps that, so the service detail reports `component_count`
+and the Components tab pages through `/components/`. Its `counts` gives the tab labels. A
+component is a group when `child_count > 0`; there is no separate flag.
 
-**Sorting** is `?sort=smart|severity|name|updated`, default `smart` — tracked first, then severity
-ascending, then name. `-` prefix reverses.
+### Filtering, sorting and pagination are server-side, without exception
 
-**Freshness.** Every list carries `oldest_refreshed_at` across the whole collection, which is what
-the header renders. `2 MIN AGO` means everything is at most two minutes old, not just something.
+There is no cap on board size — one service can contribute 109 components — so the API never
+assumes the board fits in one response. `counts` aggregates the whole collection rather than the
+page, so a chip is correct on page four.
 
-**Caching.** `GET`s are `ETag`ed. The client sends `If-None-Match`; a `304` is what makes polling
-the board cheap.
+There is no client-side fallback. One rule, one implementation.
 
-**Errors** are DRF-standard with a `code` for anything the UI branches on:
-`throttled` (429, with `Retry-After`), `provider_unreachable`, `no_status_page_found`,
-`invalid_or_expired_token`.
+### Refresh is one call
 
-### Account
-
-```
-POST   /api/auth/magic-link/     {email} → 202; throttled per email and per IP
-POST   /api/auth/verify/         {token} → access (15m) + refresh (30d, rotating)
-POST   /api/auth/refresh/        rotate
-POST   /api/auth/logout/         blacklist the refresh token
-GET    /api/me/                  email, preferences, counts of what you track
-PATCH  /api/me/                  {theme, refresh_interval}
-DELETE /api/me/                  deletes dashboard, items, user; catalog and status untouched
-```
-
-Preferences live on `User`, not local storage, so a second device inherits them.
-
-### Catalog
-
-One list serves Discover, the suggested lists and the public "down right now" view — the same
-query with different parameters.
-
-```
-GET  /api/catalog/services/
-       ?q=          free text; omit for the suggested list
-       &status=     any | outages | maintenance
-       &tracked=    true | false        (authed only)
-       &sort=       smart | severity | name | suggested
-       &cursor=
-GET  /api/catalog/services/{slug}/
-GET  /api/catalog/services/{slug}/components/
-       ?tracked=    true | false        drives Showing All / Tracked / Untracked
-       &status=     &sort= &cursor=
-GET  /api/catalog/services/{slug}/incidents/
-       ?state=      active | resolved | all
-       &cursor=
-POST /api/catalog/resolve/        {url} → sniff provider, create-or-return
-```
-
-**Suggestions are not a separate concept.** The catalog list with no `q`, sorted `suggested`, *is*
-the suggested list. On the Maintenance tab `status=maintenance` restricts it to services with an
-upcoming window, which is why a suggestion there always has a time to show.
-
-**Components are their own paginated collection.** Cloudflare publishes 109 and nothing caps that,
-so the service detail does not inline them — it reports `component_count` and the tab pages
-through this endpoint. Its `counts` gives the tab labels (`All 42`, `Tracked 5`).
-
-**Service list item** — everything a row needs, so no per-row fetches:
-
-```json
-{ "slug": "twilio", "name": "Twilio", "logo": "…",
-  "status": "major_outage", "severity": 0, "since": "…",
-  "component_count": 42,
-  "tracked": { "service": true, "components": 5 },
-  "maintenance_window": null }
-```
-
-`tracked` is `null` when unauthenticated, so the client renders `＋` without a second code path.
-
-**Service detail** — the About fields plus current state:
-
-```json
-{ "slug": "twilio", "name": "Twilio", "description": "…",
-  "status_page_url": "…", "provider": "statuspage",
-  "in_catalog_since": "2026-08-12", "refresh_interval_seconds": 300,
-  "status": "major_outage", "severity": 0, "since": "…",
-  "component_count": 42, "active_incident_count": 2,
-  "tracked": { "service": true, "components": 5 } }
-```
-
-### Board
-
-```
-GET    /api/dashboards/{uuid}/          ?status= &sort= &cursor=
-POST   /api/dashboards/{uuid}/items/    {service_id} | {component_id}
-DELETE /api/dashboards/items/{uuid}/
-PATCH  /api/dashboards/items/{uuid}/    {position}
-POST   /api/dashboards/{uuid}/items/bulk/    {service_id, scope: "all_components"}
-DELETE /api/dashboards/{uuid}/items/bulk/    {service_id}   — the "Remove all" control
-```
-
-**Filtering, sorting and pagination are server-side, without exception.** There is no cap on board
-size — one service can contribute 109 components — so the API never assumes the board fits in one
-response, and there is exactly one implementation of each rule.
-
-**Board item** resolves to whichever thing it points at:
-
-```json
-{ "id": "uuid", "kind": "service" | "component",
-  "service": { "slug": "twilio", "name": "Twilio", "logo": "…" },
-  "component": { "id": "uuid", "name": "SMS", "path": "Twilio › Programmable Messaging" },
-  "status": "degraded", "severity": 2, "since": "…",
-  "component_count": 42, "maintenance_window": null,
-  "position": 3, "last_refreshed_at": "…" }
-```
-
-### Refresh
-
-```
-POST /api/refresh/                 → the caller's board, refreshed
-POST /api/refresh/{service_id}/    → one service, refreshed
-```
-
-**One call, not two.** The endpoint nudges every service the caller tracks — skipping any inside
-its global cooldown — waits up to three seconds, then returns the same payload the board `GET`
-would, honouring the caller's current `status` and `sort`. Whatever has not landed is returned at
-its stored value and arrives on the next scheduled poll.
-
-That keeps the button honest: one press, one request, and the screen either changed or it did not.
-POST-then-GET forces the client to guess a wait, and it guesses too early.
+`POST /refresh/` nudges every service the caller tracks, skipping any inside its global
+per-service cooldown, waits up to three seconds, then returns the board exactly as the `GET`
+would. One press, one request, and the screen either changed or it did not. POST-then-GET forces
+the client to guess a wait, and it guesses too early.
 
 **The cooldown is on the service, globally.** The thing needing protection is somebody else's
 status page. A per-user or per-board limit would guard our endpoint while leaving theirs exposed,
@@ -368,29 +307,30 @@ our request budget on other people's servers.
 
 ### Public access
 
-Catalog and status endpoints are readable without a token; that data is not personal. Adding,
-refreshing, `/api/me/` and `/api/dashboards/` require auth. Public endpoints carry their own
+Catalog and incident endpoints are readable without a token; that data is not personal. `tracked`
+comes back `null` rather than absent, so the client renders `＋` without a second code path.
+Adding, refreshing, `/me/` and `/dashboards/` require auth, and public endpoints carry their own
 caching and rate limits.
 
 ### Screen-to-endpoint map
 
 | Screen | Calls |
 | --- | --- |
-| Home · All / Outages / Maintenance | `GET /api/dashboards/{uuid}/?status=&sort=` — counts ride along |
-| Home, signed out | `GET /api/catalog/services/?status=` — same list, different source |
-| Header refresh | `POST /api/refresh/` |
-| Row ⋮ → Refresh now | `POST /api/refresh/{service_id}/` |
-| Row ⋮ → Stop tracking | `DELETE /api/dashboards/items/{uuid}/` |
-| Discover, suggested | `GET /api/catalog/services/?sort=suggested` |
-| Discover, typing / no results | `GET /api/catalog/services/?q=` |
-| Add by URL | `POST /api/catalog/resolve/` |
-| Service · Components + its filter | `GET …/{slug}/components/?tracked=` |
-| Service · Incidents | `GET …/{slug}/incidents/?state=` |
-| Service · About | `GET /api/catalog/services/{slug}/` |
-| Service · Add / Remove all | `POST` / `DELETE …/items/bulk/` |
-| ＋ on any row | `POST /api/dashboards/{uuid}/items/` |
+| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/?severity_lte=&sort=` |
+| Home, signed out | `GET /catalog/services/?severity_lte=` |
+| Header refresh | `POST /refresh/` |
+| Row ⋮ → Refresh now | `POST /refresh/{service_id}/` |
+| Row ⋮ → Stop tracking | `DELETE /dashboards/items/{uuid}/` |
+| Discover, suggested | `GET /catalog/services/` |
+| Discover, typing / no results | `GET /catalog/services/?q=` |
+| Add by URL | `POST /catalog/resolve/` |
+| Service · Components + filter | `GET /catalog/services/{slug}/components/?tracked=` |
+| Service · Incidents | `GET /catalog/services/{slug}/incidents/?state=` |
+| Service · About | `GET /catalog/services/{slug}/` |
+| Service · Add all / Remove all | `POST` / `DELETE /dashboards/{uuid}/items/bulk/` |
+| ＋ on any row | `POST /dashboards/{uuid}/items/` |
 | Sign in | `magic-link` → `verify` |
-| Settings | `GET` / `PATCH /api/me/`; `DELETE /api/me/` |
+| Settings | `GET` / `PATCH` / `DELETE /me/` |
 
 ## 6. Frontend
 
