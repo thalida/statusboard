@@ -153,8 +153,8 @@ components is always degraded.
 This is why the board model is as simple as it is. "Track Twilio" and "track Twilio SMS" are the
 same operation with a different id, so:
 
-- `DashboardItem` points at one thing, not one-of-two
-- `POST /dashboards/{uuid}/items/` takes a `component_id` and nothing else
+- A tracked row points at one thing, not one-of-two
+- Every board endpoint is `/dashboards/{uuid}/components/`, because every row *is* a component
 - A board row has no `kind` to branch on, and the client never picks an endpoint by row type
 
 An earlier draft had items point at *either* a service or a component. That forced a
@@ -174,6 +174,11 @@ where every add has two possible shapes.
 - `StatusEvent` — append-only, written **only when a status changes**. Full history at a fraction
   of the rows a per-poll snapshot would cost, and the trigger source for notifications later.
 - `Incident` — upstream id, title, phase, started/resolved; `IncidentUpdate` child for the log
+- `MaintenanceWindow` — **hangs off a component, not a service**, and there can be several.
+  Providers schedule maintenance per component, and a service with three components under
+  maintenance has three windows with three different times. A service-level field would have to
+  pick one and lie about the rest, so the API exposes `Component.maintenance_windows[]` and
+  derives `Service.next_maintenance_window` as the soonest across them.
 - `PollRun` — per-attempt success/error, so "everything is fine" is distinguishable from
   "we have not successfully checked in six hours"
 
@@ -229,7 +234,7 @@ One class per provider, same interface: given a URL, return normalised component
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
-`GET /api/catalog/services/resolve/` sniffs a pasted URL and picks an adapter.
+`POST /api/catalog/services/` sniffs a pasted URL, picks an adapter and creates the service.
 
 ### Keeping names and component trees current
 
@@ -271,25 +276,33 @@ the user, is specified in §5 under **Refresh**.
 
 ## 5. API surface
 
-**The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 19 operations, 14 schemas,
+**The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 17 operations, 14 schemas,
 with every parameter and response shape. It is the single source of truth; drf-spectacular will
 generate it from the code, and it is served through Scalar at `/admin/api-docs/` like your other
 projects. This section records only the decisions behind it, so the two cannot drift.
 
 ### Identifiers
 
-`GET /me/` returns your `dashboard_id`. There is no alias endpoint for "my board" — the dashboard
-is a resource and it is addressed like one, which is also the URL sharing will use unchanged.
+`GET /me/` returns your `default_dashboard_id`. There is no alias endpoint for "my board" — the
+dashboard is a resource and it is addressed like one, which is also the URL sharing will use
+unchanged. The name says *default* rather than *the* because v1 having one per user is a product
+decision, not a schema one.
 
 **UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
 everywhere except one: `Service` also carries a stable `slug`, used on public catalog routes,
 because those URLs get shared during an outage and a UUID would be hostile there. Anything the
 user owns stays UUID, so nothing personal is enumerable. Writes always address the UUID.
 
-`resolve/` derives a slug from the host and de-duplicates on collision (`linear`, `linear-2`).
+Creating a service derives its slug from the host and de-duplicates on collision (`linear`,
+`linear-2`).
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
-### Severity is filtered as a number
+### Severity is the state, and there is no status string beside it
+
+An earlier draft carried both a `severity` integer and a `status` string on every row. Two fields
+for one fact can disagree, and one of them is always the redundant copy. Only the integer is
+transported; `/meta/` publishes the 0–5 label map once and the client renders from it, so a label
+change ships without touching a serializer.
 
 `severity_lte=3` is everything needing attention; `severity=4` is maintenance. There is no named
 band parameter — the Outages chip is just `severity_lte=3`, and a client can compose any threshold
@@ -335,10 +348,26 @@ top only to stop one client hammering us.
 Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
 our request budget on other people's servers.
 
+### What belongs to the user, the device, and the deployment
+
+Three things were sitting on `/me/` that are not user data, and each moved:
+
+- **Theme is per device.** Someone runs dark on their phone at night and light on a desktop in a
+  bright office; syncing it as an account preference makes one of those wrong. It lives in that
+  browser's local storage and never reaches the server.
+- **Poll interval is deployment-wide**, not a preference. A user cannot make us hit somebody
+  else's status page more often, so it was never theirs to set.
+- **The severity label map, page sizes and refresh cooldown** are the same for everyone.
+
+Those now come from `GET /meta/`, fetched once at app start and cacheable. It also means the 0–5
+labels have exactly one home. What is left on `/me/` is genuinely personal and small: id, email,
+`default_dashboard_id`. Nothing on it was patchable once theme left, so `PATCH /me/` is gone —
+`GET` and `DELETE` are the whole resource.
+
 ### Public access
 
-Catalog and incident endpoints are readable without a token; that data is not personal. `tracked`
-comes back `null` rather than absent, so the client renders `＋` without a second code path.
+Catalog and incident endpoints are readable without a token; that data is not personal.
+`is_tracked` comes back `null` rather than absent, so the client renders `＋` without a second code path.
 Adding, refreshing, `/me/` and `/dashboards/` require auth, and public endpoints carry their own
 caching and rate limits.
 
@@ -346,21 +375,22 @@ caching and rate limits.
 
 | Screen | Calls |
 | --- | --- |
-| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/?severity_lte=&sort=` |
+| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/components/?severity_lte=&ordering=` |
 | Home, signed out | `GET /catalog/services/?severity_lte=` |
 | Header refresh | `POST /refresh/` |
-| Row ⋮ → Refresh now | `POST /refresh/{service_id}/` |
-| Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/items/{item_uuid}/` |
+| Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
+| Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` |
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
-| Add by URL | `POST /catalog/resolve/` |
-| Service · Components + filter | `GET /catalog/services/{slug}/components/?tracked=` |
+| Add by URL | `POST /catalog/services/` |
+| Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/incidents/?state=` |
 | Service · About | `GET /catalog/services/{slug}/` |
 | Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
-| ＋ on any row | `POST /dashboards/{uuid}/items/` |
+| ＋ on any row | `POST /dashboards/{uuid}/components/` |
 | Sign in | `magic-link` → `verify` |
-| Settings | `GET` / `PATCH` / `DELETE /me/` |
+| App start | `GET /meta/` |
+| Settings | `GET /me/`, `GET /meta/`, `DELETE /me/`; theme is device-local |
 
 ## 6. Frontend
 
@@ -393,7 +423,8 @@ differ.
 shows: the catalog when signed out, your tracked set when signed in. Signed out shows no counts,
 because nothing is yours.
 
-Sort is **Smart** by default: tracked first, then severity ascending (worst first), then name.
+Sort is **Smart** by default (`ordering=suggested`): tracked first, then severity ascending
+(worst first), then name.
 
 ### No offline mode
 
