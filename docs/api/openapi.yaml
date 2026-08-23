@@ -241,18 +241,18 @@ paths:
           description: No supported status page found
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
-  /board/:
+  /dashboards/{uuid}/:
     get:
       tags: [board]
-      summary: The signed-in user's board
+      summary: A dashboard's items
       description: |
-        There is one board per user in v1, so it has no id in the path. When shared boards arrive,
-        `/dashboards/{uuid}/` appears alongside this and `/board/` stays as the shorthand for your
-        own.
+        `GET /me/` returns your `dashboard_id`; there is one per user in v1. No alias endpoint —
+        this is the resource, and it is the same URL sharing will use.
 
         Filtering, sorting and pagination are server-side without exception — nothing assumes the
         board is small.
       parameters:
+        - { $ref: '#/components/parameters/Uuid' }
         - { name: severity_lte, in: query, schema: { type: integer }, description: 'Outages chip is severity_lte=3' }
         - { name: severity, in: query, schema: { type: integer }, description: 'Maintenance chip is severity=4' }
         - { name: sort, in: query, schema: { type: string, enum: [severity, name, updated], default: severity } }
@@ -269,70 +269,41 @@ paths:
                     properties:
                       results: { type: array, items: { $ref: '#/components/schemas/BoardItem' } }
 
-  /board/items/:
+  /dashboards/{uuid}/items/:
     post:
       tags: [board]
-      summary: Track one or more components
+      summary: Track a component
       description: |
         Everything on a board is a component. A service's overall status is its **overall
         component** — created by Statusboard, carrying the provider's top-level indicator — so
-        "track Twilio" and "track Twilio SMS" are the same operation with a different id.
+        "track Twilio" and "track Twilio SMS" are the same call with a different id.
 
-        There is no separate bulk endpoint and nothing to choose between: send one id or forty.
+        Creates one item. Add-all and remove-all are the client repeating this and the single
+        delete; there is no bulk variant to choose between.
+      parameters: [{ $ref: '#/components/parameters/Uuid' }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [component_ids]
+              required: [component_id]
               properties:
-                component_ids:
-                  type: array
-                  minItems: 1
-                  items: { type: string, format: uuid }
+                component_id: { type: string, format: uuid }
       responses:
         '201':
-          description: Created; already-tracked ids are ignored rather than erroring
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  created: { type: array, items: { $ref: '#/components/schemas/BoardItem' } }
-                  already_tracked: { type: array, items: { type: string, format: uuid } }
-    delete:
-      tags: [board]
-      summary: Stop tracking components
-      description: |
-        Address either the components themselves, or every component of one service — which is
-        what the service screen's **Remove all** does, without the client having to enumerate 42
-        ids.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              oneOf:
-                - required: [component_ids]
-                - required: [service_id]
-              properties:
-                component_ids: { type: array, items: { type: string, format: uuid } }
-                service_id: { type: string, format: uuid, description: Removes every tracked component of this service, including its overall component }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, properties: { removed: { type: integer } } }
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/BoardItem' } } }
+        '409': { description: Already tracked }
 
-  /board/items/{uuid}/:
+  /dashboards/{uuid}/items/{item_uuid}/:
     delete:
       tags: [board]
       summary: Stop tracking one row
       description: The row menu's Stop tracking. Same effect as the collection form with a single id.
-      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { name: item_uuid, in: path, required: true, schema: { type: string, format: uuid } }
       responses: { '204': { description: No content } }
 
   /refresh/:
@@ -405,7 +376,7 @@ components:
         email: { type: string, format: email }
         theme: { type: string, enum: [system, light, dark] }
         refresh_interval: { type: integer }
-        dashboard_id: { type: string, format: uuid }
+        dashboard_id: { type: string, format: uuid, description: 'Your board. Use it on /dashboards/{uuid}/ — there is no alias endpoint.' }
         tracked_count: { type: integer }
     Envelope:
       type: object

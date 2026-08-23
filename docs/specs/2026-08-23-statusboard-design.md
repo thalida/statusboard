@@ -154,13 +154,18 @@ This is why the board model is as simple as it is. "Track Twilio" and "track Twi
 same operation with a different id, so:
 
 - `DashboardItem` points at one thing, not one-of-two
-- `POST /board/items/` takes `component_ids` and nothing else — one id or forty, no bulk variant
-  to choose between
+- `POST /dashboards/{uuid}/items/` takes a `component_id` and nothing else
 - A board row has no `kind` to branch on, and the client never picks an endpoint by row type
 
 An earlier draft had items point at *either* a service or a component. That forced a
-discriminator on every row, an either/or request body, a separate bulk endpoint, and a client that
-had to decide which shape to send. The overall component removes all four.
+discriminator on every row, an either/or request body, and a client that had to decide which shape
+to send. The overall component removes all three.
+
+**There are no bulk endpoints and no aliases.** One `POST` creates one item; one `DELETE` removes
+one. "Add all" and "Remove all" are the client repeating those calls, so there is never a decision
+about which endpoint to use. The cost is honest: removing a service with 42 tracked components is
+42 requests. They are small, they parallelise, and it is a rare action — cheaper than an API
+where every add has two possible shapes.
 
 ### status
 
@@ -273,6 +278,9 @@ projects. This section records only the decisions behind it, so the two cannot d
 
 ### Identifiers
 
+`GET /me/` returns your `dashboard_id`. There is no alias endpoint for "my board" — the dashboard
+is a resource and it is addressed like one, which is also the URL sharing will use unchanged.
+
 **UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
 everywhere except one: `Service` also carries a stable `slug`, used on public catalog routes,
 because those URLs get shared during an outage and a UUID would be hostile there. Anything the
@@ -342,14 +350,14 @@ caching and rate limits.
 | Home, signed out | `GET /catalog/services/?severity_lte=` |
 | Header refresh | `POST /refresh/` |
 | Row ⋮ → Refresh now | `POST /refresh/{service_id}/` |
-| Row ⋮ → Stop tracking | `DELETE /dashboards/items/{uuid}/` |
+| Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/items/{item_uuid}/` |
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/resolve/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/incidents/?state=` |
 | Service · About | `GET /catalog/services/{slug}/` |
-| Service · Add all / Remove all | `POST` / `DELETE /dashboards/{uuid}/items/bulk/` |
+| Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
 | ＋ on any row | `POST /dashboards/{uuid}/items/` |
 | Sign in | `magic-link` → `verify` |
 | Settings | `GET` / `PATCH` / `DELETE /me/` |
