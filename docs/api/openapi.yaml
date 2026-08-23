@@ -35,6 +35,21 @@ info:
     independently: a provider can be `monitoring` a fix while every component reads operational,
     or report degraded with no incident open. Neither is derived from the other.
 
+    ## One schema, one model
+
+    Every schema maps to a single Django model, and related models are **nested under a key**
+    rather than flattened into the parent. `status` is its own object because `ComponentStatus`
+    is its own table — so a `ModelSerializer` with a nested serializer produces these shapes
+    directly, with no hand-assembled fields.
+
+    `allOf` appears only where a serializer *subclasses* another over the same model
+    (`ServiceDetail` extends `Service`, `TrackedComponent` extends `Component`). It never
+    merges two models into one flat object.
+
+    Query parameters stay flat and readable even though the field is nested — `severity_lte`
+    filters `status__severity` via a declared `django_filters.NumberFilter`, and
+    `ordering=severity` maps to `status__severity`. The URL should not leak the join.
+
     ## Conventions
 
     Lists return `{ counts, next, results }`. `counts` aggregates the whole collection, not the
@@ -377,30 +392,35 @@ components:
             tracked: { type: integer, nullable: true }
         oldest_refreshed_at: { type: string, format: date-time, nullable: true, description: Across the whole collection. The header renders it, so "2 min ago" means everything is at most two minutes old. }
         next: { type: string, nullable: true }
-    State:
+    Status:
       type: object
-      description: The current state a provider reports. Unrelated to incident phase.
+      description: |
+        The current state a provider reports. Its own model (`ComponentStatus`), so it is nested
+        rather than flattened onto its parent — one nested serializer, one model.
+
+        Unrelated to incident phase.
       properties:
         severity: { type: integer, minimum: 0, maximum: 5, description: Lower is worse. Render the label from /meta/ severity_labels. }
         started_at: { type: string, format: date-time, description: When it entered this severity }
         last_refreshed_at: { type: string, format: date-time }
     Service:
-      allOf:
-        - $ref: '#/components/schemas/State'
-        - type: object
-          properties:
-            id: { type: string, format: uuid }
-            slug: { type: string }
-            name: { type: string }
-            logo: { type: string, format: uri, nullable: true }
-            component_count: { type: integer }
-            active_incident_count: { type: integer }
-            next_maintenance_window:
-              allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
-              description: The soonest upcoming window across this service's components, or null.
-            overall_component_id: { type: string, format: uuid, description: Track this to track the service as a whole. }
-            is_tracked: { type: boolean, nullable: true, description: 'Whether the overall component is on your board. Null when unauthenticated, so the client renders ＋ without a second code path.' }
-            tracked_component_count: { type: integer, nullable: true, description: How many of this service's components are on your board. }
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        logo: { type: string, format: uri, nullable: true }
+        component_count: { type: integer }
+        active_incident_count: { type: integer }
+        status:
+          allOf: [{ $ref: '#/components/schemas/Status' }]
+          description: "The overall component's status. `source='overall_component.status'`."
+        next_maintenance_window:
+          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
+          description: The soonest upcoming window across this service's components, or null.
+        overall_component_id: { type: string, format: uuid, description: Track this to track the service as a whole. }
+        is_tracked: { type: boolean, nullable: true, description: 'Whether the overall component is on your board. Null when unauthenticated, so the client renders ＋ without a second code path.' }
+        tracked_component_count: { type: integer, nullable: true, description: How many of this service's components are on your board. }
     ServiceDetail:
       allOf:
         - $ref: '#/components/schemas/Service'
@@ -411,22 +431,21 @@ components:
             provider: { type: string, enum: [statuspage, instatus, betterstack, rss], description: Which adapter reads this service }
             in_catalog_since: { type: string, format: date }
     Component:
-      allOf:
-        - $ref: '#/components/schemas/State'
-        - type: object
-          properties:
-            id: { type: string, format: uuid, description: Track or untrack this component by this id. }
-            name: { type: string, description: '"All services" for the overall component' }
-            path: { type: string, nullable: true, example: 'Twilio › Programmable Messaging' }
-            parent: { type: string, format: uuid, nullable: true }
-            child_count: { type: integer, description: A component is a group when this is above zero. There is no is_group flag. }
-            is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
-            archived_at: { type: string, format: date-time, nullable: true, description: Set when the provider stops publishing it. The row stays, reads unknown, and says so — deleting it would silently drop it from someone's board. }
-            maintenance_windows:
-              type: array
-              description: A component can have several scheduled, so this is a list and it lives here rather than on the service.
-              items: { $ref: '#/components/schemas/MaintenanceWindow' }
-            is_tracked: { type: boolean, nullable: true }
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: Track or untrack this component by this id. }
+        name: { type: string, description: '"All services" for the overall component' }
+        path: { type: string, nullable: true, example: 'Twilio › Programmable Messaging' }
+        parent: { type: string, format: uuid, nullable: true }
+        child_count: { type: integer, description: A component is a group when this is above zero. There is no is_group flag. }
+        is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
+        archived_at: { type: string, format: date-time, nullable: true, description: Set when the provider stops publishing it. The row stays, reads unknown, and says so — deleting it would silently drop it from someone's board. }
+        status: { $ref: '#/components/schemas/Status' }
+        maintenance_windows:
+          type: array
+          description: A component can have several scheduled, so this is a list and it lives here rather than on the service.
+          items: { $ref: '#/components/schemas/MaintenanceWindow' }
+        is_tracked: { type: boolean, nullable: true }
     MaintenanceWindow:
       type: object
       nullable: true

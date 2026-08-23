@@ -348,6 +348,28 @@ top only to stop one client hammering us.
 Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
 our request budget on other people's servers.
 
+### One schema, one model
+
+Serializers are `ModelSerializer`s, so the API shape has to be something a `ModelSerializer` can
+actually produce. Every schema therefore maps to a single model, and **related models nest under a
+key rather than flattening into the parent**.
+
+`status` is the case that forced the rule. Severity, `started_at` and `last_refreshed_at` live on
+`ComponentStatus`, a separate table from `Component` and further still from `Service`. An earlier
+draft merged them into the parent object, which reads fine as JSON but is a hand-assembled
+serializer with `source=` on every field and no model behind it. Nested, it is one
+`StatusSerializer` over one model, reused on both parents — and `Service.status` is
+`source="overall_component.status"`, which is the overall component doing exactly the job it was
+introduced for.
+
+`allOf` survives in only one role: a serializer subclassing another **over the same model**.
+`ServiceDetail` extends `Service`; `TrackedComponent` extends `Component`. It never merges two
+models into one flat object.
+
+Query parameters stay flat even though the field is nested. `severity_lte` is a declared
+`NumberFilter(field_name="status__severity", lookup_expr="lte")` and `ordering=severity` maps to
+`status__severity`. The URL should not leak the join.
+
 ### What belongs to the user, the device, and the deployment
 
 Three things were sitting on `/me/` that are not user data, and each moved:
