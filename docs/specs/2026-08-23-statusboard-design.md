@@ -304,9 +304,9 @@ for one fact can disagree, and one of them is always the redundant copy. Only th
 transported; `/meta/` publishes the 0–5 label map once and the client renders from it, so a label
 change ships without touching a serializer.
 
-`severity_lte=3` is everything needing attention; `severity=4` is maintenance. There is no named
-band parameter — the Outages chip is just `severity_lte=3`, and a client can compose any threshold
-without waiting for a new enum value. `counts.by_severity` returns the raw histogram for the same
+`status__severity__lte=3` is everything needing attention; `status__severity=4` is maintenance.
+There is no named band parameter — the Outages chip is just a threshold, and a client can compose
+any other one without waiting for a new enum value. `counts.by_severity` returns the raw histogram for the same
 reason.
 
 ### One list, several screens
@@ -366,9 +366,24 @@ introduced for.
 `ServiceDetail` extends `Service`; `TrackedComponent` extends `Component`. It never merges two
 models into one flat object.
 
-Query parameters stay flat even though the field is nested. `severity_lte` is a declared
-`NumberFilter(field_name="status__severity", lookup_expr="lte")` and `ordering=severity` maps to
-`status__severity`. The URL should not leak the join.
+Query parameters use the ORM path, and the nesting is visible in the URL on purpose.
+
+```python
+filterset_fields = {"status__severity": ["exact", "lte"]}   # ?status__severity__lte=3
+ordering_fields  = ["status__severity", "name", "updated_at"]
+```
+
+That is django-filter's zero-config behaviour. Renaming them to `severity_lte` buys a shorter URL
+and costs a declared `NumberFilter` per field per viewset — a `FilterSet` class to write and keep
+in sync every time a field is added. The ORM path also means a client can read a response body and
+derive the filter for anything in it, including fields that do not exist yet.
+
+Two parameters cannot follow the rule and are declared: `is_tracked` is a per-user annotation with
+no ORM path behind it, and `ordering=suggested` is a multi-key sort. Everything else is generated.
+
+Because these paths are public, **model field names are chosen to read well in a URL.** The FK from
+`Service` to its overall component is `overall`, not `overall_component`, so the catalog filter is
+`overall__status__severity__lte`. Naming is an API decision now, not just an internal one.
 
 ### What belongs to the user, the device, and the deployment
 
@@ -397,8 +412,8 @@ caching and rate limits.
 
 | Screen | Calls |
 | --- | --- |
-| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/components/?severity_lte=&ordering=` |
-| Home, signed out | `GET /catalog/services/?severity_lte=` |
+| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/components/?status__severity__lte=` |
+| Home, signed out | `GET /catalog/services/?overall__status__severity__lte=` |
 | Header refresh | `POST /refresh/` |
 | Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
 | Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` |
@@ -406,7 +421,7 @@ caching and rate limits.
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/services/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
-| Service · Incidents | `GET /catalog/services/{slug}/incidents/?state=` |
+| Service · Incidents | `GET /catalog/services/{slug}/incidents/?resolved_at__isnull=true` |
 | Service · About | `GET /catalog/services/{slug}/` |
 | Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
 | ＋ on any row | `POST /dashboards/{uuid}/components/` |

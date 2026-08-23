@@ -26,7 +26,8 @@ info:
     | 4 | Maintenance |
     | 5 | Operational |
 
-    Filter it numerically. `severity_lte=3` is the Outages chip; `severity=4` is Maintenance.
+    Filter it numerically: `status__severity__lte=3` is the Outages chip, `status__severity=4` is
+    Maintenance.
 
     ## Status and incidents are different things
 
@@ -46,9 +47,19 @@ info:
     (`ServiceDetail` extends `Service`, `TrackedComponent` extends `Component`). It never
     merges two models into one flat object.
 
-    Query parameters stay flat and readable even though the field is nested — `severity_lte`
-    filters `status__severity` via a declared `django_filters.NumberFilter`, and
-    `ordering=severity` maps to `status__severity`. The URL should not leak the join.
+    **Query parameters use the ORM path, because that is what django-filter gives for free.**
+    `filterset_fields = {"status__severity": ["exact", "lte"]}` produces
+    `?status__severity__lte=3` with no `FilterSet` class, and `ordering_fields` works the same
+    way. Renaming these to `severity_lte` would mean a declared filter per field per viewset.
+
+    So the nesting is visible in the URL, and that is the point — a client can read a response
+    body and derive the filter for any field in it, including fields added later. Two exceptions
+    are unavoidable: `is_tracked` is a per-user annotation with no ORM path, and
+    `ordering=suggested` is a multi-key sort. Both are declared; nothing else is.
+
+    Because the paths are public, model field names are chosen to read well in one:
+    `Service.overall` rather than `overall_component`, so the catalog filter is
+    `overall__status__severity__lte` and not something half again as long.
 
     ## Conventions
 
@@ -152,10 +163,10 @@ paths:
       security: [{}, { bearer: [] }]
       parameters:
         - { name: q, in: query, schema: { type: string } }
-        - { name: severity_lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip is severity_lte=3' }
-        - { name: severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is severity=4' }
-        - { name: is_tracked, in: query, schema: { type: boolean }, description: Authenticated only }
-        - { name: ordering, in: query, schema: { type: string, enum: [suggested, severity, -severity, name, -name, updated, -updated], default: suggested } }
+        - { name: overall__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip. A service''s severity is its overall component''s, so the path runs through it.' }
+        - { name: overall__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
+        - { name: is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. A per-user annotation rather than a model field, so this one is a declared BooleanFilter — there is no ORM path to expose.' }
+        - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall__status__severity, -overall__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -209,8 +220,9 @@ paths:
       parameters:
         - { $ref: '#/components/parameters/Slug' }
         - { name: is_tracked, in: query, schema: { type: boolean }, description: Drives Showing All / Tracked / Untracked }
-        - { name: severity_lte, in: query, schema: { type: integer } }
-        - { name: ordering, in: query, schema: { type: string, enum: [provider, severity, -severity, name, -name], default: provider }, description: '`provider` preserves the order the provider publishes' }
+        - { name: status__severity__lte, in: query, schema: { type: integer } }
+        - { name: status__severity, in: query, schema: { type: integer } }
+        - { name: ordering, in: query, schema: { type: string, enum: [provider_order, status__severity, -status__severity, name, -name], default: provider_order }, description: '`provider_order` preserves the order the provider publishes' }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -231,7 +243,10 @@ paths:
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Slug' }
-        - { name: state, in: query, schema: { type: string, enum: [active, resolved, all], default: active }, description: '`active` is any incident whose phase is not resolved' }
+        - { name: resolved_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the active set. Omit for all.' }
+        - { name: phase, in: query, schema: { type: string, enum: [investigating, identified, monitoring, resolved] } }
+        - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated, django-filter's `in` lookup }
+        - { name: ordering, in: query, schema: { type: string, enum: [-started_at, started_at], default: -started_at } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -261,9 +276,9 @@ paths:
       description: Filtering, sorting and pagination are server-side without exception — nothing assumes a board is small.
       parameters:
         - { $ref: '#/components/parameters/Uuid' }
-        - { name: severity_lte, in: query, schema: { type: integer } }
-        - { name: severity, in: query, schema: { type: integer } }
-        - { name: ordering, in: query, schema: { type: string, enum: [severity, -severity, name, -name, updated, -updated], default: severity } }
+        - { name: status__severity__lte, in: query, schema: { type: integer } }
+        - { name: status__severity, in: query, schema: { type: integer } }
+        - { name: ordering, in: query, schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at], default: status__severity } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -414,11 +429,11 @@ components:
         active_incident_count: { type: integer }
         status:
           allOf: [{ $ref: '#/components/schemas/Status' }]
-          description: "The overall component's status. `source='overall_component.status'`."
+          description: "The overall component's status. `source='overall.status'`."
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
           description: The soonest upcoming window across this service's components, or null.
-        overall_component_id: { type: string, format: uuid, description: Track this to track the service as a whole. }
+        overall: { type: string, format: uuid, description: 'The overall component''s id — track this to track the service as a whole. Named `overall` so the filter path stays short.' }
         is_tracked: { type: boolean, nullable: true, description: 'Whether the overall component is on your board. Null when unauthenticated, so the client renders ＋ without a second code path.' }
         tracked_component_count: { type: integer, nullable: true, description: How many of this service's components are on your board. }
     ServiceDetail:
