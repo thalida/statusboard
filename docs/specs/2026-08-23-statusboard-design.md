@@ -28,7 +28,7 @@ current state, read the provider's incident log, and browse a public view withou
 | Community issue reporting, comments | Sub-project #3. The Figma set already contains `status dot - user reported`, a split-circle variant, so the dot component should accept a shape from day one. |
 | Notifications | Sub-project #2. The Figma set contains a `Toggle Notifications` button; nothing in v1 uses it. |
 | Uptime history charts | `StatusEvent` accumulates from first poll, so any chart is empty on day one. Ships when there is data. |
-| Service categories | Cut deliberately. `featured_rank` orders the suggested list instead. |
+| Service categories | Cut deliberately. `is_featured` plus `watcher_count` orders the suggested list instead. |
 
 ### Non-goals
 
@@ -89,12 +89,41 @@ is a different concept from a permission role.
 ### catalog
 
 - `Service` — slug, name, logo, homepage URL, status page URL, `adapter`, `api_url`,
-  `is_curated`, `added_by` (null for catalog entries), `featured_rank`
+  `is_curated`, `added_by` (null for catalog entries), `is_featured`, `watcher_count`
 - `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `position`, `is_group`
 
 Custom URLs dedupe into the catalog on a normalised URL, so two users pasting the same status
 page share one `Service` and one poll. A popular custom entry becomes curated by flipping a flag
 in admin.
+
+**Suggestion ordering** is `(-is_featured, -watcher_count, name)`.
+
+`is_featured` is a boolean you tick in admin for services worth surfacing regardless of usage.
+
+**`watcher_count` is distinct users, not items.** Someone tracking five Twilio components is one
+watcher, not five:
+
+```sql
+SELECT COUNT(DISTINCT d.owner_id)
+FROM   dashboards_dashboarditem i
+JOIN   dashboards_dashboard d ON d.id = i.dashboard_id
+WHERE  i.service_id = %s
+```
+
+It is recomputed for the one affected service on `DashboardItem` create and delete — a single
+indexed aggregate, not a scan — so it is exact rather than drifting the way naive
+increment/decrement would when someone adds a second component for a service they already track.
+Deleting an account removes its items, which fires the same path.
+
+A nightly reconciliation task recomputes every service as a safety net. It orders a suggestion
+list, so a few hours of staleness costs nothing if a signal is ever missed.
+
+On day one every `watcher_count` is zero, so the list is your featured picks followed by
+everything else alphabetically. As real usage arrives the tail self-orders and you stop curating.
+Nothing about the API changes at that point — it is the same query.
+
+An earlier draft used a manual integer `featured_rank`. That is worse: it needs renumbering every
+time something is promoted, and a value of 37 carries no meaning to whoever inherits it.
 
 ### dashboards
 
@@ -245,7 +274,7 @@ GET  /api/catalog/services/
        ?q=          free text; omit for the suggested list
        &status=     any | outages | maintenance
        &tracked=    true | false        (authed only)
-       &sort=       smart | severity | name | featured
+       &sort=       smart | severity | name | suggested
        &cursor=
 GET  /api/catalog/services/{slug}/
 GET  /api/catalog/services/{slug}/components/
@@ -257,7 +286,7 @@ GET  /api/catalog/services/{slug}/incidents/
 POST /api/catalog/resolve/        {url} → sniff provider, create-or-return
 ```
 
-**Suggestions are not a separate concept.** The catalog list with no `q`, sorted `featured`, *is*
+**Suggestions are not a separate concept.** The catalog list with no `q`, sorted `suggested`, *is*
 the suggested list. On the Maintenance tab `status=maintenance` restricts it to services with an
 upcoming window, which is why a suggestion there always has a time to show.
 
@@ -352,7 +381,7 @@ caching and rate limits.
 | Header refresh | `POST /api/refresh/` |
 | Row ⋮ → Refresh now | `POST /api/refresh/{service_id}/` |
 | Row ⋮ → Stop tracking | `DELETE /api/dashboards/items/{uuid}/` |
-| Discover, suggested | `GET /api/catalog/services/?sort=featured` |
+| Discover, suggested | `GET /api/catalog/services/?sort=suggested` |
 | Discover, typing / no results | `GET /api/catalog/services/?q=` |
 | Add by URL | `POST /api/catalog/resolve/` |
 | Service · Components + its filter | `GET …/{slug}/components/?tracked=` |
@@ -535,7 +564,7 @@ rather than silently showing stale green.
 ## Open questions
 
 1. **Icon weight** — filled Figma marks beside stroked Lucide icons in the same nav.
-2. **Featured ranking** — `featured_rank` is editorial until there is traffic; swapping to a
-   denormalised `watcher_count` later changes no API shape.
+2. **Suggestion quality** — featured plus watcher count is a starting point, not a ranking
+   algorithm. Worth revisiting once there is enough usage for the tail to be meaningful.
 3. **Corner-notch card treatment** — explored and set aside; revisit against the real `.row`
    component rather than a copy.
