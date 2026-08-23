@@ -153,16 +153,40 @@ Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one
 
 ### Polling
 
+**There is one global schedule, not a schedule per user or per dashboard.** A service is polled
+because *someone* tracks it, not because a particular board is open. Two hundred users tracking
+Twilio produce one poll every five minutes, not two hundred.
+
 `django-celery-beat` on `DatabaseScheduler`. Rules:
 
 - Poll only services with at least one watcher
 - Five-minute default interval, with jitter so we do not stampede
 - Honour `ETag` / `If-Modified-Since`
 - Exponential backoff on failure
-- A hard per-service minimum interval that the manual refresh also respects
+- **A hard per-service cooldown, global across all users**, which the manual refresh also obeys
 
 A failed fetch sets `unknown` and **never clobbers the last known value**. The UI shows the grey
 state plus how long it has been stale.
+
+### What the refresh button does
+
+The header control is two things at once, and only one of them touches the network beyond us:
+
+1. **Refetch** `GET /api/dashboards/{uuid}/` — reads our database, returns instantly. This is what
+   the press is usually for: "has anything changed since I last looked?"
+2. **Nudge** `POST /api/refresh/` — enqueues a poll for each service the caller tracks, and each
+   one is dropped if that service is inside its global cooldown.
+
+So pressing refresh during an outage re-polls Twilio at most once a minute no matter how many
+people press it, and everyone else pressing it gets the result of that same poll.
+
+**The throttle lives on the service, not the dashboard or the user.** The thing that needs
+protecting is somebody else's status page. A per-dashboard limit would have guarded our endpoint
+while leaving theirs exposed — and would have polled the same service twice for two boards that
+both track it. A modest per-user rate limit sits on top, but only to stop one client hammering us.
+
+Signed out, the button is present but routes to sign-in: an unauthenticated nudge is a way for
+strangers to spend our request budget on other people's servers.
 
 ---
 
@@ -170,21 +194,41 @@ state plus how long it has been stale.
 
 DRF, JWT via SimpleJWT.
 
+### Identifiers
+
+**UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
+everywhere except one place: `Service` also carries a unique `slug`, and public catalog routes
+take that instead.
+
+The reason is the logged-out view. Someone sends you `statusboard.app/service/twilio` during an
+outage and it has to be readable and guessable; a UUID there would be hostile for the one surface
+built to be shared. Everything the user owns — dashboards, items — stays UUID, so nothing personal
+is enumerable.
+
+Rules that keep the two from drifting:
+
+- Slug exists on `Service` only. No other model gets one.
+- It is unique and treated as stable. Renaming keeps the old slug as a redirect rather than
+  breaking shared links.
+- Services created through `resolve/` get a slug derived from the host, de-duplicated on
+  collision (`linear`, `linear-2`).
+- Writes and anything requiring auth address the UUID, never the slug.
+
 ```
 POST /api/auth/magic-link/           send link; rate-limited per email and per IP
 POST /api/auth/verify/               token → access (15m) + refresh (30d, rotating)
 GET  /api/me/
 
 GET  /api/dashboards/                list; POST/PATCH/DELETE
-GET  /api/dashboards/{id}/           items + nested service/component/current status
-POST /api/dashboards/{id}/items/     add; DELETE, PATCH (reorder)
-POST /api/dashboards/{id}/refresh/   202, throttled per dashboard
-POST /api/dashboards/items/{id}/refresh/   single row, same throttle
+GET  /api/dashboards/{uuid}/         items + nested service/component/current status
+POST /api/dashboards/{uuid}/items/   add; DELETE, PATCH (reorder)
+POST /api/refresh/                   202; nudge the caller's tracked services
+POST /api/refresh/{service_id}/      202; nudge one service (UUID — authed write)
 
 GET  /api/catalog/services/?q=       search; ordered by featured_rank
-GET  /api/catalog/services/{slug}/   component tree with group flags
+GET  /api/catalog/services/{slug}/   component tree with group flags (public — slug)
 POST /api/catalog/services/resolve/  {url} → sniff provider, create-or-return
-GET  /api/status/services/{slug}/incidents/
+GET  /api/status/services/{slug}/incidents/          (public — slug)
 GET  /api/status/outages/            currently broken across the catalog — powers the public view
 ```
 
