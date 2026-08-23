@@ -165,7 +165,8 @@ paths:
         - { name: q, in: query, schema: { type: string } }
         - { name: overall__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip. A service''s severity is its overall component''s, so the path runs through it.' }
         - { name: overall__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
-        - { name: is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. A per-user annotation rather than a model field, so this one is a declared BooleanFilter — there is no ORM path to expose.' }
+        - { name: tracked_component_count__gt, in: query, schema: { type: integer }, description: 'Authenticated only. `__gt=0` is "on my board at all" — the Tracked filter on Discover.' }
+        - { name: overall__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
         - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall__status__severity, -overall__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -427,15 +428,26 @@ components:
         logo: { type: string, format: uri, nullable: true }
         component_count: { type: integer }
         active_incident_count: { type: integer }
-        status:
-          allOf: [{ $ref: '#/components/schemas/Status' }]
-          description: "The overall component's status. `source='overall.status'`."
+        overall:
+          allOf: [{ $ref: '#/components/schemas/OverallComponent' }]
+          description: |
+            The service's own status *is* its overall component's, so this is that component
+            rather than a copy of its fields. One FK, one nested serializer.
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
           description: The soonest upcoming window across this service's components, or null.
-        overall: { type: string, format: uuid, description: 'The overall component''s id — track this to track the service as a whole. Named `overall` so the filter path stays short.' }
-        is_tracked: { type: boolean, nullable: true, description: 'Whether the overall component is on your board. Null when unauthenticated, so the client renders ＋ without a second code path.' }
-        tracked_component_count: { type: integer, nullable: true, description: How many of this service's components are on your board. }
+        tracked_component_count:
+          type: integer
+          nullable: true
+          description: |
+            How many of this service's components are on your board, **counting the overall
+            component**. Overall is a component like any other; excluding it would reintroduce the
+            service-versus-component split.
+
+            `> 0` is therefore "this service is on my board at all", which is a different question
+            from `overall.is_tracked` — you can track Twilio SMS without tracking Twilio as a
+            whole. It also renders the "3 tracked" label on the row, so no separate boolean is
+            carried for something the count already answers.
     ServiceDetail:
       allOf:
         - $ref: '#/components/schemas/Service'
@@ -461,6 +473,18 @@ components:
           description: A component can have several scheduled, so this is a list and it lives here rather than on the service.
           items: { $ref: '#/components/schemas/MaintenanceWindow' }
         is_tracked: { type: boolean, nullable: true }
+    OverallComponent:
+      type: object
+      description: |
+        The overall component, as it appears on its parent service. A slim projection of
+        `Component` — the id you track by, its status, and whether you already track it.
+
+        Read severity at `overall.status.severity`, which is the same path the filter uses:
+        `?overall__status__severity__lte=3`.
+      properties:
+        id: { type: string, format: uuid, description: Track this to track the service as a whole. }
+        status: { $ref: '#/components/schemas/Status' }
+        is_tracked: { type: boolean, nullable: true, description: Null when unauthenticated, so the client renders ＋ without a second code path. }
     MaintenanceWindow:
       type: object
       nullable: true

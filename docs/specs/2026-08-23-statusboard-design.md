@@ -358,9 +358,31 @@ key rather than flattening into the parent**.
 `ComponentStatus`, a separate table from `Component` and further still from `Service`. An earlier
 draft merged them into the parent object, which reads fine as JSON but is a hand-assembled
 serializer with `source=` on every field and no model behind it. Nested, it is one
-`StatusSerializer` over one model, reused on both parents — and `Service.status` is
-`source="overall_component.status"`, which is the overall component doing exactly the job it was
-introduced for.
+`StatusSerializer` over one model, reused on both parents — and a `Service` reaches its status through
+the overall component, which is the job that component was introduced for.
+
+The rule applies transitively, which is easy to miss. A `Service` has no status of its own — its
+status *is* its overall component's. An intermediate draft gave `Service` a `status` key with
+`source="overall.status"`, reaching through a relation to hoist fields onto the parent: the same
+mistake one level up. It also carried `overall` as a bare id and `is_tracked` as a third field
+describing that same component. All three collapse into one nested object:
+
+```jsonc
+"overall": { "id": "…", "status": { "severity": 1, … }, "is_tracked": true },
+"tracked_component_count": 3
+```
+
+One FK, one nested serializer. The response path and the filter path become identical —
+`overall.status.severity` is read at `?overall__status__severity__lte=3`.
+
+**Tracking is two questions, not one.** Whether the *overall* component is tracked is what the ＋
+on a service row toggles; whether *anything* from the service is tracked decides if it appears on
+your board. You can track Twilio SMS without tracking Twilio as a whole. The first is
+`overall.is_tracked`; the second is `tracked_component_count > 0`, so no second boolean is carried
+for something the count already answers — and the same count renders the "3 tracked" label.
+
+The count **includes the overall component**, because overall is a component like any other.
+Excluding it would reintroduce the service-versus-component split this design exists to remove.
 
 `allOf` survives in only one role: a serializer subclassing another **over the same model**.
 `ServiceDetail` extends `Service`; `TrackedComponent` extends `Component`. It never merges two
@@ -378,8 +400,9 @@ and costs a declared `NumberFilter` per field per viewset — a `FilterSet` clas
 in sync every time a field is added. The ORM path also means a client can read a response body and
 derive the filter for anything in it, including fields that do not exist yet.
 
-Two parameters cannot follow the rule and are declared: `is_tracked` is a per-user annotation with
-no ORM path behind it, and `ordering=suggested` is a multi-key sort. Everything else is generated.
+Three parameters cannot follow the rule and are declared: `tracked_component_count__gt` and
+`overall__is_tracked` are per-user annotations with no ORM path behind them, and
+`ordering=suggested` is a multi-key sort. Everything else is generated.
 
 Because these paths are public, **model field names are chosen to read well in a URL.** The FK from
 `Service` to its overall component is `overall`, not `overall_component`, so the catalog filter is
@@ -418,6 +441,7 @@ caching and rate limits.
 | Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
 | Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` |
 | Discover, suggested | `GET /catalog/services/` |
+| Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/services/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
