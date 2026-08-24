@@ -274,6 +274,11 @@ state plus how long it has been stale.
 The manual refresh path, and why the cooldown lives on the service rather than the dashboard or
 the user, is specified in §5 under **Refresh**.
 
+A poll also captures the service's **logo** from its own page. A favicon belonging to the parent
+company rather than the product — Google's mark for Google Slides — is discarded rather than
+stored: a wrong logo misidentifies the row, while a missing one falls back to an initial and
+merely looks incomplete.
+
 ## 5. API surface
 
 **The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 17 operations, 14 schemas,
@@ -452,6 +457,44 @@ caching and rate limits.
 | Sign in | `magic-link` → `verify` |
 | App start | `GET /meta/` |
 | Settings | `GET /me/`, `GET /meta/`, `DELETE /me/`; theme is device-local |
+
+### The row is one component, used everywhere
+
+Home, Discover and the service screen render the same card. Line one is the mark and the name;
+line two is the status and its duration; line three is context. Nothing shares a line, because a
+232px phone row cannot hold two things that must not truncate.
+
+**Line three is the only variable, and what it holds follows from what the row is.**
+
+| the row is | line three |
+| --- | --- |
+| a service you track nothing of | `7 components` — what is on offer |
+| a service you track part of | `Tracking [overall] [3 of 42]` |
+| a component on your board | its parent breadcrumb, `Twilio › Programmable Messaging` |
+
+A board row never shows a tracking count. The count answers *how much of this service am I
+watching*, which is a question about a **service**; a board row is already one tracked component,
+so the answer would always be "this one".
+
+Tracking state renders as **one token per subscription** rather than a sentence — `overall` for the
+summary row, `3 of 42` for components, both when you take both. That maps one-to-one onto
+`overall.is_tracked` and `tracked_component_count`, so the client assembles no strings, and "all"
+is simply `118 of 118` with no extra vocabulary.
+
+**The duration is always shown**, including on operational rows, where it reads as time since the
+service last left operational — the same `status.started_at` every other state uses. Maintenance is
+the one case that would state its timing twice, so its window renders in that slot rather than
+below, and always relatively: `in 4 hrs` before it starts, `ends in 40 min` while it runs.
+
+**The overall component is titled by where you are standing.** On a service screen the header
+already says Twilio, so the row is `Overall status` with `All services` beneath. On your board
+nothing else names the service, so it is `Twilio` with `Overall status` beneath. Same component,
+same `is_overall` flag, different useful title.
+
+**Marks appear only where rows come from different services** — Home and Discover. On a service
+screen every row belongs to the same service, so forty-two identical marks are noise and the slot
+is dropped. Where a service has no usable logo the row falls back to its initial in the same
+circle, so a list with patchy coverage keeps one left edge.
 
 ## 6. Frontend
 

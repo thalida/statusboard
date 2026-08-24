@@ -279,7 +279,15 @@ paths:
         - { $ref: '#/components/parameters/Uuid' }
         - { name: status__severity__lte, in: query, schema: { type: integer } }
         - { name: status__severity, in: query, schema: { type: integer } }
-        - { name: ordering, in: query, schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at], default: status__severity } }
+        - name: ordering
+          in: query
+          schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at, next_transition], default: status__severity }
+          description: |
+            `next_transition` is the Maintenance tab: the window's `ends_at` if it is running,
+            `starts_at` if it is not. One key, so anything in progress sorts to the top without a
+            rule of its own — sorting on `ends_at` alone would not, because a long window in
+            progress can end after a short one that has not started. It is the third declared
+            ordering, being an annotation rather than a field.
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -425,7 +433,16 @@ components:
         id: { type: string, format: uuid }
         slug: { type: string }
         name: { type: string }
-        logo: { type: string, format: uri, nullable: true }
+        logo:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Taken from the provider's own page during the poll (favicon or `og:image`). **Null
+            rather than approximate**: a favicon that belongs to the parent company and not the
+            product — Google's mark on a Google Slides row — misrepresents the row, so the poller
+            discards it and the client falls back to the initial in the same circle. A patchy
+            catalogue then reads as patchy rather than wrong.
         component_count: { type: integer }
         active_incident_count: { type: integer }
         overall:
@@ -461,7 +478,14 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid, description: Track or untrack this component by this id. }
-        name: { type: string, description: '"All services" for the overall component' }
+        name:
+          type: string
+          description: |
+            The component's own name. For the overall component this is `"All services"`, which is
+            correct on the service screen where the service is already named in the header — but a
+            board row must render the **service** name instead, with `"Overall status"` beneath it,
+            because there the service name is the only word worth scanning for. The client picks
+            using `is_overall`; the API does not ship two names.
         path: { type: string, nullable: true, example: 'Twilio › Programmable Messaging' }
         parent: { type: string, format: uuid, nullable: true }
         child_count: { type: integer, description: A component is a group when this is above zero. There is no is_group flag. }
@@ -488,6 +512,14 @@ components:
     MaintenanceWindow:
       type: object
       nullable: true
+      description: |
+        Absolute times; the client renders them **relative** — `in 4 hrs` before it starts,
+        `ends in 40 min` while it runs. An absolute window does not fit a phone row, and the
+        relative form also carries the distinction that matters: whether this is happening to you
+        now or is something to plan around.
+
+        A row never states its timing twice — the window occupies the same slot as any other
+        duration, so the line beneath stays the parent breadcrumb.
       properties:
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
