@@ -387,11 +387,18 @@ longer exists should be told.
 
 Three things happen to a service, and the summary carries one field for each:
 
-| what is happening | on `Service` |
-| --- | --- |
-| its current state | `overall_component` — the overall component, with its `status` |
-| scheduled work | `next_maintenance_window` — the soonest across its components |
-| a live problem | `latest_incident` — the most recently started, active or resolved |
+| what is happening | on `Service` | where it really lives |
+| --- | --- | --- |
+| its current state | `overall_component`, with its `status` | on that one component |
+| scheduled work | `next_maintenance_window` | across **all** its components |
+| a live problem | `latest_incident` | on the service |
+
+**Only the first is nested, and that is not a style choice.** `overall_component.status` is
+literally that component's own field, so it is read through the component that owns it. The other
+two are not: maintenance is scheduled on real components and the summary is the soonest across all
+of them, and an incident is published against the service. Nesting either under
+`overall_component` would claim it belongs to a component that, in the maintenance case, almost
+never has one.
 
 Each is a **projection, not the full record**. `latest_incident` is an `IncidentRef` with no
 `updates` array, so a row costs one title rather than a log; the full incident is a tab away.

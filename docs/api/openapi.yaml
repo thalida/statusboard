@@ -576,7 +576,13 @@ components:
             Read `active_incident_count` to know whether anything is open.
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
-          description: The soonest upcoming window across this service's components, or null.
+          description: |
+            The soonest upcoming window across **every** component of this service. Null if none
+            is scheduled.
+
+            This is not the overall component's own window. Providers schedule maintenance on real
+            components, so the overall component rarely has one. Read
+            `Component.maintenance_windows` for a single component's windows.
         tracked_component_count:
           type: integer
           nullable: true
