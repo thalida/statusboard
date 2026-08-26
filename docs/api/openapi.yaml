@@ -257,7 +257,7 @@ paths:
         - { name: is_tracked, in: query, schema: { type: boolean }, description: Drives Showing All / Tracked / Untracked }
         - { name: status__severity__lte, in: query, schema: { type: integer } }
         - { name: status__severity, in: query, schema: { type: integer } }
-        - { name: ordering, in: query, schema: { type: string, enum: [provider_order, status__severity, -status__severity, name, -name], default: provider_order }, description: '`provider_order` preserves the order the provider publishes' }
+        - { name: ordering, in: query, schema: { type: string, enum: [status_page_order, status__severity, -status__severity, name, -name], default: status_page_order }, description: '`status_page_order` keeps the order the status page lists them in.' }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Fields' }

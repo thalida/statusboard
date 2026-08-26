@@ -90,12 +90,12 @@ is a different concept from a permission role.
 
 - `Service` — slug, name, logo, homepage URL, status page URL, `adapter`, `api_url`,
   `is_curated`, `added_by` (null for catalog entries), `is_featured`, `watcher_count`
-- `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `provider_order`,
+- `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `status_page_order`,
   `archived_at`
 
   There is no `is_group` flag: a component is a group when it has children, so the flag would be a
-  second copy of a fact the tree already holds. `provider_order` preserves the order the provider
-  publishes, which is the order the component tab shows by default.
+  second copy of a fact the tree already holds. `status_page_order` preserves the order the status
+  page lists them in, which is the order the components tab shows by default.
 
 Custom URLs dedupe into the catalog on a normalised URL, so two users pasting the same status
 page share one `Service` and one poll. A popular custom entry becomes curated by flipping a flag
@@ -244,7 +244,7 @@ not just a status read.
 Each successful poll:
 
 1. **Upserts components by `upstream_id`.** New ones are created, renames are applied, and the
-   parent/child structure and `provider_order` are refreshed.
+   parent/child structure and `status_page_order` are refreshed.
 2. **Marks vanished components `archived_at`** rather than deleting them. Someone may be tracking
    one, and deleting the row would silently remove it from their board. An archived component
    still renders, reads `unknown`, and says the provider no longer publishes it.
