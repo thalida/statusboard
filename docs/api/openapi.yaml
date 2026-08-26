@@ -3,74 +3,80 @@ info:
   title: Statusboard API
   version: 1.0.0
   description: |
-    One place to see whether the services you depend on are working.
+    Monitor the status pages of many services in one place.
 
     ## Everything on a board is a component
 
-    Each service has an **overall component** that Statusboard creates, `is_overall: true`,
-    carrying the provider's own top-level indicator. So "track Twilio" and "track Twilio SMS" are
-    the same call with a different id. There is no service-versus-component branch anywhere.
+    Each service has an overall component. Statusboard creates it. It has `is_overall: true`.
+    It carries the provider's own top-level indicator.
+
+    To track a service, track its overall component. To track one part of a service, track that
+    component. Both are the same call with a different id.
 
     ## Severity is the state
 
-    `severity` is an integer, 0–5, and **lower is worse** — matching the SEV0/SEV1 convention.
-    There is no parallel status string: the label is a client-side render of the number, so the two
-    can never disagree.
+    `severity` is an integer from 0 to 5. Lower is worse. This matches the SEV0/SEV1 convention.
+
+    Do not expect a status string. The client renders the label from the number.
 
     | severity | label |
     |---|---|
     | 0 | Major outage |
     | 1 | Partial outage |
     | 2 | Degraded |
-    | 3 | Unknown — we could not reach the provider |
+    | 3 | Unknown. The provider was unreachable. |
     | 4 | Maintenance |
     | 5 | Operational |
 
-    Filter it numerically: `status__severity__lte=3` is the Outages chip, `status__severity=4` is
-    Maintenance.
+    Filter severity as a number. `status__severity__lte=3` gives the Outages chip.
+    `status__severity=4` gives Maintenance.
 
     ## Status and incidents are different things
 
-    A **severity** is the current state a provider reports. An **incident** is that provider's
-    narrative record — a title and a running log — with a workflow `phase`. They move
-    independently: a provider can be `monitoring` a fix while every component reads operational,
-    or report degraded with no incident open. Neither is derived from the other.
+    A severity is the state the provider reports now. An incident is the provider's written
+    record: a title, a log, and a workflow `phase`.
+
+    The two move independently. A provider can monitor a fix while every component reads
+    operational. A provider can report degraded with no incident open.
+
+    Do not derive one from the other.
 
     ## One schema, one model
 
-    Every schema maps to a single Django model, and related models are **nested under a key**
-    rather than flattened into the parent. `status` is its own object because `ComponentStatus`
-    is its own table — so a `ModelSerializer` with a nested serializer produces these shapes
-    directly, with no hand-assembled fields.
+    Every schema maps to one Django model. Nest a related model under a key. Do not flatten it
+    into the parent.
 
-    `allOf` appears only where a serializer *subclasses* another over the same model
-    (`ServiceDetail` extends `Service`, `TrackedComponent` extends `Component`). It never
-    merges two models into one flat object.
+    `status` is its own object because `ComponentStatus` is its own table. A `ModelSerializer`
+    with a nested serializer produces these shapes directly.
 
-    **Query parameters use the ORM path, because that is what django-filter gives for free.**
-    `filterset_fields = {"status__severity": ["exact", "lte"]}` produces
-    `?status__severity__lte=3` with no `FilterSet` class, and `ordering_fields` works the same
-    way. Renaming these to `severity_lte` would mean a declared filter per field per viewset.
+    The rule applies transitively. A `Service` nests its overall component. It does not copy that
+    component's status.
 
-    So the nesting is visible in the URL, and that is the point — a client can read a response
-    body and derive the filter for any field in it, including fields added later. Two exceptions
-    are unavoidable: `is_tracked` is a per-user annotation with no ORM path, and
-    `ordering=suggested` is a multi-key sort. Both are declared; nothing else is.
+    `allOf` marks a serializer that subclasses another over the same model. `ServiceDetail`
+    extends `Service`. `TrackedComponent` extends `Component`. `allOf` never merges two models.
 
-    Because the paths are public, model field names are chosen to read well in one:
-    `Service.overall` rather than `overall_component`, so the catalog filter is
-    `overall__status__severity__lte` and not something half again as long.
+    Query parameters use the ORM path. django-filter generates them from `filterset_fields` and
+    `ordering_fields`. No `FilterSet` class is necessary.
+
+    The nesting is visible in the URL. Read a field's path in the response body to build its
+    filter. This holds for fields added later.
+
+    Four parameters are declared, not generated. They have no ORM path:
+    `tracked_component_count__gt`, `overall__is_tracked`, `ordering=suggested`, and
+    `ordering=next_transition`.
+
+    Model field names are chosen to read well in a URL. `Service.overall` keeps the catalog
+    filter short.
 
     ## Conventions
 
     Lists return `{ aggregates, next, results }`. `aggregates` covers the whole collection, not
-    the page, so a chip is correct on page four. `ordering` follows DRF (`-severity` reverses).
-    GETs are ETagged.
+    the page. `ordering` follows DRF. Prefix a field with `-` to reverse it. GETs are ETagged.
 
     ## Identity
 
-    Every resource is a UUID. `Service` also has a stable `slug` used on public catalog routes,
-    because those URLs get shared during an outage.
+    Every resource has a UUID. `Service` also has a stable `slug`. Public catalog routes use the
+    slug, because people share those URLs during an outage.
 servers:
   - url: https://statusboard.app/api
 tags:
@@ -139,8 +145,8 @@ paths:
       tags: [me]
       summary: The signed-in user
       description: |
-        Theme is deliberately absent — it is a per-device choice and lives in that device's local
-        storage. Poll interval is absent too; it is deployment-wide, in `/meta/`.
+        This resource has no theme field. Theme is per device. Store it in local storage.
+        Poll interval is deployment-wide. Read it from `/meta/`.
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
     delete:
@@ -154,12 +160,12 @@ paths:
       tags: [catalog]
       summary: List services
       description: |
-        Serves Discover, the suggested lists and the public "down right now" view — one query,
-        different parameters.
+        This endpoint serves Discover, the suggested lists, and the public "down right now" view.
+        Use parameters to select the view.
 
-        With `q`, ordering is relevance. Without it the default is `suggested`, meaning
-        `(-is_featured, severity, -watcher_count, name)` — so a mid-popularity service that is
-        currently broken outranks a more popular one that is fine.
+        With `q`, results are ordered by relevance. Without `q`, the default ordering is
+        `suggested`: `(-is_featured, severity, -watcher_count, name)`. A broken service outranks a
+        more popular service that is working.
       security: [{}, { bearer: [] }]
       parameters:
         - { name: q, in: query, schema: { type: string } }
@@ -182,24 +188,38 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Service' } }
+
+  /catalog/imports/:
     post:
       tags: [catalog]
-      summary: Add a service from its status page URL
+      summary: Import a service from its status page URL
       description: |
-        Sniffs the provider, creates the service and its components if it is new, and returns it.
-        Deduped on a normalised URL, so two people pasting the same page get the same service and
-        it is polled once.
+        An import is a resource, not an action on the service collection. It records one attempt to
+        turn a URL into a service.
 
+        The importer detects the provider. If the service is new, it creates the service and its
+        components. Services are deduplicated on a normalised URL. One status page gives one
+        service and one poll.
+
+        `POST /catalog/services/` is reserved. A future admin create takes a service body, not a
+        URL, and must not share this endpoint.
+
+        This shape also allows a slow import to return `202` later, with the client polling the
+        import. That change would not alter the endpoint's meaning.
       requestBody:
         required: true
         content:
           application/json:
             schema: { type: object, required: [status_page_url], properties: { status_page_url: { type: string, format: uri } } }
       responses:
-        '200': { description: Already in the catalog, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
-        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
+        '200':
+          description: The URL resolves to a service already in the catalog
+          content: { application/json: { schema: { $ref: '#/components/schemas/Import' } } }
+        '201':
+          description: Service created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Import' } } }
         '422':
-          description: No supported status page found there
+          description: No supported status page found at that URL
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /catalog/services/{slug}/:
@@ -217,8 +237,8 @@ paths:
       tags: [catalog]
       summary: List a service's components
       description: |
-        The tree, flattened, with `parent` linking children to groups. The overall component is
-        always first. `aggregates` gives the tab labels — All 42, Tracked 5.
+        The component tree, flattened. `parent` links a child to its group. The overall component
+        is first. `aggregates` gives the tab labels.
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Slug' }
@@ -289,11 +309,9 @@ paths:
           in: query
           schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at, next_transition], default: status__severity }
           description: |
-            `next_transition` is the Maintenance tab: the window's `ends_at` if it is running,
-            `starts_at` if it is not. One key, so anything in progress sorts to the top without a
-            rule of its own — sorting on `ends_at` alone would not, because a long window in
-            progress can end after a short one that has not started. It is the third declared
-            ordering, being an annotation rather than a field.
+            `next_transition` sorts the Maintenance tab. It uses `ends_at` for a running window
+            and `starts_at` for one that has not started. Running windows sort first. This
+            ordering is declared, not generated.
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
       responses:
@@ -339,15 +357,13 @@ paths:
       tags: [refresh]
       summary: Refresh now
       description: |
-        With no body, nudges every service the caller tracks and returns the dashboard's
-        components. With `component_id`, nudges just that component's service.
+        With no body, this refreshes every service the caller tracks. With `component_id`, it
+        refreshes that component's service only.
 
-        Either way it skips anything inside its **global per-service cooldown**, waits up to three
-        seconds, and returns the same payload the `GET` would. One call, so the client never has
-        to guess how long to wait before refetching.
+        The endpoint skips any service inside its cooldown. It waits up to three seconds. It
+        returns the same payload as the `GET`. Do not refetch after the call.
 
-        The cooldown is on the service, not the user or the board: the thing needing protection is
-        somebody else's status page, and two boards tracking Twilio should cost one poll.
+        The cooldown is global and per service. Two boards that track one service cost one poll.
       requestBody:
         content:
           application/json:
@@ -383,6 +399,14 @@ components:
       description: Error
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
+    Import:
+      type: object
+      description: One attempt to turn a status page URL into a service.
+      properties:
+        id: { type: string, format: uuid }
+        status_page_url: { type: string, format: uri, description: The URL as submitted. }
+        created: { type: boolean, description: True if this import created the service. }
+        service: { $ref: '#/components/schemas/ServiceDetail' }
     Error:
       type: object
       properties:
@@ -414,13 +438,13 @@ components:
     Envelope:
       type: object
       description: |
-        Every list response has the same three keys. `aggregates` holds everything computed over
-        the **whole collection** rather than the page; `results` is the page; `next` is the cursor.
+        Every list response has the same three keys. `aggregates` covers the whole collection.
+        `results` is the page. `next` is the cursor.
 
-        A list endpoint keeps this envelope and swaps in its own `aggregates` schema — see
-        `StatusAggregates` and `IncidentAggregates`. Nothing collection-wide is ever added at the
-        top level, so a new figure never changes the envelope's shape and a client can read
-        `aggregates` generically.
+        A list endpoint keeps this envelope and supplies its own `aggregates` schema. See
+        `StatusAggregates` and `IncidentAggregates`.
+
+        Do not add a collection-wide value at the top level. Put it in `aggregates`.
       properties:
         aggregates:
           allOf: [{ $ref: '#/components/schemas/Aggregates' }]
@@ -429,8 +453,8 @@ components:
     Aggregates:
       type: object
       description: |
-        The floor every aggregate block shares. An endpoint extends it rather than replacing it,
-        so `aggregates.total` can be read without knowing which endpoint produced it.
+        The base every aggregate block shares. An endpoint extends it. Read `aggregates.total`
+        without knowing the endpoint.
       properties:
         total: { type: integer, description: Size of the whole collection, not the page. }
     StatusAggregates:
@@ -449,9 +473,8 @@ components:
               format: date-time
               nullable: true
               description: |
-                The staleness of the freshest-possible claim: the header renders it, so "2 min ago"
-                means *everything* in the collection is at most two minutes old. Across the whole
-                collection, not the page — a board's second page cannot be quietly older.
+                The oldest refresh time in the collection. The header shows it. "2 min ago" means
+                no item is older than two minutes. This covers the whole collection, not the page.
     IncidentAggregates:
       allOf:
         - $ref: '#/components/schemas/Aggregates'
@@ -464,10 +487,8 @@ components:
     Status:
       type: object
       description: |
-        The current state a provider reports. Its own model (`ComponentStatus`), so it is nested
-        rather than flattened onto its parent — one nested serializer, one model.
-
-        Unrelated to incident phase.
+        The state the provider reports now. This is its own model, `ComponentStatus`, so it is
+        nested. It is unrelated to incident phase.
       properties:
         severity: { type: integer, minimum: 0, maximum: 5, description: Lower is worse. Render the label from /meta/ severity_labels. }
         started_at: { type: string, format: date-time, description: When it entered this severity }
@@ -483,11 +504,10 @@ components:
           format: uri
           nullable: true
           description: |
-            Taken from the provider's own page during the poll (favicon or `og:image`). **Null
-            rather than approximate**: a favicon that belongs to the parent company and not the
-            product — Google's mark on a Google Slides row — misrepresents the row, so the poller
-            discards it and the client falls back to the initial in the same circle. A patchy
-            catalogue then reads as patchy rather than wrong.
+            The poller takes this from the provider's page. It uses the favicon or `og:image`.
+
+            The poller discards a favicon that belongs to the parent company and not the product.
+            The field is then null. The client shows the service initial instead.
         component_count: { type: integer }
         active_incident_count: { type: integer }
         overall:
@@ -502,14 +522,10 @@ components:
           type: integer
           nullable: true
           description: |
-            How many of this service's components are on your board, **counting the overall
-            component**. Overall is a component like any other; excluding it would reintroduce the
-            service-versus-component split.
+            The number of this service's components on your board. The overall component counts.
 
-            `> 0` is therefore "this service is on my board at all", which is a different question
-            from `overall.is_tracked` — you can track Twilio SMS without tracking Twilio as a
-            whole. It also renders the "3 tracked" label on the row, so no separate boolean is
-            carried for something the count already answers.
+            A value above 0 means the service is on your board. This differs from
+            `overall.is_tracked`, which covers the overall component only.
     ServiceDetail:
       allOf:
         - $ref: '#/components/schemas/Service'
@@ -526,11 +542,10 @@ components:
         name:
           type: string
           description: |
-            The component's own name. For the overall component this is `"All services"`, which is
-            correct on the service screen where the service is already named in the header — but a
-            board row must render the **service** name instead, with `"Overall status"` beneath it,
-            because there the service name is the only word worth scanning for. The client picks
-            using `is_overall`; the API does not ship two names.
+            The component's own name. For the overall component it is `"All services"`.
+
+            Use this name on a service screen. On a board row, show the service name instead, with
+            `"Overall status"` below it. Select with `is_overall`. The API sends one name only.
         path: { type: string, nullable: true, example: 'Twilio › Programmable Messaging' }
         parent: { type: string, format: uuid, nullable: true }
         child_count: { type: integer, description: A component is a group when this is above zero. There is no is_group flag. }
@@ -545,11 +560,10 @@ components:
     OverallComponent:
       type: object
       description: |
-        The overall component, as it appears on its parent service. A slim projection of
-        `Component` — the id you track by, its status, and whether you already track it.
+        The overall component as it appears on its parent service. This is a subset of
+        `Component`: the id, the status, and whether you track it.
 
-        Read severity at `overall.status.severity`, which is the same path the filter uses:
-        `?overall__status__severity__lte=3`.
+        Read severity at `overall.status.severity`. The filter uses the same path.
       properties:
         id: { type: string, format: uuid, description: Track this to track the service as a whole. }
         status: { $ref: '#/components/schemas/Status' }
@@ -558,13 +572,10 @@ components:
       type: object
       nullable: true
       description: |
-        Absolute times; the client renders them **relative** — `in 4 hrs` before it starts,
-        `ends in 40 min` while it runs. An absolute window does not fit a phone row, and the
-        relative form also carries the distinction that matters: whether this is happening to you
-        now or is something to plan around.
+        Times are absolute. The client shows them relative. Show `in 4 hrs` before the window
+        starts. Show `ends in 40 min` while it runs.
 
-        A row never states its timing twice — the window occupies the same slot as any other
-        duration, so the line beneath stays the parent breadcrumb.
+        Show the window in the duration slot. Do not show a second time on the line below.
       properties:
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
@@ -596,9 +607,8 @@ components:
         aggregates:
           allOf: [{ $ref: '#/components/schemas/StatusAggregates' }]
           description: |
-            The same block the board's own list returns, so the chips can be drawn before the
-            first page arrives. A resource may carry `aggregates` too — the key means the same
-            thing wherever it appears: computed over a whole collection, not a page.
+            The same block the board's list returns. Draw the chips before the first page
+            arrives. `aggregates` means the same on a resource as on a list.
     TrackedComponent:
       allOf:
         - $ref: '#/components/schemas/Component'
