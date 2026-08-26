@@ -150,6 +150,25 @@ Statusboard creates one component per service, `is_overall = true`, `parent = nu
 siblings, because a worst-of rollup leaves Cloudflare permanently orange when one of 109
 components is always degraded.
 
+**Not every provider publishes one, so `status.source` says where a severity came from.**
+
+| `source` | when | severity |
+| --- | --- | --- |
+| `provider` | the provider publishes a top-level status | theirs |
+| `components` | it publishes component statuses but no top-level one | worst of the components |
+| `incidents` | it publishes incidents only, no status at all | 2 if any incident is open, else 5 |
+
+`incidents` is the RSS case. A feed we fetched is **not** unknown — it told us something. Clean
+feed means nothing is reported wrong; an open entry means something is. What it cannot say is how
+bad, so an open incident is `degraded` and no other severity is inferred from it.
+
+`unknown` keeps its own meaning: we could not reach the provider. That is the only case where we
+have no data at all.
+
+A screen showing a derived status says so. "Degraded" from a published indicator and "Degraded"
+because an RSS entry exists are different claims, and a user who clicks through to a provider's
+page and finds no status there should not feel misled.
+
 This is why the board model is as simple as it is. "Track Twilio" and "track Twilio SMS" are the
 same operation with a different id, so:
 
@@ -396,6 +415,18 @@ Three things happen, and a component carries all three:
 **The overall component carries the same three, scoped to the whole service.** Its
 `maintenance_windows` is every window in the service, from any component. Its `latest_incident` is
 the most recent incident anywhere in it.
+
+**Tracking the overall component means one card for the service**, instead of one per component.
+That is the point of it, and it is why the card compresses: a service with three maintenance
+windows still gets one row.
+
+The row shows `next_maintenance_window` and, when `maintenance_window_count` is above one, "+2
+more". **Windows are never merged into a combined span** — two windows a week apart are two facts,
+and a single merged window would be true of neither. Same for incidents: the row shows
+`latest_incident` and `active_incident_count` says whether there are others.
+
+Read `maintenance_window_count` rather than the array when rendering a row. On the overall
+component the array covers every component in the service and can be long.
 
 That is what makes tracking a service as a whole work. A board row is a component, so a row for
 Twilio's overall component must answer "is anything scheduled, is anything broken" for Twilio —

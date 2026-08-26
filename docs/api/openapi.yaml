@@ -532,6 +532,23 @@ components:
         nested. It is unrelated to incident phase.
       properties:
         severity: { type: integer, minimum: 0, maximum: 5, description: Lower is worse. Render the label from /meta/ severity_labels. }
+        source:
+          type: string
+          enum: [provider, components, incidents]
+          description: |
+            Where this severity comes from.
+
+            `provider` — the provider publishes this status. Trust it.
+
+            `components` — the provider publishes component statuses but no top-level indicator.
+            This is the worst severity among the components. Only the overall component uses it.
+
+            `incidents` — the provider publishes incidents only, with no status of any kind. An
+            open incident gives severity 2. No open incident gives severity 5. The feed does not
+            say how bad it is, so no other severity is inferred.
+
+            A screen that shows a derived status says so. "Degraded" from a published indicator
+            and "Degraded" because an RSS entry exists are different claims.
         started_at: { type: string, format: date-time, description: When it entered this severity }
         last_refreshed_at: { type: string, format: date-time }
     Service:
@@ -614,7 +631,19 @@ components:
           items: { $ref: '#/components/schemas/MaintenanceWindow' }
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
-          description: The soonest of `maintenance_windows`. Null if there are none.
+          description: |
+            The soonest of `maintenance_windows`. Null if there are none.
+
+            A card shows this one. Windows are never merged into a combined span — two windows a
+            week apart are two facts, and a merged one would be true of neither.
+        maintenance_window_count:
+          type: integer
+          description: |
+            How many windows `maintenance_windows` holds. A card shows the soonest and adds
+            "+2 more" from this.
+
+            Read it instead of the array when rendering a row. On the overall component the array
+            covers the whole service and can be long.
         latest_incident:
           allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
           description: |
@@ -636,6 +665,7 @@ components:
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
           description: The soonest window scheduled anywhere in this service. Null if none.
+        maintenance_window_count: { type: integer, description: How many are scheduled across the service. }
         latest_incident:
           allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
           description: The most recent incident anywhere in this service. Null if there is none.
