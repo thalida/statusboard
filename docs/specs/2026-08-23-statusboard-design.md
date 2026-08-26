@@ -234,7 +234,7 @@ One class per provider, same interface: given a URL, return normalised component
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
-`POST /api/catalog/imports/` detects the provider from a pasted URL and creates the service.
+`POST /api/catalog/import/` detects the provider from a pasted URL and creates the service.
 
 ### Keeping names and component trees current
 
@@ -301,12 +301,7 @@ user owns stays UUID, so nothing personal is enumerable. Writes always address t
 An import derives the slug from the host and de-duplicates on collision (`linear`, `linear-2`).
 
 **An import is a resource, not an action on the service collection.** It records one attempt to
-turn a URL into a service. That keeps `POST /catalog/services/` free for a future admin create,
-which takes a service body rather than a URL — the two must not share an endpoint, or the request
-body becomes an either/or again.
-
-It also leaves room for the import to become asynchronous. A slow detection can return `202` and
-let the client poll the import, without changing what the endpoint means.
+turn a URL into a service.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
 ### Severity is the state, and there is no status string beside it
@@ -483,7 +478,7 @@ caching and rate limits.
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
-| Add by URL | `POST /catalog/imports/` |
+| Add by URL | `POST /catalog/import/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/incidents/?resolved_at__isnull=true` |
 | Service · About | `GET /catalog/services/{slug}/` |

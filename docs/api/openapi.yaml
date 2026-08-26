@@ -189,23 +189,16 @@ paths:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Service' } }
 
-  /catalog/imports/:
+  /catalog/import/:
     post:
       tags: [catalog]
       summary: Import a service from its status page URL
       description: |
-        An import is a resource, not an action on the service collection. It records one attempt to
-        turn a URL into a service.
-
         The importer detects the provider. If the service is new, it creates the service and its
-        components. Services are deduplicated on a normalised URL. One status page gives one
-        service and one poll.
+        components.
 
-        `POST /catalog/services/` is reserved. A future admin create takes a service body, not a
-        URL, and must not share this endpoint.
-
-        This shape also allows a slow import to return `202` later, with the client polling the
-        import. That change would not alter the endpoint's meaning.
+        Services are deduplicated on a normalised URL. One status page gives one service and one
+        poll.
       requestBody:
         required: true
         content:
