@@ -81,6 +81,39 @@ keep integer keys — that is Django, not a choice.
 
 ### authentication
 
+```mermaid
+erDiagram
+    User ||--|| Dashboard : owns
+    Dashboard ||--o{ DashboardItem : holds
+    DashboardItem }o--|| ServiceComponent : "tracks one"
+
+    Service ||--|| StatusPage : "read from"
+    Service ||--o{ ServiceComponent : publishes
+    ServiceComponent ||--o| ServiceComponent : "parent of"
+    ServiceComponent ||--|| ComponentStatus : "current state"
+    ServiceComponent ||--o{ StatusEvent : "history of"
+    ServiceComponent ||--o{ MaintenanceWindow : "scheduled on"
+
+    StatusPage ||--o{ PollRun : "attempts against"
+    Service ||--o{ Incident : "reported on"
+    Incident ||--o{ IncidentUpdate : "log of"
+    Incident }o--o{ ServiceComponent : affects
+```
+
+Reading it:
+
+- **A board row is a `ServiceComponent`**, never a `Service`. The overall component is one of
+  these, so the arrow from `DashboardItem` has one destination.
+- **`StatusPage` is separate from `Service`** because it is the *source*, and it is where the
+  unique URL and the poller's state live.
+- **`ComponentStatus` is one row per component**, updated in place; `StatusEvent` is append-only
+  and written only on change. Board reads touch the first and never the second.
+- **`MaintenanceWindow` hangs off a component**, not a service — several per component if the
+  provider schedules that way.
+- **`Incident` belongs to the service** and names the components it affects, which is why it is
+  many-to-many with `ServiceComponent` while maintenance is not.
+
+
 `User(BaseModel, AbstractUser)` with a UUID pk and email as the login field. Django's stock
 `auth.Group`, unregistered and re-registered with Unfold's admin. No custom Group: it is not
 swappable, and the thing worth extending later is `DashboardMembership` in `dashboards`, which
