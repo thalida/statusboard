@@ -88,8 +88,19 @@ is a different concept from a permission role.
 
 ### catalog
 
-- `Service` — slug, name, logo, homepage URL, status page URL, `adapter`, `api_url`,
-  `is_curated`, `added_by` (null for catalog entries), `is_featured`, `watcher_count`
+- `Service` — slug, name, logo, homepage URL, `is_curated`, `added_by` (null for catalog
+  entries), `is_featured`, `watcher_count`
+- `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
+  `provider`, `api_url`, `last_fetched_at`, `next_poll_at`, `poll_interval_seconds`,
+  `refresh_cooldown_seconds`, `consecutive_failures`, `last_error`
+
+  The source of a service's data, separate from the service itself. The unique constraint on
+  `url` is what makes two people pasting the same page share one service and one poll, so the
+  dedupe rule lives on the thing being deduplicated.
+
+  It also gives the poller somewhere to keep state. `consecutive_failures` drives the backoff that
+  grows `poll_interval_seconds`; `next_poll_at` is what the scheduler reads. Those were homeless
+  while the URL was a field on `Service`.
 - `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `status_page_order`,
   `archived_at`
 
@@ -97,8 +108,8 @@ is a different concept from a permission role.
   second copy of a fact the tree already holds. `status_page_order` preserves the order the status
   page lists them in, which is the order the components tab shows by default.
 
-Custom URLs dedupe into the catalog on a normalised URL, so two users pasting the same status
-page share one `Service` and one poll. A popular custom entry becomes curated by flipping a flag
+Custom URLs dedupe on `StatusPage.url`, so two users pasting the same status page share one
+`Service` and one poll. A popular custom entry becomes curated by flipping a flag
 in admin.
 
 **Suggestion ordering** is `(-is_featured, -watcher_count, name)`.
@@ -145,15 +156,13 @@ Unique on `(dashboard, component)`.
 
 ### Every service has an overall component
 
-Its fixed properties: `parent` is null, `path` is null — it has no ancestry — and `child_count` is
-0, because it is a peer of the top-level components rather than their parent.
+Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
+"All services". `path` is null, since it has no ancestry, and `child_count` is 0 — it is a peer of
+the top-level components rather than their parent.
 
 **`component_count` excludes it.** The number equals what the provider's own status page claims,
 which is the number a user can check. The components list returns the overall row first and does
-not count it in `aggregates.total`, so a page holds one more row than its count.
-
-Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
-"All services". It carries **the provider's own top-level indicator** — not an aggregate of its
+not count it in `aggregates.total`, so a page holds one more row than its count. It carries **the provider's own top-level indicator** — not an aggregate of its
 siblings, because a worst-of rollup leaves Cloudflare permanently orange when one of 109
 components is always degraded.
 
@@ -209,8 +218,9 @@ where every add has two possible shapes.
   maintenance has three windows with three different times. A service-level field would have to
   pick one and lie about the rest, so the API exposes `Component.maintenance_windows[]` and
   derives `Service.next_maintenance_window` as the soonest across them.
-- `PollRun` — per-attempt success/error, so "everything is fine" is distinguishable from
-  "we have not successfully checked in six hours"
+- `PollRun` — per-attempt success/error against a `StatusPage`, so "everything is fine" is
+  distinguishable from "we have not successfully checked in six hours". `StatusPage` holds the
+  rolled-up state; `PollRun` holds the history.
 
 ### Status and incidents are different things
 
@@ -416,7 +426,8 @@ longer exists should be told.
 
 ### The status page is its own model
 
-`Service.status_page` holds the source and how we read it, separately from what we read:
+`StatusPage` is a model, `OneToOneField` to `Service`, serialized as `Service.status_page`. It
+holds the source and how we read it, separately from what we read:
 
 ```jsonc
 "status_page": {
@@ -430,8 +441,9 @@ longer exists should be told.
 }
 ```
 
-Three loose `status_page_*` fields on `Service` became one object, and the polling facts that had
-nowhere sensible to live joined them. `poll_interval_seconds` was on `ServiceDetail` purely
+Three loose `status_page_*` fields became one model, and the polling facts that had nowhere
+sensible to live joined them. The nesting follows the same rule as everything else here — one
+schema, one model — rather than being a serializer that groups fields for looks. `poll_interval_seconds` was on `ServiceDetail` purely
 because the About tab shows "Refreshed every"; it belongs here, next to the backoff that changes
 it.
 
