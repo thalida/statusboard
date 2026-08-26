@@ -564,24 +564,6 @@ components:
           description: |
             The service's own status *is* its overall component's, so this is that component
             rather than a copy of its fields. One FK, one nested serializer.
-        latest_incident:
-          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
-          description: |
-            The most recently started incident, active or resolved. Null if the service has none.
-
-            Order by `started_at`, not by phase. An active incident is normally the most recent
-            one, and when it is not, the newer record is still the one that explains the current
-            state.
-
-            Read `active_incident_count` to know whether anything is open.
-        next_maintenance_window:
-          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
-          description: |
-            A summary field. It is the soonest upcoming window found on any component of this
-            service. Null if no component has one scheduled.
-
-            Maintenance is stored on components. Read `Component.maintenance_windows` for one
-            component's windows — a component can have several.
         tracked_component_count:
           type: integer
           nullable: true
@@ -624,19 +606,39 @@ components:
         status: { $ref: '#/components/schemas/Status' }
         maintenance_windows:
           type: array
-          description: A component can have several scheduled, so this is a list and it lives here rather than on the service.
+          description: |
+            Every window scheduled for this component. A component can have several.
+
+            On the **overall** component this is every window in the service, from any component.
+            Follow the overall component and you see all of the service's maintenance.
           items: { $ref: '#/components/schemas/MaintenanceWindow' }
+        next_maintenance_window:
+          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
+          description: The soonest of `maintenance_windows`. Null if there are none.
+        latest_incident:
+          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
+          description: |
+            The most recently started incident affecting this component. Null if there is none.
+
+            A provider names the components an incident affects. On the **overall** component this
+            is the most recent incident anywhere in the service.
         is_tracked: { type: boolean, nullable: true }
     OverallComponent:
       type: object
       description: |
         The overall component as it appears on its parent service. This is a subset of
-        `Component`: the id, the status, and whether you track it.
+        `Component`, scoped to the whole service.
 
         Read severity at `overall_component.status.severity`. The filter uses the same path.
       properties:
         id: { type: string, format: uuid, description: Track this to track the service as a whole. }
         status: { $ref: '#/components/schemas/Status' }
+        next_maintenance_window:
+          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
+          description: The soonest window scheduled anywhere in this service. Null if none.
+        latest_incident:
+          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
+          description: The most recent incident anywhere in this service. Null if there is none.
         is_tracked: { type: boolean, nullable: true, description: Null when unauthenticated, so the client renders ＋ without a second code path. }
     MaintenanceWindow:
       type: object

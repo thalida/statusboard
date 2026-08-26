@@ -383,38 +383,31 @@ and nowhere it does not, because both come from the same declaration.
 An unknown field name is a `400`, not a silent empty response. A client asking for a field that no
 longer exists should be told.
 
-### A service summarises each thing that can be happening to it
+### A component carries everything happening to it
 
-Three things happen to a service, and the summary carries one field for each:
+Three things happen, and a component carries all three:
 
-| what is happening | on `Service` | where it really lives |
-| --- | --- | --- |
-| its current state | `overall_component`, with its `status` | on that one component |
-| scheduled work | `next_maintenance_window` | across **all** its components |
-| a live problem | `latest_incident` | on the service |
+| | on `Component` |
+| --- | --- |
+| its current state | `status` |
+| scheduled work | `maintenance_windows`, and `next_maintenance_window` |
+| a live problem | `latest_incident` |
 
-**Maintenance is stored on components** — `Component.maintenance_windows`, several per component
-if the provider schedules that way. `Service.next_maintenance_window` is a *summary* of them: the
-soonest window found on any of that service's components.
+**The overall component carries the same three, scoped to the whole service.** Its
+`maintenance_windows` is every window in the service, from any component. Its `latest_incident` is
+the most recent incident anywhere in it.
 
-It is not nested under `overall_component` because it does not belong to that component. The
-overall component is the synthetic "All services" row; providers schedule maintenance on real
-components like *Programmable Messaging*, so the overall component is the one least likely to have
-a window. `overall_component.status` is nested because it genuinely is that component's own field.
+That is what makes tracking a service as a whole work. A board row is a component, so a row for
+Twilio's overall component must answer "is anything scheduled, is anything broken" for Twilio —
+otherwise following the whole service tells you *less* than following one part of it, which is
+backwards.
 
-`latest_incident` sits at service level because providers publish incidents against the service,
-naming affected components by id.
+An earlier draft put a maintenance summary and an incident summary on `Service` instead. Those
+fields are gone: a `Service` nests `overall_component`, and the same values are read there. One
+fact, one place, and the board gets it for free because a board row already is that component.
 
-Each is a **projection, not the full record**. `latest_incident` is an `IncidentRef` with no
-`updates` array, so a row costs one title rather than a log; the full incident is a tab away.
-`overall_component` is the id, status and tracked flag, not a whole `Component`.
-
-`latest_incident` orders by `started_at`, not by phase. An active incident is normally the most
-recent one, and when it is not, the newer record is still the one explaining the current state.
-`active_incident_count` answers whether anything is open.
-
-A fourth kind of event would take a fourth field of the same shape, rather than a generic
-`events[]` that the client has to sort out.
+Real components are scoped normally — `maintenance_windows` is that component's own, and
+`latest_incident` is the most recent incident naming it in `affected_component_ids`.
 
 ### One envelope, and aggregates that grow without changing it
 
