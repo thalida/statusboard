@@ -62,11 +62,11 @@ info:
     filter. This holds for fields added later.
 
     Four parameters are declared, not generated. They have no ORM path:
-    `tracked_component_count__gt`, `overall__is_tracked`, `ordering=suggested`, and
+    `tracked_component_count__gt`, `overall_component__is_tracked`, `ordering=suggested`, and
     `ordering=next_transition`.
 
-    Model field names are chosen to read well in a URL. `Service.overall` keeps the catalog
-    filter short.
+    Model field names are chosen to read well in a URL, because a field name appears in `?fields=`
+    and in a filter path.
 
     ## Conventions
 
@@ -183,11 +183,11 @@ paths:
       security: [{}, { bearer: [] }]
       parameters:
         - { name: q, in: query, schema: { type: string } }
-        - { name: overall__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip. A service''s severity is its overall component''s, so the path runs through it.' }
-        - { name: overall__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
+        - { name: overall_component__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Outages chip. A service''s severity is its overall component''s, so the path runs through it.' }
+        - { name: overall_component__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
         - { name: tracked_component_count__gt, in: query, schema: { type: integer }, description: 'Authenticated only. `__gt=0` is "on my board at all" — the Tracked filter on Discover.' }
-        - { name: overall__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
-        - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall__status__severity, -overall__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
+        - { name: overall_component__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
+        - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall_component__status__severity, -overall_component__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Fields' }
@@ -413,12 +413,12 @@ components:
       in: query
       required: false
       schema: { type: string }
-      example: id,name,overall.status.severity
+      example: id,name,overall_component.status.severity
       description: |
         Comma-separated list of fields to return. Omit to get every field.
 
-        Use a dotted path for a nested field. `overall.status.severity` returns `overall`
-        containing `status` containing `severity` only.
+        Use a dotted path for a nested field. `overall_component.status.severity` returns
+        `overall_component` containing `status` containing `severity` only.
 
         A path that names an unknown field returns `400`.
     PageSize: { name: page_size, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
@@ -559,7 +559,7 @@ components:
             The adapter that reads this service. The client maps the value to a display name:
             `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
             "Better Stack", `rss` is "RSS feed".
-        overall:
+        overall_component:
           allOf: [{ $ref: '#/components/schemas/OverallComponent' }]
           description: |
             The service's own status *is* its overall component's, so this is that component
@@ -574,7 +574,7 @@ components:
             The number of this service's components on your board. The overall component counts.
 
             A value above 0 means the service is on your board. This differs from
-            `overall.is_tracked`, which covers the overall component only.
+            `overall_component.is_tracked`, which covers the overall component only.
     ServiceDetail:
       allOf:
         - $ref: '#/components/schemas/Service'
@@ -618,7 +618,7 @@ components:
         The overall component as it appears on its parent service. This is a subset of
         `Component`: the id, the status, and whether you track it.
 
-        Read severity at `overall.status.severity`. The filter uses the same path.
+        Read severity at `overall_component.status.severity`. The filter uses the same path.
       properties:
         id: { type: string, format: uuid, description: Track this to track the service as a whole. }
         status: { $ref: '#/components/schemas/Status' }

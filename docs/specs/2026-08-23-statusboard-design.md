@@ -367,7 +367,7 @@ our request budget on other people's servers.
 
 ### Sparse fieldsets are a framework concern
 
-Every endpoint that returns a body accepts `?fields=`. `?fields=id,name,overall.status.severity`
+Every endpoint that returns a body accepts `?fields=`. `?fields=id,name,overall_component.status.severity`
 returns those three and nothing else. A dotted path prunes inside a nested object rather than
 dropping it.
 
@@ -426,7 +426,7 @@ the overall component, which is the job that component was introduced for.
 
 The rule applies transitively, which is easy to miss. A `Service` has no status of its own — its
 status *is* its overall component's. An intermediate draft gave `Service` a `status` key with
-`source="overall.status"`, reaching through a relation to hoist fields onto the parent: the same
+`source="overall_component.status"`, reaching through a relation to hoist fields onto the parent: the same
 mistake one level up. It also carried `overall` as a bare id and `is_tracked` as a third field
 describing that same component. All three collapse into one nested object:
 
@@ -436,12 +436,12 @@ describing that same component. All three collapse into one nested object:
 ```
 
 One FK, one nested serializer. The response path and the filter path become identical —
-`overall.status.severity` is read at `?overall__status__severity__lte=3`.
+`overall_component.status.severity` is read at `?overall_component__status__severity__lte=3`.
 
 **Tracking is two questions, not one.** Whether the *overall* component is tracked is what the ＋
 on a service row toggles; whether *anything* from the service is tracked decides if it appears on
 your board. You can track Twilio SMS without tracking Twilio as a whole. The first is
-`overall.is_tracked`; the second is `tracked_component_count > 0`, so no second boolean is carried
+`overall_component.is_tracked`; the second is `tracked_component_count > 0`, so no second boolean is carried
 for something the count already answers — and the same count renders the "3 tracked" label.
 
 The count **includes the overall component**, because overall is a component like any other.
@@ -464,12 +464,11 @@ in sync every time a field is added. The ORM path also means a client can read a
 derive the filter for anything in it, including fields that do not exist yet.
 
 Three parameters cannot follow the rule and are declared: `tracked_component_count__gt` and
-`overall__is_tracked` are per-user annotations with no ORM path behind them, and
+`overall_component__is_tracked` are per-user annotations with no ORM path behind them, and
 `ordering=suggested` is a multi-key sort. Everything else is generated.
 
-Because these paths are public, **model field names are chosen to read well in a URL.** The FK from
-`Service` to its overall component is `overall`, not `overall_component`, so the catalog filter is
-`overall__status__severity__lte`. Naming is an API decision now, not just an internal one.
+Because these paths are public, **a model field name is an API decision.** It appears in
+`?fields=` and in every filter path built from it, so it is chosen to be read, not just stored.
 
 ### What belongs to the user, the device, and the deployment
 
@@ -499,7 +498,7 @@ caching and rate limits.
 | Screen | Calls |
 | --- | --- |
 | Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/components/?status__severity__lte=` |
-| Home, signed out | `GET /catalog/services/?overall__status__severity__lte=` |
+| Home, signed out | `GET /catalog/services/?overall_component__status__severity__lte=` |
 | Header refresh | `POST /refresh/` |
 | Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
 | Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` |
@@ -536,7 +535,7 @@ so the answer would always be "this one".
 
 Tracking state renders as **one token per subscription** rather than a sentence — `overall` for the
 summary row, `3 of 42` for components, both when you take both. That maps one-to-one onto
-`overall.is_tracked` and `tracked_component_count`, so the client assembles no strings, and "all"
+`overall_component.is_tracked` and `tracked_component_count`, so the client assembles no strings, and "all"
 is simply `118 of 118` with no extra vocabulary.
 
 **The duration is always shown**, including on operational rows, where it reads as time since the
