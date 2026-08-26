@@ -544,6 +544,14 @@ components:
             The field is then null. The client shows the service initial instead.
         component_count: { type: integer }
         active_incident_count: { type: integer }
+        status_page_url: { type: string, format: uri }
+        provider:
+          type: string
+          enum: [statuspage, instatus, betterstack, rss]
+          description: |
+            The adapter that reads this service. The client maps the value to a display name:
+            `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
+            "Better Stack", `rss` is "RSS feed".
         overall:
           allOf: [{ $ref: '#/components/schemas/OverallComponent' }]
           description: |
@@ -566,8 +574,6 @@ components:
         - type: object
           properties:
             description: { type: string, nullable: true }
-            status_page_url: { type: string, format: uri }
-            provider: { type: string, enum: [statuspage, instatus, betterstack, rss], description: Which adapter reads this service }
             in_catalog_since: { type: string, format: date }
     Component:
       type: object

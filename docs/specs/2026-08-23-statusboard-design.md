@@ -306,6 +306,10 @@ turn a URL into a service.
 `Import.service` is the **same shape the catalog list returns**, not the detail shape. One service
 representation, whatever produced it — so a client can drop an imported service straight into the
 list it already renders.
+
+That forced `status_page_url` and `provider` down into the list shape, because the Add-by-URL
+screen shows both in its About block before you press ＋. `ServiceDetail` is now only
+`description` and `in_catalog_since`, which no list has ever needed.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
 ### Severity is the state, and there is no status string beside it
