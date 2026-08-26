@@ -245,7 +245,19 @@ where every add has two possible shapes.
   only this table.
 - `StatusEvent` — append-only, written **only when a status changes**. Full history at a fraction
   of the rows a per-poll snapshot would cost, and the trigger source for notifications later.
-- `Incident` — upstream id, title, phase, started/resolved; `IncidentUpdate` child for the log
+- `Incident` — FK to **`Service`**, upstream id, title, phase, started/resolved, M2M
+  `affected_components`; `IncidentUpdate` child for the log
+
+  **Incidents belong to the service because that is how providers publish them.** One record on
+  Twilio's status page, naming the components it affects — and frequently naming none, which is
+  the most common shape early in an outage: "investigating elevated error rates" before anyone
+  knows where.
+
+  An FK to a component would need six rows for an incident affecting six components, or a
+  many-to-many anyway, and would leave the ones naming nothing homeless. So the M2M carries
+  which components, and `Component.latest_incident` is a **projection through it**, not a field.
+  On the overall component it is the most recent incident anywhere in the service, which is what
+  gives an unattributed incident somewhere to appear.
 - `MaintenanceWindow` — **hangs off a component, not a service**, and there can be several.
   Providers schedule maintenance per component, and a service with three components under
   maintenance has three windows with three different times. A service-level field would have to
@@ -254,6 +266,31 @@ where every add has two possible shapes.
 - `PollRun` — per-attempt success/error against a `StatusPage`, so "everything is fine" is
   distinguishable from "we have not successfully checked in six hours". `StatusPage` holds the
   rolled-up state; `PollRun` holds the history.
+
+#### Four kinds of record, and how to tell them apart
+
+Three of these are append-only logs, which is why they blur. What separates them is **whose record
+it is and what it holds**.
+
+| model | whose | holds | written when |
+| --- | --- | --- | --- |
+| `ComponentStatus` | ours | the current severity | every poll, in place |
+| `StatusEvent` | ours | a severity change, no prose | only when severity changes |
+| `IncidentUpdate` | **theirs** | a paragraph they wrote, and a phase | when the provider posts one |
+| `PollRun` | ours | did the fetch succeed | every attempt, success or failure |
+
+`StatusEvent` is us diffing two polls. `IncidentUpdate` is ingested verbatim, carrying the
+provider's own `upstream_id`. They come apart constantly: a component flaps with no incident open
+and you get events but no updates; a provider posts "monitoring a fix" while every component reads
+operational and you get updates but no events.
+
+`PollRun` is the third axis and is about neither — it records whether we could *read* the page. It
+is what makes "everything is fine" distinguishable from "we have not successfully checked in six
+hours", which look identical if you only store status.
+
+`ComponentStatus` is separate from `StatusEvent` for access, not principle. A board read is one
+indexed row per component. Against an append-only table it would be a latest-per-group query over
+something that grows forever — on the hottest path in the app.
 
 ### Status and incidents are different things
 
