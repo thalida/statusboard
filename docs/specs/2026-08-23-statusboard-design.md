@@ -383,6 +383,27 @@ and nowhere it does not, because both come from the same declaration.
 An unknown field name is a `400`, not a silent empty response. A client asking for a field that no
 longer exists should be told.
 
+### A service summarises each thing that can be happening to it
+
+Three things happen to a service, and the summary carries one field for each:
+
+| what is happening | on `Service` |
+| --- | --- |
+| its current state | `overall_component` — the overall component, with its `status` |
+| scheduled work | `next_maintenance_window` — the soonest across its components |
+| a live problem | `latest_incident` — the most recently started, active or resolved |
+
+Each is a **projection, not the full record**. `latest_incident` is an `IncidentRef` with no
+`updates` array, so a row costs one title rather than a log; the full incident is a tab away.
+`overall_component` is the id, status and tracked flag, not a whole `Component`.
+
+`latest_incident` orders by `started_at`, not by phase. An active incident is normally the most
+recent one, and when it is not, the newer record is still the one explaining the current state.
+`active_incident_count` answers whether anything is open.
+
+A fourth kind of event would take a fourth field of the same shape, rather than a generic
+`events[]` that the client has to sort out.
+
 ### One envelope, and aggregates that grow without changing it
 
 Every list returns `{ aggregates, next, results }`. `aggregates` is the one place for anything

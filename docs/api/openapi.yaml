@@ -564,6 +564,16 @@ components:
           description: |
             The service's own status *is* its overall component's, so this is that component
             rather than a copy of its fields. One FK, one nested serializer.
+        latest_incident:
+          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
+          description: |
+            The most recently started incident, active or resolved. Null if the service has none.
+
+            Order by `started_at`, not by phase. An active incident is normally the most recent
+            one, and when it is not, the newer record is still the one that explains the current
+            state.
+
+            Read `active_incident_count` to know whether anything is open.
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
           description: The soonest upcoming window across this service's components, or null.
@@ -635,6 +645,18 @@ components:
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
         summary: { type: string, nullable: true }
+    IncidentRef:
+      type: object
+      nullable: true
+      description: |
+        An incident as it appears on its service. This is a subset of `Incident` with no `updates`
+        array, so a list row costs one title and not a log.
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
+        started_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
     Incident:
       type: object
       description: A provider's narrative record. `phase` is workflow, not state.
