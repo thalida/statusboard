@@ -70,6 +70,12 @@ info:
 
     ## Conventions
 
+    Every endpoint that returns a body accepts `?fields=`. Name the fields you need, and the
+    response contains those only. See the `fields` parameter.
+
+    This is a base serializer and a default filter backend, not per-view code. A view opts out by
+    setting `fields_param = None`.
+
     Lists return `{ aggregates, next, results }`. `aggregates` covers the whole collection, not
     the page. `ordering` follows DRF. Prefix a field with `-` to reverse it. GETs are ETagged.
 
@@ -95,6 +101,8 @@ paths:
       summary: Server configuration
       description: Deployment-wide values the client needs but does not own — poll interval, page size, the severity map. Not user preferences.
       security: []
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -124,6 +132,8 @@ paths:
         content:
           application/json:
             schema: { type: object, required: [token], properties: { token: { type: string } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
         '400': { $ref: '#/components/responses/Error' }
@@ -132,6 +142,8 @@ paths:
       tags: [auth]
       summary: Rotate the refresh token
       security: []
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
   /auth/logout/:
@@ -147,6 +159,8 @@ paths:
       description: |
         This resource has no theme field. Theme is per device. Store it in local storage.
         Poll interval is deployment-wide. Read it from `/meta/`.
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
     delete:
@@ -176,6 +190,7 @@ paths:
         - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall__status__severity, -overall__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -204,6 +219,8 @@ paths:
         content:
           application/json:
             schema: { type: object, required: [status_page_url], properties: { status_page_url: { type: string, format: uri } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: The URL resolves to a service already in the catalog
@@ -221,6 +238,8 @@ paths:
       summary: Service detail
       security: [{}, { bearer: [] }]
       parameters: [{ $ref: '#/components/parameters/Slug' }]
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceDetail' } } } }
         '404': { $ref: '#/components/responses/Error' }
@@ -241,6 +260,7 @@ paths:
         - { name: ordering, in: query, schema: { type: string, enum: [provider_order, status__severity, -status__severity, name, -name], default: provider_order }, description: '`provider_order` preserves the order the provider publishes' }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -267,6 +287,7 @@ paths:
         - { name: ordering, in: query, schema: { type: string, enum: [-started_at, started_at], default: -started_at } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -286,6 +307,8 @@ paths:
       summary: A dashboard
       description: '`GET /me/` returns your `default_dashboard_id`. There is one per user in v1, and no alias endpoint.'
       parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } }
 
@@ -307,6 +330,7 @@ paths:
             ordering is declared, not generated.
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -329,6 +353,8 @@ paths:
         content:
           application/json:
             schema: { type: object, required: [component_id], properties: { component_id: { type: string, format: uuid } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/TrackedComponent' } } } }
         '409': { description: Already tracked }
@@ -361,6 +387,8 @@ paths:
         content:
           application/json:
             schema: { type: object, properties: { component_id: { type: string, format: uuid } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
       responses:
         '200':
           description: OK
@@ -380,6 +408,19 @@ components:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
   parameters:
     Cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque keyset cursor from `next` }
+    Fields:
+      name: fields
+      in: query
+      required: false
+      schema: { type: string }
+      example: id,name,overall.status.severity
+      description: |
+        Comma-separated list of fields to return. Omit to get every field.
+
+        Use a dotted path for a nested field. `overall.status.severity` returns `overall`
+        containing `status` containing `severity` only.
+
+        A path that names an unknown field returns `400`.
     PageSize: { name: page_size, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
     Slug: { name: slug, in: path, required: true, schema: { type: string }, example: twilio }
     Uuid: { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
@@ -399,7 +440,7 @@ components:
         id: { type: string, format: uuid }
         status_page_url: { type: string, format: uri, description: The URL as submitted. }
         created: { type: boolean, description: True if this import created the service. }
-        service: { $ref: '#/components/schemas/ServiceDetail' }
+        service: { $ref: '#/components/schemas/Service' }
     Error:
       type: object
       properties:

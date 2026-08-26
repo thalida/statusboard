@@ -302,6 +302,10 @@ An import derives the slug from the host and de-duplicates on collision (`linear
 
 **An import is a resource, not an action on the service collection.** It records one attempt to
 turn a URL into a service.
+
+`Import.service` is the **same shape the catalog list returns**, not the detail shape. One service
+representation, whatever produced it — so a client can drop an imported service straight into the
+list it already renders.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
 ### Severity is the state, and there is no status string beside it
@@ -354,6 +358,24 @@ top only to stop one client hammering us.
 
 Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
 our request budget on other people's servers.
+
+### Sparse fieldsets are a framework concern
+
+Every endpoint that returns a body accepts `?fields=`. `?fields=id,name,overall.status.severity`
+returns those three and nothing else. A dotted path prunes inside a nested object rather than
+dropping it.
+
+**This is baked in at the base layer, not written per view.** A `FieldsMixin` on the base
+serializer reads the parameter and prunes `self.fields` in `__init__`; a filter backend declares
+it so drf-spectacular documents it on every operation without annotation. A view that must not
+support it sets `fields_param = None`.
+
+That matters because the alternative is 13 operations each remembering to add it, and the one that
+forgets is the bug. It also keeps the OpenAPI honest: the parameter appears everywhere it works
+and nowhere it does not, because both come from the same declaration.
+
+An unknown field name is a `400`, not a silent empty response. A client asking for a field that no
+longer exists should be told.
 
 ### One envelope, and aggregates that grow without changing it
 
