@@ -311,7 +311,7 @@ change ships without touching a serializer.
 
 `status__severity__lte=3` is everything needing attention; `status__severity=4` is maintenance.
 There is no named band parameter — the Outages chip is just a threshold, and a client can compose
-any other one without waiting for a new enum value. `counts.by_severity` returns the raw histogram for the same
+any other one without waiting for a new enum value. `aggregates.by_severity` returns the raw histogram for the same
 reason.
 
 ### One list, several screens
@@ -327,13 +327,13 @@ public view.
 ### Components are their own collection
 
 Cloudflare publishes 109 and nothing caps that, so the service detail reports `component_count`
-and the Components tab pages through `/components/`. Its `counts` gives the tab labels. A
+and the Components tab pages through `/components/`. Its `aggregates` gives the tab labels. A
 component is a group when `child_count > 0`; there is no separate flag.
 
 ### Filtering, sorting and pagination are server-side, without exception
 
 There is no cap on board size — one service can contribute 109 components — so the API never
-assumes the board fits in one response. `counts` aggregates the whole collection rather than the
+assumes the board fits in one response. `aggregates` covers the whole collection rather than the
 page, so a chip is correct on page four.
 
 There is no client-side fallback. One rule, one implementation.
@@ -352,6 +352,34 @@ top only to stop one client hammering us.
 
 Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
 our request budget on other people's servers.
+
+### One envelope, and aggregates that grow without changing it
+
+Every list returns `{ aggregates, next, results }`. `aggregates` is the one place for anything
+computed over the **whole collection** rather than the page.
+
+An earlier draft had `counts` and `oldest_refreshed_at` sitting side by side at the top level,
+which is two aggregations at two different depths. The next figure worth showing would have been a
+third key, and a client could not read them generically.
+
+```jsonc
+{
+  "aggregates": { "total": 42, "by_severity": {"0": 1, "5": 38}, "oldest_refreshed_at": "…" },
+  "next": "cursor…",
+  "results": [ … ]
+}
+```
+
+`Aggregates` defines the floor — `total`, present everywhere, so it can be read without knowing
+which endpoint produced it. An endpoint extends rather than replaces: `StatusAggregates` adds the
+severity histogram, the tracked count and `oldest_refreshed_at`; `IncidentAggregates` adds a phase
+histogram. A new list endpoint declares its own subclass and the envelope never changes shape.
+
+In DRF this is one pagination class emitting the three keys, with each viewset supplying
+`get_aggregates(queryset)` — so adopting the shape is a method, not a new response schema.
+
+The rule that makes it worth having: **nothing collection-wide is ever added at the top level.**
+A figure that describes the whole collection goes in `aggregates` or it does not ship.
 
 ### One schema, one model
 

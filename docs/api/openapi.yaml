@@ -63,8 +63,8 @@ info:
 
     ## Conventions
 
-    Lists return `{ counts, next, results }`. `counts` aggregates the whole collection, not the
-    page, so a chip is correct on page four. `ordering` follows DRF (`-severity` reverses).
+    Lists return `{ aggregates, next, results }`. `aggregates` covers the whole collection, not
+    the page, so a chip is correct on page four. `ordering` follows DRF (`-severity` reverses).
     GETs are ETagged.
 
     ## Identity
@@ -179,7 +179,9 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
-                    properties: { results: { type: array, items: { $ref: '#/components/schemas/Service' } } }
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Service' } }
     post:
       tags: [catalog]
       summary: Add a service from its status page URL
@@ -216,7 +218,7 @@ paths:
       summary: List a service's components
       description: |
         The tree, flattened, with `parent` linking children to groups. The overall component is
-        always first. `counts` gives the tab labels — All 42, Tracked 5.
+        always first. `aggregates` gives the tab labels — All 42, Tracked 5.
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Slug' }
@@ -235,7 +237,9 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
-                    properties: { results: { type: array, items: { $ref: '#/components/schemas/Component' } } }
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
 
   /catalog/services/{slug}/incidents/:
     get:
@@ -259,7 +263,9 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
-                    properties: { results: { type: array, items: { $ref: '#/components/schemas/Incident' } } }
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/IncidentAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Incident' } }
 
   /dashboards/{uuid}/:
     get:
@@ -299,7 +305,9 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
-                    properties: { results: { type: array, items: { $ref: '#/components/schemas/TrackedComponent' } } }
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/TrackedComponent' } }
     post:
       tags: [board]
       summary: Track a component
@@ -353,7 +361,9 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
-                    properties: { results: { type: array, items: { $ref: '#/components/schemas/TrackedComponent' } } }
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/TrackedComponent' } }
         '429': { $ref: '#/components/responses/Throttled' }
 
 components:
@@ -403,19 +413,54 @@ components:
         default_dashboard_id: { type: string, format: uuid, description: 'Use it on /dashboards/{uuid}/. One per user in v1; the name survives sharing.' }
     Envelope:
       type: object
+      description: |
+        Every list response has the same three keys. `aggregates` holds everything computed over
+        the **whole collection** rather than the page; `results` is the page; `next` is the cursor.
+
+        A list endpoint keeps this envelope and swaps in its own `aggregates` schema — see
+        `StatusAggregates` and `IncidentAggregates`. Nothing collection-wide is ever added at the
+        top level, so a new figure never changes the envelope's shape and a client can read
+        `aggregates` generically.
       properties:
-        counts:
-          type: object
-          description: Aggregated over the whole collection, not the page.
+        aggregates:
+          allOf: [{ $ref: '#/components/schemas/Aggregates' }]
+          description: Replaced by the endpoint's own aggregate schema.
+        next: { type: string, nullable: true }
+    Aggregates:
+      type: object
+      description: |
+        The floor every aggregate block shares. An endpoint extends it rather than replacing it,
+        so `aggregates.total` can be read without knowing which endpoint produced it.
+      properties:
+        total: { type: integer, description: Size of the whole collection, not the page. }
+    StatusAggregates:
+      allOf:
+        - $ref: '#/components/schemas/Aggregates'
+        - type: object
+          description: For any list of things that carry a status — services, components, a board.
           properties:
-            total: { type: integer }
             by_severity:
               type: object
               additionalProperties: { type: integer }
               description: 'Keys are severities 0–5, so the client composes any chip without a new parameter.'
-            tracked: { type: integer, nullable: true }
-        oldest_refreshed_at: { type: string, format: date-time, nullable: true, description: Across the whole collection. The header renders it, so "2 min ago" means everything is at most two minutes old. }
-        next: { type: string, nullable: true }
+            tracked: { type: integer, nullable: true, description: Authenticated only. }
+            oldest_refreshed_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                The staleness of the freshest-possible claim: the header renders it, so "2 min ago"
+                means *everything* in the collection is at most two minutes old. Across the whole
+                collection, not the page — a board's second page cannot be quietly older.
+    IncidentAggregates:
+      allOf:
+        - $ref: '#/components/schemas/Aggregates'
+        - type: object
+          properties:
+            by_phase:
+              type: object
+              additionalProperties: { type: integer }
+              description: Keys are the four phases; the Incidents tab count is the sum of the three unresolved ones.
     Status:
       type: object
       description: |
@@ -548,7 +593,12 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         components_url: { type: string, format: uri }
-        counts: { type: object, additionalProperties: { type: integer } }
+        aggregates:
+          allOf: [{ $ref: '#/components/schemas/StatusAggregates' }]
+          description: |
+            The same block the board's own list returns, so the chips can be drawn before the
+            first page arrives. A resource may carry `aggregates` too — the key means the same
+            thing wherever it appears: computed over a whole collection, not a page.
     TrackedComponent:
       allOf:
         - $ref: '#/components/schemas/Component'
