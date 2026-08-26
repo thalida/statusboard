@@ -418,11 +418,15 @@ longer exists should be told.
 
 Three things happen, and a component carries all three:
 
-| | on `Component` |
-| --- | --- |
-| its current state | `status` |
-| scheduled work | `maintenance_windows`, and `next_maintenance_window` |
-| a live problem | `latest_incident` |
+| | on `Component` | how many |
+| --- | --- | --- |
+| its current state | `status` | — one by definition |
+| scheduled work | `maintenance_windows`, `next_maintenance_window` | `maintenance_window_count` |
+| a live problem | `latest_incident` | `active_incident_count` |
+
+**A count sits with the projection it counts.** A card shows the soonest window and the most
+recent incident; the counts turn those into "+2 more" without shipping either list. Both live on
+the component, so a board row has them whatever it tracks.
 
 **The overall component carries the same three, scoped to the whole service.** Its
 `maintenance_windows` is every window in the service, from any component. Its `latest_incident` is
@@ -437,17 +441,18 @@ more". **Windows are never merged into a combined span** — two windows a week 
 and a single merged window would be true of neither. Same for incidents: the row shows
 `latest_incident` and `active_incident_count` says whether there are others.
 
-Read `maintenance_window_count` rather than the array when rendering a row. On the overall
-component the array covers every component in the service and can be long.
+Read the counts rather than the arrays when rendering a row. On the overall component the arrays
+cover every component in the service and can be long.
 
 That is what makes tracking a service as a whole work. A board row is a component, so a row for
 Twilio's overall component must answer "is anything scheduled, is anything broken" for Twilio —
 otherwise following the whole service tells you *less* than following one part of it, which is
 backwards.
 
-An earlier draft put a maintenance summary and an incident summary on `Service` instead. Those
-fields are gone: a `Service` nests `overall_component`, and the same values are read there. One
-fact, one place, and the board gets it for free because a board row already is that component.
+An earlier draft put the maintenance summary, the incident summary and `active_incident_count` on
+`Service` instead. All three are gone: a `Service` nests `overall_component`, and the same values
+are read there. One fact, one place, and the board gets them for free because a board row already
+is that component.
 
 Real components are scoped normally — `maintenance_windows` is that component's own, and
 `latest_incident` is the most recent incident naming it in `affected_component_ids`.

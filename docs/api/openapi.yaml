@@ -571,7 +571,6 @@ components:
           description: |
             How many components the provider publishes. The overall component is not counted, so
             this number equals the one on the provider's own status page.
-        active_incident_count: { type: integer }
         status_page_url: { type: string, format: uri }
         status_page_provider:
           type: string
@@ -661,6 +660,13 @@ components:
 
             A provider names the components an incident affects. On the **overall** component this
             is the most recent incident anywhere in the service.
+        active_incident_count:
+          type: integer
+          description: |
+            How many incidents affecting this component are unresolved. A card shows
+            `latest_incident` and adds "+1 more" from this.
+
+            On the **overall** component this counts every unresolved incident in the service.
         is_tracked: { type: boolean, nullable: true }
     OverallComponent:
       type: object
@@ -679,6 +685,7 @@ components:
         latest_incident:
           allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
           description: The most recent incident anywhere in this service. Null if there is none.
+        active_incident_count: { type: integer, description: How many are unresolved across the service. }
         is_tracked: { type: boolean, nullable: true, description: Null when unauthenticated, so the client renders ＋ without a second code path. }
     MaintenanceWindow:
       type: object
