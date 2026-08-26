@@ -458,7 +458,12 @@ components:
 
             A single service can differ. Read `ServiceDetail.poll_interval_seconds` for that
             service's effective interval.
-        refresh_cooldown_seconds: { type: integer, example: 60, description: Minimum gap between manual refreshes of one service, across all users }
+        refresh_cooldown_seconds:
+          type: integer
+          example: 60
+          description: |
+            The default gap between manual refreshes of one page. A single page can differ; read
+            `Service.status_page.refresh_cooldown_seconds` for that page's value.
         default_page_size: { type: integer, example: 50 }
         max_page_size: { type: integer, example: 200 }
         severity_labels:
@@ -525,6 +530,50 @@ components:
               type: object
               additionalProperties: { type: integer }
               description: Keys are the four phases; the Incidents tab count is the sum of the three unresolved ones.
+    StatusPage:
+      type: object
+      description: |
+        The page we read, and how we read it. Everything about the source of a service's data,
+        rather than the data itself.
+      properties:
+        url: { type: string, format: uri }
+        provider:
+          type: string
+          enum: [statuspage, instatus, betterstack, rss]
+          description: |
+            The adapter that reads this page. The client maps the value to a display name:
+            `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
+            "Better Stack", `rss` is "RSS feed".
+        last_fetched_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When this page was last read without error. Null until the first successful fetch.
+
+            One fetch updates every component, so `Status.last_refreshed_at` normally matches
+            this. It lags when a component was missing from the last payload.
+        next_poll_at: { type: string, format: date-time, nullable: true, description: When the scheduler will read it next. }
+        poll_interval_seconds:
+          type: integer
+          description: |
+            How often this page is read now. The About tab shows it as "Refreshed every".
+
+            This is the effective interval. A page that fails backs off, so the interval grows.
+            `/meta/` carries the default for a healthy page.
+        refresh_cooldown_seconds:
+          type: integer
+          description: |
+            The shortest gap allowed between manual refreshes of this page. `POST /refresh/`
+            obeys it.
+
+            The cooldown is on the page, not on a user or a board. Two boards that track this
+            service cost one read.
+        consecutive_failures:
+          type: integer
+          description: |
+            How many reads have failed in a row. Zero after a success. This drives the backoff
+            that grows `poll_interval_seconds`, and severity 3 once a status goes stale.
     Status:
       type: object
       description: |
@@ -571,14 +620,7 @@ components:
           description: |
             How many components the provider publishes. The overall component is not counted, so
             this number equals the one on the provider's own status page.
-        status_page_url: { type: string, format: uri }
-        status_page_provider:
-          type: string
-          enum: [statuspage, instatus, betterstack, rss]
-          description: |
-            The adapter that reads this service. The client maps the value to a display name:
-            `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
-            "Better Stack", `rss` is "RSS feed".
+        status_page: { $ref: '#/components/schemas/StatusPage' }
         overall_component:
           allOf: [{ $ref: '#/components/schemas/OverallComponent' }]
           description: |
@@ -599,14 +641,6 @@ components:
           properties:
             description: { type: string, nullable: true }
             in_catalog_since: { type: string, format: date }
-            poll_interval_seconds:
-              type: integer
-              description: |
-                How often this service is polled now. The About tab shows it as "Refreshed every".
-
-                This is the effective interval, not the deployment default. A service that fails
-                backs off, so its interval grows. Read `/meta/` for the default; read this for
-                what is happening to this service.
     Component:
       type: object
       properties:

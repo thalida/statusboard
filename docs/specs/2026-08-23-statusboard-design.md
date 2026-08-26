@@ -340,9 +340,9 @@ turn a URL into a service.
 representation, whatever produced it — so a client can drop an imported service straight into the
 list it already renders.
 
-That forced `status_page_url` and `status_page_provider` down into the list shape, because the Add-by-URL
-screen shows both in its About block before you press ＋. `ServiceDetail` is now only
-`description` and `in_catalog_since`, which no list has ever needed.
+That forced the status page fields down into the list shape, because the Add-by-URL screen shows
+them in its About block before you press ＋. `ServiceDetail` is now only `description` and
+`in_catalog_since`, which no list has ever needed.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
 ### Severity is the state, and there is no status string beside it
@@ -413,6 +413,37 @@ and nowhere it does not, because both come from the same declaration.
 
 An unknown field name is a `400`, not a silent empty response. A client asking for a field that no
 longer exists should be told.
+
+### The status page is its own model
+
+`Service.status_page` holds the source and how we read it, separately from what we read:
+
+```jsonc
+"status_page": {
+  "url": "https://status.twilio.com",
+  "provider": "statuspage",
+  "last_fetched_at": "…",
+  "next_poll_at": "…",
+  "poll_interval_seconds": 300,
+  "refresh_cooldown_seconds": 60,
+  "consecutive_failures": 0
+}
+```
+
+Three loose `status_page_*` fields on `Service` became one object, and the polling facts that had
+nowhere sensible to live joined them. `poll_interval_seconds` was on `ServiceDetail` purely
+because the About tab shows "Refreshed every"; it belongs here, next to the backoff that changes
+it.
+
+The split is between **the source and the data**. `status_page` is where a service's information
+comes from and how reliably we are getting it. `overall_component` is the information. A screen
+explaining *why* a status is stale reads the first; a screen showing status reads the second.
+
+`consecutive_failures` and `next_poll_at` make staleness explainable rather than mysterious — the
+difference between "Can't check" and "Can't check, we have failed four times and will try again in
+twenty minutes".
+
+`/meta/` keeps deployment defaults for both intervals. A single page can differ from them.
 
 ### A component carries everything happening to it
 
