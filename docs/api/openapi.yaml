@@ -545,7 +545,7 @@ components:
         component_count: { type: integer }
         active_incident_count: { type: integer }
         status_page_url: { type: string, format: uri }
-        provider:
+        status_page_provider:
           type: string
           enum: [statuspage, instatus, betterstack, rss]
           description: |

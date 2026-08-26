@@ -307,7 +307,7 @@ turn a URL into a service.
 representation, whatever produced it — so a client can drop an imported service straight into the
 list it already renders.
 
-That forced `status_page_url` and `provider` down into the list shape, because the Add-by-URL
+That forced `status_page_url` and `status_page_provider` down into the list shape, because the Add-by-URL
 screen shows both in its About block before you press ＋. `ServiceDetail` is now only
 `description` and `in_catalog_since`, which no list has ever needed.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
