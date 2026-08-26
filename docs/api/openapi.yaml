@@ -577,12 +577,11 @@ components:
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
           description: |
-            The soonest upcoming window across **every** component of this service. Null if none
-            is scheduled.
+            A summary field. It is the soonest upcoming window found on any component of this
+            service. Null if no component has one scheduled.
 
-            This is not the overall component's own window. Providers schedule maintenance on real
-            components, so the overall component rarely has one. Read
-            `Component.maintenance_windows` for a single component's windows.
+            Maintenance is stored on components. Read `Component.maintenance_windows` for one
+            component's windows — a component can have several.
         tracked_component_count:
           type: integer
           nullable: true

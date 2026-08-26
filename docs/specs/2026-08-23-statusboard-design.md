@@ -393,12 +393,17 @@ Three things happen to a service, and the summary carries one field for each:
 | scheduled work | `next_maintenance_window` | across **all** its components |
 | a live problem | `latest_incident` | on the service |
 
-**Only the first is nested, and that is not a style choice.** `overall_component.status` is
-literally that component's own field, so it is read through the component that owns it. The other
-two are not: maintenance is scheduled on real components and the summary is the soonest across all
-of them, and an incident is published against the service. Nesting either under
-`overall_component` would claim it belongs to a component that, in the maintenance case, almost
-never has one.
+**Maintenance is stored on components** — `Component.maintenance_windows`, several per component
+if the provider schedules that way. `Service.next_maintenance_window` is a *summary* of them: the
+soonest window found on any of that service's components.
+
+It is not nested under `overall_component` because it does not belong to that component. The
+overall component is the synthetic "All services" row; providers schedule maintenance on real
+components like *Programmable Messaging*, so the overall component is the one least likely to have
+a window. `overall_component.status` is nested because it genuinely is that component's own field.
+
+`latest_incident` sits at service level because providers publish incidents against the service,
+naming affected components by id.
 
 Each is a **projection, not the full record**. `latest_incident` is an `IncidentRef` with no
 `updates` array, so a row costs one title rather than a log; the full incident is a tab away.
