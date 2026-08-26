@@ -145,6 +145,13 @@ Unique on `(dashboard, component)`.
 
 ### Every service has an overall component
 
+Its fixed properties: `parent` is null, `path` is null — it has no ancestry — and `child_count` is
+0, because it is a peer of the top-level components rather than their parent.
+
+**`component_count` excludes it.** The number equals what the provider's own status page claims,
+which is the number a user can check. The components list returns the overall row first and does
+not count it in `aggregates.total`, so a page holds one more row than its count.
+
 Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
 "All services". It carries **the provider's own top-level indicator** — not an aggregate of its
 siblings, because a worst-of rollup leaves Cloudflare permanently orange when one of 109
@@ -164,6 +171,10 @@ bad, so an open incident is `degraded` and no other severity is inferred from it
 
 `unknown` keeps its own meaning: we could not reach the provider. That is the only case where we
 have no data at all.
+
+**RSS ships in v1.** An RSS service shows only Operational or Degraded, and says so via
+`status.source`. That is a narrower signal than a Statuspage service gives, but it is a real one,
+and it is the difference between a service being in the catalog and not.
 
 A screen showing a derived status says so. "Degraded" from a published indicator and "Degraded"
 because an RSS entry exists are different claims, and a user who clicks through to a provider's
@@ -248,8 +259,9 @@ One class per provider, same interface: given a URL, return normalised component
 - `StatuspageAdapter` — Atlassian's `/api/v2/summary.json` and `/api/v2/incidents.json`. Covers
   most of the industry.
 - `InstatusAdapter`, `BetterStackAdapter`
-- `RSSAdapter` — fallback. **Returns incidents but not component status**, which should shape
-  which providers v1 claims to support.
+- `RSSAdapter` — fallback. Returns incidents and no component status. Its services get one
+  synthetic component, the overall one, with `status.source = incidents`: severity 2 while an
+  incident is open, severity 5 otherwise.
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
