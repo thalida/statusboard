@@ -450,7 +450,14 @@ components:
       type: object
       description: Deployment-wide configuration. Nothing here is a user preference.
       properties:
-        poll_interval_seconds: { type: integer, example: 300, description: How often the server polls a tracked service }
+        poll_interval_seconds:
+          type: integer
+          example: 300
+          description: |
+            The default interval for a healthy service. Settings shows it.
+
+            A single service can differ. Read `ServiceDetail.poll_interval_seconds` for that
+            service's effective interval.
         refresh_cooldown_seconds: { type: integer, example: 60, description: Minimum gap between manual refreshes of one service, across all users }
         default_page_size: { type: integer, example: 50 }
         max_page_size: { type: integer, example: 200 }
@@ -575,6 +582,14 @@ components:
           properties:
             description: { type: string, nullable: true }
             in_catalog_since: { type: string, format: date }
+            poll_interval_seconds:
+              type: integer
+              description: |
+                How often this service is polled now. The About tab shows it as "Refreshed every".
+
+                This is the effective interval, not the deployment default. A service that fails
+                backs off, so its interval grows. Read `/meta/` for the default; read this for
+                what is happening to this service.
     Component:
       type: object
       properties:

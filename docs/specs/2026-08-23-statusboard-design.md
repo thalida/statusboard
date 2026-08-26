@@ -265,7 +265,9 @@ Twilio produce one poll every five minutes, not two hundred.
 - Poll only services with at least one watcher
 - Five-minute default interval, with jitter so we do not stampede
 - Honour `ETag` / `If-Modified-Since`
-- Exponential backoff on failure
+- Exponential backoff on failure. **The service screen shows the effective interval, not the
+  deployment default** — `ServiceDetail.poll_interval_seconds`. A service in backoff is not being
+  checked every five minutes, and that is precisely the service someone opens to ask why.
 - **A hard per-service cooldown, global across all users**, which the manual refresh also obeys
 
 A failed fetch sets `unknown` and **never clobbers the last known value**. The UI shows the grey
