@@ -28,7 +28,7 @@ Run `just` on its own to list every recipe.
 Each worktree gets its own ports, database and admin account. Ports are
 saved to `.local/worktree-ports.json`. Run `just info` to see them.
 
-`just init` copies `.env` from the main checkout when there is one.
+`just init` copies `.env.local` from the main checkout when there is one.
 Otherwise it asks for the admin credentials.
 
 Run tests with `just test`, not `pytest` — the database port is

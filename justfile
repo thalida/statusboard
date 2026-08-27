@@ -1,4 +1,5 @@
 set dotenv-load
+set dotenv-filename := ".env.local"
 
 # Per-worktree ports, compose project name and DATABASE_URL. Every recipe
 # touching Postgres, Redis or the server evaluates this first. Two worktrees
@@ -14,7 +15,7 @@ init: env up sync migrate seed
     pre-commit install
     @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
 
-# Write .env, asking for the admin once. Worktrees copy the main checkout's.
+# Write .env.local, asking for the admin once. Worktrees copy main's.
 env:
     @python3 bin/make-env.py
 
@@ -43,7 +44,7 @@ sync:
 migrate:
     @{{wt}} ; cd api && uv run python manage.py migrate
 
-# Create the admin in this worktree's database, from .env. Never asks.
+# Create the admin in this worktree's database, from .env.local. Never asks.
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
 

@@ -7,8 +7,10 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# The .env sits at the repository root, one level above api/.
-load_dotenv(BASE_DIR.parent / ".env")
+# Local development only. The file sits at the repository root and is
+# never committed. A deployment has no .env.local, so load_dotenv does
+# nothing and the real environment is used.
+load_dotenv(BASE_DIR.parent / ".env.local")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "local")

@@ -8,9 +8,9 @@ from django.core.management.base import BaseCommand, CommandError
 class Command(BaseCommand):
     """Create the local development admin, idempotently.
 
-    This writes the database row. `just env` writes the .env file that
+    This writes the database row. `just env` writes the .env.local that
     supplies the credentials. Each worktree has its own database, so this
-    runs per worktree even though the .env is shared.
+    runs per worktree even though the .env.local is shared.
 
     It never asks. One prompt, in one place, or the answer goes somewhere
     the next run cannot find.
@@ -38,8 +38,8 @@ class Command(BaseCommand):
         password = os.environ.get("DJANGO_SUPERUSER_PASSWORD")
         if not email or not password:
             self.stdout.write(
-                "No admin, and .env has no credentials. Run `just env` to set "
-                "them, then `just seed`."
+                "No admin, and .env.local has no credentials. Run `just env` to "
+                "set them, then `just seed`."
             )
             return
 

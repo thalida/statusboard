@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Make sure this checkout has a .env with the local admin in it.
+"""Make sure this checkout has a .env.local with the local admin in it.
 
-The canonical .env lives in the main checkout. A worktree copies it. So
+The canonical .env.local lives in the main checkout. A worktree copies
+it. So
 the credentials are entered once, not once per branch.
 
-Blank values are filled by asking. A missing file is not the trigger: a
-.env can exist and still have nothing in it. Asking only happens on a
+Blank values are filled by asking. A missing file is not the trigger: the
+file can exist and still have nothing in it. Asking only happens on a
 terminal, which keeps CI unattended.
 """
 
@@ -20,11 +21,11 @@ PROMPTS = {
     "DJANGO_SUPERUSER_PASSWORD": ("admin password: ", getpass),
 }
 
-TEMPLATE = pathlib.Path(".env.example")
+TEMPLATE = pathlib.Path(".env.local.example")
 
 
 def main_checkout() -> pathlib.Path:
-    """The repository the worktrees hang off. Its .env is the shared one."""
+    """The repository the worktrees hang off. Its file is the shared one."""
     common = subprocess.run(
         ["git", "rev-parse", "--git-common-dir"],
         capture_output=True,
@@ -73,8 +74,8 @@ def ensure(path: pathlib.Path) -> str:
 
 
 def main() -> None:
-    shared = main_checkout() / ".env"
-    local = pathlib.Path(".env").resolve()
+    shared = main_checkout() / ".env.local"
+    local = pathlib.Path(".env.local").resolve()
 
     text = ensure(shared)
     if shared.resolve() == local:
@@ -84,7 +85,7 @@ def main() -> None:
     if local.exists() and not blanks(local.read_text()):
         return
     local.write_text(text)
-    print(f"copied .env from {shared.parent}")
+    print(f"copied .env.local from {shared.parent}")
 
 
 if __name__ == "__main__":
