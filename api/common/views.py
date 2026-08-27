@@ -38,7 +38,7 @@ class MetaView(APIView):
 
 
 class ApiDocsView(TemplateView):
-    """Scalar at /docs/, reading the generated schema.
+    """Scalar at the root, reading the generated schema.
 
     Public, because /schema/ already is. Gating the page while the
     schema it renders stays open would protect nothing.

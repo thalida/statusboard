@@ -9,8 +9,10 @@ from common.views import ApiDocsView
 # has always documented.
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("docs/", ApiDocsView.as_view(), name="api-docs"),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    # The root is the docs. Exact-match "", so /meta/ and the rest
+    # still reach the includes below.
+    path("", ApiDocsView.as_view(), name="api-docs"),
     path("", include("common.urls")),
     path("", include("authentication.urls")),
     path("", include("catalog.urls")),
