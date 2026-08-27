@@ -34,3 +34,6 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Superpowers subagent run state (briefs, reports, ledger)
+.superpowers/

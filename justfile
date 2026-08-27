@@ -1,7 +1,7 @@
 set dotenv-load
 
 init:
-    docker compose up -d
+    docker compose up -d --wait
     cd api && uv sync
     pre-commit install
     cd api && uv run python manage.py migrate
