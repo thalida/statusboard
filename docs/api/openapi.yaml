@@ -468,12 +468,12 @@ components:
 
             A single service can differ. Read `ServiceDetail.poll_interval_seconds` for that
             service's effective interval.
-        refresh_cooldown_seconds:
+        poll_cooldown_seconds:
           type: integer
           example: 60
           description: |
             The default gap between manual refreshes of one page. A single page can differ; read
-            `Service.status_page.refresh_cooldown_seconds` for that page's value.
+            `Service.status_page.poll_cooldown_seconds` for that page's value.
         default_page_size: { type: integer, example: 50 }
         max_page_size: { type: integer, example: 200 }
         severity_labels:
@@ -560,7 +560,7 @@ components:
             The adapter that reads this page. The client maps the value to a display name:
             `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
             "Better Stack", `rss` is "RSS feed".
-        last_fetched_at:
+        poll_last_success_at:
           type: string
           format: date-time
           nullable: true
@@ -569,7 +569,7 @@ components:
 
             One fetch updates every component, so `Status.last_refreshed_at` normally matches
             this. It lags when a component was missing from the last payload.
-        next_poll_at: { type: string, format: date-time, nullable: true, description: When the scheduler will read it next. }
+        poll_next_at: { type: string, format: date-time, nullable: true, description: When the scheduler will read it next. }
         poll_interval_seconds:
           type: integer
           description: |
@@ -577,7 +577,7 @@ components:
 
             This is the effective interval. A page that fails backs off, so the interval grows.
             `/meta/` carries the default for a healthy page.
-        refresh_cooldown_seconds:
+        poll_cooldown_seconds:
           type: integer
           description: |
             The shortest gap allowed between manual refreshes of this page. `POST /refresh/`
@@ -585,13 +585,13 @@ components:
 
             The cooldown is on the page, not on a user or a board. Two boards that track this
             service cost one read.
-        consecutive_failure_count:
+        poll_consecutive_failure_count:
           type: integer
           description: |
             How many reads have failed in a row. Zero after a success.
 
             It drives the backoff that grows `poll_interval_seconds`, and tips a component to
-            severity 3 once the data is too stale to trust. Read it with `last_fetched_at` to say
+            severity 3 once the data is too stale to trust. Read it with `poll_last_success_at` to say
             why a status is unknown.
     Status:
       type: object
@@ -636,7 +636,7 @@ components:
           format: date-time
           description: |
             When this severity was last confirmed. It is the service's
-            `status_page.last_fetched_at`, because one fetch reads every component of a service.
+            `status_page.poll_last_success_at`, because one fetch reads every component of a service.
 
             It is not stored per component. Doing so would mean a write for every component on
             every poll, and `ComponentStatus` only writes when severity changes.

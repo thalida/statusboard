@@ -38,7 +38,7 @@ DERIVED = {
     "Service.overall_component":          "ServiceComponent where is_overall",
     "Service.status_page":                "OneToOneField",
     "Component.status":                   "ComponentStatus where ended_at is null",
-    "Status.last_refreshed_at":           "component.service.status_page.last_fetched_at",
+    "Status.last_refreshed_at":           "component.service.status_page.poll_last_success_at",
     "Component.path":                     "walk of parent",
     "Component.child_count":              "Count of reverse parent",
     "Component.is_tracked":               "per-user annotation over DashboardItem",

@@ -139,11 +139,11 @@ erDiagram
         url url UK "normalised, dedupe key"
         enum provider "TextChoices"
         url api_url "null unless the derivation fails"
-        datetime last_fetched_at
-        datetime next_poll_at
-        int poll_interval_seconds "grows with backoff"
-        int refresh_cooldown_seconds
-        int consecutive_failure_count "resets on success"
+        int poll_interval_seconds "admin sets, backoff scales"
+        int poll_cooldown_seconds "admin sets"
+        datetime poll_last_success_at "poller writes"
+        datetime poll_next_at "poller writes"
+        int poll_consecutive_failure_count "poller writes, resets on success"
     }
     ServiceComponent {
         uuid id PK
@@ -265,8 +265,8 @@ is a different concept from a permission role.
   "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
-  `provider`, `api_url` (nullable override), `last_fetched_at`, `next_poll_at`,
-  `poll_interval_seconds`, `refresh_cooldown_seconds`, `consecutive_failure_count`
+  `provider`, `api_url` (nullable override), `poll_last_success_at`, `poll_next_at`,
+  `poll_interval_seconds`, `poll_cooldown_seconds`, `poll_consecutive_failure_count`
 
   `url` is the page a person visits. `api_url` is the machine-readable endpoint behind it —
   `https://status.twilio.com` versus `https://status.twilio.com/api/v2/summary.json`.
@@ -280,12 +280,24 @@ is a different concept from a permission role.
   `url` is what makes two people pasting the same page share one service and one poll, so the
   dedupe rule lives on the thing being deduplicated.
 
-  It also gives the poller somewhere to keep state. `next_poll_at` is what the scheduler reads;
-  `consecutive_failure_count` counts failed reads in a row, resets to zero on success, drives the
+  **Two of the `poll_` fields are configuration and three are runtime state.** An admin sets
+  `poll_interval_seconds` and `poll_cooldown_seconds`; the poller writes `poll_last_success_at`,
+  `poll_next_at` and `poll_consecutive_failure_count` every cycle. Hand-editing one of the latter
+  is pointless — it is overwritten within the interval.
+
+  They are not split into a separate model. That would be a strictly one-to-one row fetched every
+  time the page is fetched, so every read grows a join and every write a second row, for five
+  columns. It becomes worth it only if settings need layering — a deployment default, a
+  per-service override, and an effective value computed from both. Today `/meta/` holds the
+  default and this holds the effective value, and nothing records that an admin deliberately chose
+  60s over inheriting 300s.
+
+  It also gives the poller somewhere to keep state. `poll_next_at` is what the scheduler reads;
+  `poll_consecutive_failure_count` counts failed reads in a row, resets to zero on success, drives the
   backoff that grows `poll_interval_seconds`, and is what tips a component to severity 3 once the
   data is too stale to trust.
 
-  `consecutive_failure_count` is a denormalised count of `PollRun`, kept because the scheduler reads it
+  `poll_consecutive_failure_count` is a denormalised count of `PollRun`, kept because the scheduler reads it
   every cycle — deriving it would be a count-since-last-success query per service per tick. A
   `last_error` column was dropped for failing that test: it is the newest `PollRun.error`, read
   only in admin, and a copy that can disagree with the row it came from.
@@ -486,7 +498,7 @@ where every add has two possible shapes.
   The snapshotted `url` and `provider` are what makes that history still readable afterwards — a
   run from before the migration says which page it read.
 
-  `StatusPage` holds the rolled-up state (`consecutive_failure_count`, `last_fetched_at`); `PollRun`
+  `StatusPage` holds the rolled-up state (`poll_consecutive_failure_count`, `poll_last_success_at`); `PollRun`
   holds the attempts. This is what makes "everything is fine" distinguishable from "we have not
   successfully checked in six hours".
 
@@ -518,7 +530,7 @@ asked the polling code to maintain.
 
 **Nothing is written on an unchanged poll.** A row per poll would be 12 components × 288 polls a
 day, about 630M rows a year across 500 services, nearly all identical to the row before them.
-"When did we last check" does not need to be there: `StatusPage.last_fetched_at` answers it,
+"When did we last check" does not need to be there: `StatusPage.poll_last_success_at` answers it,
 because one fetch covers every component of a service.
 
 ### Status and incidents are different things
@@ -757,11 +769,11 @@ holds the source and how we read it, separately from what we read:
 "status_page": {
   "url": "https://status.twilio.com",
   "provider": "statuspage",
-  "last_fetched_at": "…",
-  "next_poll_at": "…",
+  "poll_last_success_at": "…",
+  "poll_next_at": "…",
   "poll_interval_seconds": 300,
-  "refresh_cooldown_seconds": 60,
-  "consecutive_failure_count": 0
+  "poll_cooldown_seconds": 60,
+  "poll_consecutive_failure_count": 0
 }
 ```
 
@@ -775,7 +787,7 @@ The split is between **the source and the data**. `status_page` is where a servi
 comes from and how reliably we are getting it. `overall_component` is the information. A screen
 explaining *why* a status is stale reads the first; a screen showing status reads the second.
 
-`consecutive_failure_count` and `next_poll_at` make staleness explainable rather than mysterious — the
+`poll_consecutive_failure_count` and `poll_next_at` make staleness explainable rather than mysterious — the
 difference between "Can't check" and "Can't check, we have failed four times and will try again in
 twenty minutes".
 
