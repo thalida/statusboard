@@ -81,7 +81,10 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.OrderingFilter",
+        "common.filters.FieldsBackend",
     ],
+    "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
+    "PAGE_SIZE": 50,
 }
 
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
