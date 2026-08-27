@@ -1,0 +1,197 @@
+from django.utils import timezone
+from rest_framework import serializers
+
+from catalog.models import Poller, Service, ServiceComponent, StatusPage
+from common.mixins import FieldsMixin
+from status.choices import CLOSED_PHASES, EventKind
+from status.serializers import EventRefSerializer, StatusSerializer
+
+
+class StatusPageSerializer(FieldsMixin, serializers.ModelSerializer):
+    class Meta:
+        model = StatusPage
+        fields = ["url", "provider"]
+
+
+class PollerSerializer(FieldsMixin, serializers.ModelSerializer):
+    interval_seconds = serializers.IntegerField(source="effective_interval_seconds")
+    cooldown_seconds = serializers.IntegerField(source="effective_cooldown_seconds")
+
+    class Meta:
+        model = Poller
+        fields = [
+            "interval_seconds",
+            "cooldown_seconds",
+            "last_success_at",
+            "next_at",
+            "consecutive_failure_count",
+            "is_paused",
+        ]
+
+
+class ServiceRefSerializer(FieldsMixin, serializers.ModelSerializer):
+    """Breaks the Service -> Component -> Service cycle. It nests nothing."""
+
+    class Meta:
+        model = Service
+        fields = ["id", "slug", "name", "logo"]
+
+
+class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    path = serializers.SerializerMethodField()
+    child_count = serializers.SerializerMethodField()
+    upcoming_maintenance = serializers.SerializerMethodField()
+    upcoming_maintenance_count = serializers.SerializerMethodField()
+    active_incident = serializers.SerializerMethodField()
+    active_incident_count = serializers.SerializerMethodField()
+    service = ServiceRefSerializer(read_only=True)
+    is_tracked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceComponent
+        fields = [
+            "id",
+            "name",
+            "path",
+            "parent",
+            "child_count",
+            "is_overall",
+            "archived_at",
+            "status",
+            "upcoming_maintenance",
+            "upcoming_maintenance_count",
+            "active_incident",
+            "active_incident_count",
+            "service",
+            "is_tracked",
+        ]
+
+    def _events(self, row, kind):
+        """Scope to what is still live.
+
+        A wider count than the item beside it shows "+3 more" for nothing.
+        """
+        queryset = row.events.filter(kind=kind).exclude(phase__in=CLOSED_PHASES)
+        if kind == EventKind.MAINTENANCE:
+            queryset = queryset.filter(ends_at__isnull=True) | queryset.filter(
+                ends_at__gte=timezone.now()
+            )
+        return queryset
+
+    def get_status(self, row):
+        current = row.statuses.filter(ended_at__isnull=True).first()
+        return (
+            StatusSerializer(
+                current,
+                context=self.context,
+                fields_tree=self.child_tree("status"),
+            ).data
+            if current
+            else None
+        )
+
+    def get_path(self, row):
+        # Null on the overall component: it is not under anything.
+        if row.is_overall or row.parent is None:
+            return None
+        names, node = [], row.parent
+        while node is not None:
+            names.append(node.name)
+            node = node.parent
+        return " › ".join(reversed(names))
+
+    def get_child_count(self, row):
+        return 0 if row.is_overall else row.children.count()
+
+    def get_upcoming_maintenance(self, row):
+        soonest = self._events(row, EventKind.MAINTENANCE).order_by("starts_at").first()
+        return (
+            EventRefSerializer(
+                soonest,
+                context=self.context,
+                fields_tree=self.child_tree("upcoming_maintenance"),
+            ).data
+            if soonest
+            else None
+        )
+
+    def get_upcoming_maintenance_count(self, row):
+        return self._events(row, EventKind.MAINTENANCE).count()
+
+    def get_active_incident(self, row):
+        newest = self._events(row, EventKind.INCIDENT).order_by("-starts_at").first()
+        return (
+            EventRefSerializer(
+                newest,
+                context=self.context,
+                fields_tree=self.child_tree("active_incident"),
+            ).data
+            if newest
+            else None
+        )
+
+    def get_active_incident_count(self, row):
+        return self._events(row, EventKind.INCIDENT).count()
+
+    def get_is_tracked(self, row):
+        user = getattr(self.context.get("request"), "user", None)
+        if user is None or not user.is_authenticated:
+            return None
+        return row.tracked_by.filter(dashboard__owner=user).exists()
+
+
+class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
+    status_page = StatusPageSerializer(read_only=True)
+    poller = PollerSerializer(read_only=True)
+    overall_component = serializers.SerializerMethodField()
+    component_count = serializers.SerializerMethodField()
+    tracked_component_count = serializers.SerializerMethodField()
+    in_catalog_since = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = Service
+        fields = [
+            "id",
+            "slug",
+            "name",
+            "description",
+            "homepage_url",
+            "logo",
+            "in_catalog_since",
+            "component_count",
+            "status_page",
+            "poller",
+            "overall_component",
+            "tracked_component_count",
+        ]
+
+    def get_overall_component(self, service):
+        row = service.components.filter(is_overall=True).first()
+        return (
+            ComponentSerializer(
+                row,
+                context=self.context,
+                fields_tree=self.child_tree("overall_component"),
+            ).data
+            if row
+            else None
+        )
+
+    def get_component_count(self, service):
+        # The overall component is excluded: it is the service, not a part of it.
+        return service.components.filter(
+            is_overall=False, archived_at__isnull=True
+        ).count()
+
+    def get_tracked_component_count(self, service):
+        user = getattr(self.context.get("request"), "user", None)
+        if user is None or not user.is_authenticated:
+            return 0
+        return (
+            ServiceComponent.objects.filter(
+                service=service, tracked_by__dashboard__owner=user
+            )
+            .distinct()
+            .count()
+        )
