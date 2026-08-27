@@ -1,52 +1,20 @@
-import json
-from pathlib import Path
-
 import pytest
 
 from catalog.adapters.statuspage import StatuspageAdapter
 from status.choices import EventKind, Severity
-
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-
-
-class StubSession:
-    """Return a recorded body per URL suffix. No network."""
-
-    def __init__(self, bodies):
-        self.bodies = bodies
-        self.requested = []
-
-    def get(self, url, **kwargs):
-        self.requested.append(url)
-        for suffix, body in self.bodies.items():
-            if url.endswith(suffix):
-                return type(
-                    "R",
-                    (),
-                    {
-                        "json": lambda self, b=body: b,
-                        "status_code": 200,
-                        "raise_for_status": lambda self: None,
-                        "headers": {},
-                    },
-                )()
-        raise AssertionError(f"unexpected url {url}")
+from tests.adapters.conftest import StubSession
 
 
 @pytest.fixture
-def adapter():
+def adapter(load):
     return StatuspageAdapter(
         "https://status.twilio.com/",
         session=StubSession(
             {
-                "summary.json": json.loads(
-                    (FIXTURES / "statuspage_summary.json").read_text()
-                ),
-                "incidents.json": json.loads(
-                    (FIXTURES / "statuspage_incidents.json").read_text()
-                ),
-                "scheduled-maintenances.json": json.loads(
-                    (FIXTURES / "statuspage_scheduled_maintenances.json").read_text()
+                "summary.json": load("statuspage_summary.json"),
+                "incidents.json": load("statuspage_incidents.json"),
+                "scheduled-maintenances.json": load(
+                    "statuspage_scheduled_maintenances.json"
                 ),
             }
         ),
