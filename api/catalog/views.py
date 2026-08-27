@@ -2,8 +2,12 @@ from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics
+from rest_framework import status as http
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from catalog.import_service import import_from_url
 from catalog.models import Service, ServiceComponent
 from catalog.serializers import ComponentSerializer, ServiceSerializer
 from common.aggregates import EventAggregateSet, StatusAggregateSet
@@ -143,3 +147,24 @@ class ServiceEventListView(generics.ListAPIView):
         from status.serializers import ServiceEventSerializer
 
         return ServiceEventSerializer
+
+
+class CatalogImportView(APIView):
+    """`POST /catalog/services/` is reserved.
+
+    A future admin create takes a service body and a bulk create takes a
+    list, so importing by URL gets its own path rather than overloading
+    the standard collection.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        url = (request.data.get("url") or "").strip()
+        if not url:
+            return Response({"detail": "url is required"}, status=400)
+        service, created = import_from_url(url)
+        return Response(
+            ServiceSerializer(service, context={"request": request}).data,
+            status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
+        )

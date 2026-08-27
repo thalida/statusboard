@@ -1,6 +1,7 @@
 from django.urls import path
 
 from catalog.views import (
+    CatalogImportView,
     ServiceComponentListView,
     ServiceDetailView,
     ServiceEventListView,
@@ -8,6 +9,8 @@ from catalog.views import (
 )
 
 urlpatterns = [
+    # Above the <slug:slug> route so it is not shadowed.
+    path("catalog/import/", CatalogImportView.as_view(), name="catalog-import"),
     path("catalog/services/", ServiceListView.as_view(), name="service-list"),
     path(
         "catalog/services/<slug:slug>/",
