@@ -860,7 +860,11 @@ components:
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        components_url: { type: string, format: uri }
+        is_default:
+          type: boolean
+          description: |
+            Exactly one dashboard per user has this. `GET /me/` returns its id, so a client can
+            reach it without listing.
         aggregates:
           allOf: [{ $ref: '#/components/schemas/StatusAggregates' }]
           description: |

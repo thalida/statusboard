@@ -51,7 +51,6 @@ DERIVED = {
     "Component.active_incident_count":    "Count of unresolved across that M2M",
     "ServiceEvent.affected_component_ids": "M2M ids",
     "ServiceEvent.updates":               "reverse FK from EventUpdate",
-    "Dashboard.components_url":           "built from the request",
     "Dashboard.aggregates":               "pagination aggregate block",
     "Me.default_dashboard_id":            "Dashboard where is_default",
     "ServiceDetail.in_catalog_since":     "BaseModel.created_at",
