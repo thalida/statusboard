@@ -48,7 +48,7 @@ statusboard/
 │  ├─ common/              BaseModel, pagination, schema, mixins
 │  ├─ docs/                drf-spectacular + Scalar, served inside Unfold admin
 │  ├─ authentication/      User, magic link
-│  ├─ catalog/             Service, StatusPage, ServiceComponent, adapters/
+│  ├─ catalog/             Service, StatusPage, PollSettings, ServiceComponent, adapters/
 │  ├─ dashboards/          Dashboard, DashboardItem
 │  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
@@ -88,6 +88,7 @@ erDiagram
     DashboardItem }o--|| ServiceComponent : "tracks one"
 
     Service ||--|| StatusPage : "read from"
+    StatusPage ||--o| PollSettings : "tuned by"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
@@ -139,11 +140,18 @@ erDiagram
         url url UK "normalised, dedupe key"
         enum provider "TextChoices"
         url api_url "null unless the derivation fails"
-        int poll_interval_seconds "admin sets, backoff scales"
-        int poll_cooldown_seconds "admin sets"
         datetime poll_last_success_at "poller writes"
         datetime poll_next_at "poller writes"
         int poll_consecutive_failure_count "poller writes, resets on success"
+    }
+    PollSettings {
+        uuid id PK
+        uuid status_page_id FK "one-to-one, absent means inherit"
+        int interval_seconds "null inherits the default"
+        int cooldown_seconds "null inherits the default"
+        int max_interval_seconds "backoff ceiling"
+        bool is_paused
+        text note "why this was tuned"
     }
     ServiceComponent {
         uuid id PK
@@ -202,6 +210,7 @@ erDiagram
     Dashboard ||--o{ DashboardItem : holds
     DashboardItem }o--|| ServiceComponent : "tracks one"
     Service ||--|| StatusPage : "read from"
+    StatusPage ||--o| PollSettings : "tuned by"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
@@ -265,8 +274,28 @@ is a different concept from a permission role.
   "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
-  `provider`, `api_url` (nullable override), `poll_last_success_at`, `poll_next_at`,
-  `poll_interval_seconds`, `poll_cooldown_seconds`, `poll_consecutive_failure_count`
+  `provider`, `api_url` (nullable override), and the poller's runtime state:
+  `poll_last_success_at`, `poll_next_at`, `poll_consecutive_failure_count`
+- `PollSettings` — nullable `OneToOneField` to `StatusPage`. Every field is an **override**:
+  `interval_seconds`, `cooldown_seconds`, `max_interval_seconds`, `is_paused`, `note`
+
+  **A row exists only for a page someone has tuned.** Absent means "inherit everything", so the
+  table holds exceptions rather than a copy of the defaults for every service in the catalogue.
+
+  ```python
+  interval = settings.interval_seconds if settings else meta.poll_interval_seconds
+  ```
+
+  This is the layering that a single effective column could not express: `/meta/` holds the
+  deployment default, `PollSettings` holds a deliberate choice, and the effective interval is
+  computed from both plus the backoff. Nothing before recorded that an admin *chose* 60s rather
+  than inheriting 300s.
+
+  `is_paused` stops polling a page without deleting the service — a status page that has gone for
+  good, or one rate-limiting us hard enough to be worth leaving alone.
+
+  `note` is why. A tuned value with no reason attached becomes undeletable: nobody later knows
+  whether it still matters.
 
   `url` is the page a person visits. `api_url` is the machine-readable endpoint behind it —
   `https://status.twilio.com` versus `https://status.twilio.com/api/v2/summary.json`.
@@ -280,17 +309,9 @@ is a different concept from a permission role.
   `url` is what makes two people pasting the same page share one service and one poll, so the
   dedupe rule lives on the thing being deduplicated.
 
-  **Two of the `poll_` fields are configuration and three are runtime state.** An admin sets
-  `poll_interval_seconds` and `poll_cooldown_seconds`; the poller writes `poll_last_success_at`,
-  `poll_next_at` and `poll_consecutive_failure_count` every cycle. Hand-editing one of the latter
-  is pointless — it is overwritten within the interval.
-
-  They are not split into a separate model. That would be a strictly one-to-one row fetched every
-  time the page is fetched, so every read grows a join and every write a second row, for five
-  columns. It becomes worth it only if settings need layering — a deployment default, a
-  per-service override, and an effective value computed from both. Today `/meta/` holds the
-  default and this holds the effective value, and nothing records that an admin deliberately chose
-  60s over inheriting 300s.
+  **Configuration and runtime state are separate models.** `StatusPage` carries only what the
+  poller writes each cycle; `PollSettings` carries what an admin chose. Hand-editing the former is
+  pointless — it is overwritten within the interval.
 
   It also gives the poller somewhere to keep state. `poll_next_at` is what the scheduler reads;
   `poll_consecutive_failure_count` counts failed reads in a row, resets to zero on success, drives the

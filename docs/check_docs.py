@@ -39,6 +39,8 @@ DERIVED = {
     "Service.status_page":                "OneToOneField",
     "Component.status":                   "ComponentStatus where ended_at is null",
     "Status.last_refreshed_at":           "component.service.status_page.poll_last_success_at",
+    "StatusPage.poll_interval_seconds":   "PollSettings override or /meta/ default, scaled by backoff",
+    "StatusPage.poll_cooldown_seconds":   "PollSettings override or /meta/ default",
     "Component.path":                     "walk of parent",
     "Component.child_count":              "Count of reverse parent",
     "Component.is_tracked":               "per-user annotation over DashboardItem",

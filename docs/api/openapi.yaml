@@ -575,16 +575,16 @@ components:
           description: |
             How often this page is read now. The About tab shows it as "Refreshed every".
 
-            This is the effective interval. A page that fails backs off, so the interval grows.
-            `/meta/` carries the default for a healthy page.
+            Computed, not stored: the `PollSettings` override if there is one, otherwise the
+            `/meta/` default, scaled by the current backoff.
         poll_cooldown_seconds:
           type: integer
           description: |
-            The shortest gap allowed between manual refreshes of this page. `POST /refresh/`
-            obeys it.
+            The shortest gap allowed between two reads of this page, manual ones included.
+            `POST /refresh/` obeys it.
 
-            The cooldown is on the page, not on a user or a board. Two boards that track this
-            service cost one read.
+            Computed the same way. The cooldown is on the page, not on a user or a board — two
+            boards that track this service cost one read.
         poll_consecutive_failure_count:
           type: integer
           description: |
