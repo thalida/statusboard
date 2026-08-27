@@ -702,6 +702,11 @@ components:
         id: { type: string, format: uuid }
         slug: { type: string }
         name: { type: string }
+        homepage_url:
+          type: string
+          format: uri
+          nullable: true
+          description: The service's own site. The About tab links to it as "Website".
         logo:
           type: string
           format: uri

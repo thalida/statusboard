@@ -983,7 +983,7 @@ caching and rate limits.
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/events/?kind=incident&ends_at__isnull=true` |
 | Service · Maintenance | `GET /catalog/services/{slug}/events/?kind=maintenance` |
-| Service · About | `GET /catalog/services/{slug}/` |
+| Service · About | `GET /catalog/services/{slug}/` — Website, Status page, Provider, Components, Active incidents, In catalog since, Refreshed every |
 | Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
 | ＋ on any row | `POST /dashboards/{uuid}/components/` |
 | Sign in | `magic-link` → `verify` |
