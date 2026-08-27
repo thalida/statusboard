@@ -48,9 +48,9 @@ statusboard/
 │  ├─ common/              BaseModel, pagination, schema, mixins
 │  ├─ docs/                drf-spectacular + Scalar, served inside Unfold admin
 │  ├─ authentication/      User, magic link
-│  ├─ catalog/             Service, ServiceComponent
+│  ├─ catalog/             Service, StatusPage, ServiceComponent, adapters/
 │  ├─ dashboards/          Dashboard, DashboardItem
-│  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, adapters/, tasks.py
+│  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
 ├─ justfile                infisical run --env=dev wrapping everything
 └─ docker-compose.yml      postgres 17, redis 7
@@ -100,6 +100,122 @@ erDiagram
     MaintenanceWindow }o--o{ ServiceComponent : affects
 ```
 
+Every field and relationship:
+
+```mermaid
+erDiagram
+    User {
+        uuid id PK
+        string email UK
+        bool is_active
+        bool is_staff
+    }
+    Dashboard {
+        uuid id PK
+        uuid owner_id FK
+        string name
+        int position
+    }
+    DashboardItem {
+        uuid id PK
+        uuid dashboard_id FK
+        uuid component_id FK
+    }
+    Service {
+        uuid id PK
+        string slug UK
+        string name
+        url logo
+        url homepage_url
+        bool is_curated
+        uuid added_by_id FK "null for catalog entries"
+        bool is_featured
+        int watcher_count "distinct users"
+    }
+    StatusPage {
+        uuid id PK
+        uuid service_id FK "one-to-one"
+        url url UK "normalised, dedupe key"
+        string provider "statuspage|instatus|betterstack|rss"
+        url api_url
+        datetime last_fetched_at
+        datetime next_poll_at
+        int poll_interval_seconds "grows with backoff"
+        int refresh_cooldown_seconds
+        int consecutive_failures
+        text last_error
+    }
+    ServiceComponent {
+        uuid id PK
+        uuid service_id FK
+        string upstream_id "unique with service"
+        string name
+        uuid parent_id FK "self, null at top level"
+        int status_page_order
+        bool is_overall
+        datetime archived_at "set when it stops being published"
+    }
+    ComponentStatus {
+        uuid id PK
+        uuid component_id FK
+        int severity "0 worst - 5 operational"
+        string source "provider|components|incidents"
+        datetime started_at
+        bool is_current "partial unique per component"
+    }
+    Incident {
+        uuid id PK
+        uuid service_id FK
+        string upstream_id "unique with service"
+        string title
+        string phase "investigating|identified|monitoring|resolved"
+        datetime started_at
+        datetime resolved_at
+    }
+    IncidentUpdate {
+        uuid id PK
+        uuid incident_id FK
+        string phase
+        text body "written by the provider"
+        datetime posted_at
+    }
+    MaintenanceWindow {
+        uuid id PK
+        uuid service_id FK
+        string upstream_id "unique with service"
+        datetime starts_at
+        datetime ends_at
+        text summary
+    }
+    PollRun {
+        uuid id PK
+        uuid service_id FK
+        url url "snapshot, survives a migration"
+        string provider "snapshot"
+        datetime started_at
+        datetime finished_at
+        bool ok
+        text error
+    }
+
+    User ||--|| Dashboard : owns
+    Dashboard ||--o{ DashboardItem : holds
+    DashboardItem }o--|| ServiceComponent : "tracks one"
+    Service ||--|| StatusPage : "read from"
+    Service ||--o{ ServiceComponent : publishes
+    ServiceComponent ||--o| ServiceComponent : "parent of"
+    ServiceComponent ||--o{ ComponentStatus : "severity over time"
+    Service ||--o{ PollRun : "attempts to read"
+    Service ||--o{ Incident : "reported on"
+    Service ||--o{ MaintenanceWindow : "scheduled on"
+    Incident ||--o{ IncidentUpdate : "log of"
+    Incident }o--o{ ServiceComponent : affects
+    MaintenanceWindow }o--o{ ServiceComponent : affects
+```
+
+Every model also carries `common.BaseModel`: `created_at`, `updated_at`, `created_by`,
+`updated_by`. They are omitted above so the diagram shows what distinguishes each table.
+
 Reading it:
 
 - **A board row is a `ServiceComponent`**, never a `Service`. The overall component is one of
@@ -135,7 +251,7 @@ is a different concept from a permission role.
   grows `poll_interval_seconds`; `next_poll_at` is what the scheduler reads. Those were homeless
   while the URL was a field on `Service`.
 - `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `status_page_order`,
-  `archived_at`
+  `is_overall`, `archived_at`. Unique on `(service, upstream_id)`.
 
   There is no `is_group` flag: a component is a group when it has children, so the flag would be a
   second copy of a fact the tree already holds. `status_page_order` preserves the order the status
@@ -388,7 +504,7 @@ One class per provider, same interface: given a URL, return normalised component
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
-`POST /api/catalog/import/` detects the provider from a pasted URL and creates the service.
+`POST /api/catalog/services/` detects the provider from a pasted URL and creates the service.
 
 ### Keeping names and component trees current
 
@@ -454,10 +570,20 @@ everywhere except one: `Service` also carries a stable `slug`, used on public ca
 because those URLs get shared during an outage and a UUID would be hostile there. Anything the
 user owns stays UUID, so nothing personal is enumerable. Writes always address the UUID.
 
-An import derives the slug from the host and de-duplicates on collision (`linear`, `linear-2`).
+Creating a service derives its slug from the host and de-duplicates on collision (`linear`,
+`linear-2`).
 
-**An import is a resource, not an action on the service collection.** It records one attempt to
-turn a URL into a service.
+**`POST /catalog/services/` takes a status page URL.** It detects the provider, then creates the
+service, its `StatusPage` and its components. `201` when it created one, `200` when the URL already
+resolved to one. Nothing is stored about the attempt itself.
+
+Two earlier drafts got this wrong in opposite directions. One called it `resolve/`, naming the
+mechanism rather than the thing. The other split it to `import/` and persisted an `Import` row, so
+the endpoint could return a resource with an id — reserving the plain `POST` for an admin create
+that may never exist, which is the kind of speculation this document removes everywhere else.
+
+It creates a service. A URL is the body because that is the only way a service enters the
+catalogue.
 
 `Import.service` is the **same shape the catalog list returns**, not the detail shape. One service
 representation, whatever produced it — so a client can drop an imported service straight into the
@@ -735,7 +861,7 @@ caching and rate limits.
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
-| Add by URL | `POST /catalog/import/` |
+| Add by URL | `POST /catalog/services/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/incidents/?resolved_at__isnull=true` |
 | Service · About | `GET /catalog/services/{slug}/` |

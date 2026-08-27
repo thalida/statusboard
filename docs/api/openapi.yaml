@@ -43,8 +43,19 @@ info:
 
     ## One schema, one model
 
-    Every schema maps to one Django model. Nest a related model under a key. Do not flatten it
-    into the parent.
+    Every schema maps to one Django model, and every nested key is a real relation a
+    `ModelSerializer` can traverse. Nest a related model under a key. Do not flatten it into the
+    parent.
+
+    | key | relation |
+    | --- | --- |
+    | `Service.status_page` | `OneToOneField` |
+    | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
+    | `Component.status` | the `ComponentStatus` row where `is_current` |
+    | `Component.maintenance_windows` | reverse M2M from `MaintenanceWindow` |
+    | `Component.latest_incident` | newest across the reverse M2M from `Incident` |
+    | `Incident.updates` | reverse FK from `IncidentUpdate` |
+    | `TrackedComponent.service` | `ForeignKey` |
 
     `status` is its own object because `ComponentStatus` is its own table. A `ModelSerializer`
     with a nested serializer produces these shapes directly.
@@ -203,17 +214,18 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Service' } }
-
-  /catalog/import/:
     post:
       tags: [catalog]
-      summary: Import a service from its status page URL
+      summary: Add a service from its status page URL
       description: |
         The importer detects the provider. If the service is new, it creates the service and its
-        components.
+        components. It returns the service either way: `201` when it created one, `200` when the
+        URL already resolved to one.
 
         Services are deduplicated on a normalised URL. One status page gives one service and one
         poll.
+
+        Nothing is stored about the attempt itself.
       requestBody:
         required: true
         content:
@@ -224,13 +236,14 @@ paths:
       responses:
         '200':
           description: The URL resolves to a service already in the catalog
-          content: { application/json: { schema: { $ref: '#/components/schemas/Import' } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } }
         '201':
           description: Service created
-          content: { application/json: { schema: { $ref: '#/components/schemas/Import' } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } }
         '422':
           description: No supported status page found at that URL
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
 
   /catalog/services/{slug}/:
     get:
@@ -433,14 +446,10 @@ components:
       description: Error
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
-    Import:
-      type: object
-      description: One attempt to turn a status page URL into a service.
-      properties:
-        id: { type: string, format: uuid }
-        status_page_url: { type: string, format: uri, description: The URL as submitted. }
-        created: { type: boolean, description: True if this import created the service. }
-        service: { $ref: '#/components/schemas/Service' }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
     Error:
       type: object
       properties:
