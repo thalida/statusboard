@@ -50,7 +50,10 @@ def test_a_serializer_can_opt_out():
         b = serializers.CharField()
 
     request = type("R", (), {"query_params": {"fields": "a"}})()
-    assert set(Fixed({"a": "1", "b": "2"}, context={"request": request}).data) == {"a", "b"}
+    assert set(Fixed({"a": "1", "b": "2"}, context={"request": request}).data) == {
+        "a",
+        "b",
+    }
 
 
 @pytest.mark.django_db

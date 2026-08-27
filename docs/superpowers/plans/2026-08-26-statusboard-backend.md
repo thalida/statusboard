@@ -1103,6 +1103,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'authentication.models'
 import secrets
 from datetime import timedelta
 
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
@@ -1110,6 +1111,11 @@ from django.utils import timezone
 from common.models import BaseModel
 
 MAGIC_LINK_TTL = timedelta(minutes=15)
+
+
+def _unusable_password():
+    # Give every new row an unusable password, even outside `create_user`.
+    return make_password(None)
 
 
 class UserManager(BaseUserManager):
@@ -1127,6 +1133,7 @@ class UserManager(BaseUserManager):
 
 class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
+    password = models.CharField(max_length=128, default=_unusable_password)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     last_active_at = models.DateTimeField(null=True, blank=True)

@@ -12,7 +12,11 @@ class FieldsMixin:
         if self.fields_param is None:
             return
         request = self.context.get("request")
-        raw = getattr(request, "query_params", {}).get(self.fields_param) if request else None
+        raw = (
+            getattr(request, "query_params", {}).get(self.fields_param)
+            if request
+            else None
+        )
         if not raw:
             return
         self._prune(self._parse(raw))
