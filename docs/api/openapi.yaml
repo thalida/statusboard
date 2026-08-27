@@ -50,6 +50,7 @@ info:
     | key | relation |
     | --- | --- |
     | `Service.status_page` | `OneToOneField` |
+    | `Service.poller` | `OneToOneField` |
     | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
     | `Component.status` | the `ComponentStatus` row where `ended_at` is null |
     | `Component.maintenance_windows` | reverse M2M from `MaintenanceWindow` |
@@ -549,8 +550,7 @@ components:
     StatusPage:
       type: object
       description: |
-        The page we read, and how we read it. Everything about the source of a service's data,
-        rather than the data itself.
+        Where a service's data is read from. Identity only — how it is read is the `Poller`.
       properties:
         url: { type: string, format: uri }
         provider:
@@ -560,39 +560,47 @@ components:
             The adapter that reads this page. The client maps the value to a display name:
             `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
             "Better Stack", `rss` is "RSS feed".
-        poll_last_success_at:
+    Poller:
+      type: object
+      description: |
+        How a service is read: how often, when next, and how that is going.
+
+        It reads the service's `status_page` but holds no reference to it, so swapping a page
+        changes nothing here.
+      properties:
+        interval_seconds:
+          type: integer
+          description: |
+            How often this service is read now. The About tab shows it as "Refreshed every".
+
+            Computed: the poller's own override if set, otherwise the `/meta/` default, scaled by
+            the current backoff.
+        cooldown_seconds:
+          type: integer
+          description: |
+            The shortest gap allowed between two reads, manual ones included. `POST /refresh/`
+            obeys it.
+
+            The cooldown is on the service, not on a user or a board. Two boards that track it
+            cost one read.
+        last_success_at:
           type: string
           format: date-time
           nullable: true
           description: |
-            When this page was last read without error. Null until the first successful fetch.
+            When the page was last read without error. Null until the first success.
 
-            One fetch updates every component, so `Status.last_refreshed_at` normally matches
-            this. It lags when a component was missing from the last payload.
-        poll_next_at: { type: string, format: date-time, nullable: true, description: When the scheduler will read it next. }
-        poll_interval_seconds:
-          type: integer
-          description: |
-            How often this page is read now. The About tab shows it as "Refreshed every".
-
-            Computed, not stored: the `PollSettings` override if there is one, otherwise the
-            `/meta/` default, scaled by the current backoff.
-        poll_cooldown_seconds:
-          type: integer
-          description: |
-            The shortest gap allowed between two reads of this page, manual ones included.
-            `POST /refresh/` obeys it.
-
-            Computed the same way. The cooldown is on the page, not on a user or a board — two
-            boards that track this service cost one read.
-        poll_consecutive_failure_count:
+            One read covers every component, so `Status.last_refreshed_at` is this value.
+        next_at: { type: string, format: date-time, nullable: true, description: When the scheduler reads it next. }
+        consecutive_failure_count:
           type: integer
           description: |
             How many reads have failed in a row. Zero after a success.
 
-            It drives the backoff that grows `poll_interval_seconds`, and tips a component to
-            severity 3 once the data is too stale to trust. Read it with `poll_last_success_at` to say
-            why a status is unknown.
+            It drives the backoff that scales `interval_seconds`, and tips a component to severity
+            3 once the data is too stale to trust. Read it with `last_success_at` to say why a
+            status is unknown.
+        is_paused: { type: boolean, description: Polling is stopped for this service. }
     Status:
       type: object
       description: |
@@ -661,6 +669,7 @@ components:
             How many components the provider publishes. The overall component is not counted, so
             this number equals the one on the provider's own status page.
         status_page: { $ref: '#/components/schemas/StatusPage' }
+        poller: { $ref: '#/components/schemas/Poller' }
         overall_component:
           allOf: [{ $ref: '#/components/schemas/OverallComponent' }]
           description: |

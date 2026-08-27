@@ -22,7 +22,7 @@ for m in re.finditer(r"^\s{4}(\w+) \{\n((?:\s{8}.*\n)+)\s{4}\}", detail, re.M):
 # ── which schema is backed by which model ──────────────────────────────────
 BACKED = {
     "Service": "Service", "ServiceDetail": "Service", "ServiceRef": "Service",
-    "StatusPage": "StatusPage", "Component": "ServiceComponent",
+    "StatusPage": "StatusPage", "Poller": "Poller", "Component": "ServiceComponent",
     "OverallComponent": "ServiceComponent", "TrackedComponent": "ServiceComponent",
     "Status": "ComponentStatus", "MaintenanceWindow": "MaintenanceWindow",
     "Incident": "Incident", "IncidentRef": "Incident",
@@ -39,11 +39,9 @@ DERIVED = {
     "Service.status_page":                "OneToOneField",
     "Component.status":                   "ComponentStatus where ended_at is null",
     "Status.last_refreshed_at":           "component.service.poller.last_success_at",
-    "StatusPage.poll_interval_seconds":         "service.poller.interval_seconds or /meta/ default, scaled by backoff",
-    "StatusPage.poll_cooldown_seconds":         "service.poller.cooldown_seconds or /meta/ default",
-    "StatusPage.poll_last_success_at":          "service.poller.last_success_at",
-    "StatusPage.poll_next_at":                  "service.poller.next_at",
-    "StatusPage.poll_consecutive_failure_count":"service.poller.consecutive_failure_count",
+    "Poller.interval_seconds":            "own override or /meta/ default, scaled by backoff",
+    "Poller.cooldown_seconds":            "own override or /meta/ default",
+    "Service.poller":                     "OneToOneField",
     "Component.path":                     "walk of parent",
     "Component.child_count":              "Count of reverse parent",
     "Component.is_tracked":               "per-user annotation over DashboardItem",
