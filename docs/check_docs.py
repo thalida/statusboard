@@ -84,3 +84,18 @@ for schema in api["components"]["schemas"]:
 print(f"{len(BACKED)} model-backed schemas, {len(columns)} tables, {len(DERIVED)} declared derivations")
 print("\n".join("  FAIL " + f for f in fail) if fail else "  every API field maps to a column or a declared derivation")
 sys.exit(1 if fail else 0)
+
+# ── naming conventions ──────────────────────────────────────────────────────
+convention = []
+for table, names in columns.items():
+    for f in names:
+        if f.endswith("s_count"):
+            convention.append(f"{table}.{f} — count fields are singular: {f[:-7]}_count")
+        if f.endswith("_at") and not re.search(r"(_at)$", f):
+            pass
+for schema in api["components"]["schemas"]:
+    for f in props(schema):
+        if f.endswith("s_count"):
+            convention.append(f"{schema}.{f} — count fields are singular")
+if convention:
+    print("\n".join("  FAIL " + c for c in convention)); sys.exit(1)

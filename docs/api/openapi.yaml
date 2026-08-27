@@ -585,7 +585,7 @@ components:
 
             The cooldown is on the page, not on a user or a board. Two boards that track this
             service cost one read.
-        consecutive_failures:
+        consecutive_failure_count:
           type: integer
           description: |
             How many reads have failed in a row. Zero after a success.
