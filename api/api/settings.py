@@ -180,6 +180,51 @@ UNFOLD = {
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
+    # The sidebar is two levels deep and cannot nest an item under an item.
+    # Tabs carry the relationship instead: a status history belongs to the
+    # component it describes, not to a separate area of the admin. A sidebar
+    # entry also stays active while you are on one of its tabs.
+    "TABS": [
+        {
+            "models": ["catalog.service", "status.serviceevent"],
+            "items": [
+                {
+                    "title": _("Services"),
+                    "link": reverse_lazy("admin:catalog_service_changelist"),
+                },
+                {
+                    "title": _("Events"),
+                    "link": reverse_lazy("admin:status_serviceevent_changelist"),
+                },
+            ],
+        },
+        {
+            "models": ["catalog.servicecomponent", "status.componentstatus"],
+            "items": [
+                {
+                    "title": _("Components"),
+                    "link": reverse_lazy("admin:catalog_servicecomponent_changelist"),
+                },
+                {
+                    "title": _("Status history"),
+                    "link": reverse_lazy("admin:status_componentstatus_changelist"),
+                },
+            ],
+        },
+        {
+            "models": ["catalog.poller", "status.pollrun"],
+            "items": [
+                {
+                    "title": _("Pollers"),
+                    "link": reverse_lazy("admin:catalog_poller_changelist"),
+                },
+                {
+                    "title": _("Poll runs"),
+                    "link": reverse_lazy("admin:status_pollrun_changelist"),
+                },
+            ],
+        },
+    ],
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": True,
@@ -236,22 +281,6 @@ UNFOLD = {
                         "link": reverse_lazy(
                             "admin:django_celery_beat_periodictask_changelist"
                         ),
-                    },
-                ],
-            },
-            {
-                "title": _("Status"),
-                "collapsible": True,
-                "items": [
-                    {
-                        "title": _("Component status"),
-                        "icon": "vital_signs",
-                        "link": reverse_lazy("admin:status_componentstatus_changelist"),
-                    },
-                    {
-                        "title": _("Events"),
-                        "icon": "warning",
-                        "link": reverse_lazy("admin:status_serviceevent_changelist"),
                     },
                 ],
             },
