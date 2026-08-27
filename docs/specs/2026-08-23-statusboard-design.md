@@ -676,10 +676,16 @@ projects. This section records only the decisions behind it, so the two cannot d
 
 ### Identifiers
 
-`GET /me/` returns your `default_dashboard_id`. There is no alias endpoint for "my board" — the
-dashboard is a resource and it is addressed like one, which is also the URL sharing will use
-unchanged. The name says *default* rather than *the* because v1 having one per user is a product
-decision, not a schema one.
+`GET /me/` returns your `default_dashboard_id`, and the client goes straight to
+`/dashboards/{uuid}/components/`. The name says *default* rather than *the* because v1 having one
+per user is a product decision, not a schema one.
+
+**There is no `GET /dashboards/{uuid}/`.** The board's own fields — `name`, `is_default` — are not
+rendered anywhere: the header says "Home", not the dashboard's name. An endpoint returning three
+unused fields is a request nobody makes.
+
+It arrives when a board is shared, because a recipient needs its name and its owner, and the URL
+is already the one sharing will use. Adding it then is additive; shipping it now is a guess.
 
 **UUID is the identity for every model**, from `common.BaseModel`. Path parameters are UUIDs
 everywhere except one: `Service` also carries a stable `slug`, used on public catalog routes,

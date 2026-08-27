@@ -326,17 +326,6 @@ paths:
                       aggregates: { $ref: '#/components/schemas/EventAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
 
-  /dashboards/{uuid}/:
-    get:
-      tags: [board]
-      summary: A dashboard
-      description: '`GET /me/` returns your `default_dashboard_id`. There is one per user in v1, and no alias endpoint.'
-      parameters: [{ $ref: '#/components/parameters/Uuid' }]
-      parameters:
-        - { $ref: '#/components/parameters/Fields' }
-      responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } }
-
   /dashboards/{uuid}/components/:
     get:
       tags: [board]
@@ -531,7 +520,8 @@ components:
           type: string
           format: uuid
           description: |
-            The dashboard where `is_default` is true. Use it on `/dashboards/{uuid}/`.
+            The dashboard where `is_default` is true. Use it on
+            `/dashboards/{uuid}/components/`.
 
             One per user in v1. The name survives a second board arriving.
     Envelope:
@@ -869,16 +859,6 @@ components:
               phase: { type: string }
               body: { type: string }
               posted_at: { type: string, format: date-time }
-    Dashboard:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        is_default:
-          type: boolean
-          description: |
-            Exactly one dashboard per user has this. `GET /me/` returns its id, so a client can
-            reach it without listing.
     TrackedComponent:
       allOf:
         - $ref: '#/components/schemas/Component'

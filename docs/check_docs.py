@@ -25,7 +25,7 @@ BACKED = {
     "StatusPage": "StatusPage", "Poller": "Poller", "Component": "ServiceComponent",
     "OverallComponent": "ServiceComponent", "TrackedComponent": "ServiceComponent",
     "Status": "ComponentStatus", "ServiceEvent": "ServiceEvent", "EventRef": "ServiceEvent",
-    "Dashboard": "Dashboard", "Me": "User",
+    "Me": "User",
 }
 PLAIN = {"Meta", "Envelope", "Aggregates", "StatusAggregates", "EventAggregates",
          "TokenPair", "Error"}
