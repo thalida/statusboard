@@ -661,13 +661,13 @@ Twilio produce one poll every five minutes, not two hundred.
 - Exponential backoff on failure. **The service screen shows the effective interval, not the
   deployment default** — `Service.poller.interval_seconds`. A service in backoff is not being
   checked every five minutes, and that is precisely the service someone opens to ask why.
-- **A hard per-service cooldown, global across all users**, which the manual refresh also obeys
+- **A hard per-service cooldown, global across all users**
 
 A failed fetch sets `unknown` and **never clobbers the last known value**. The UI shows the grey
 state plus how long it has been stale.
 
-The manual refresh path, and why the cooldown lives on the service rather than the dashboard or
-the user, is specified in §5 under **Refresh**.
+Why the cooldown lives on the service rather than the dashboard or the user is specified in §5
+under **There is no manual refresh**.
 
 A poll also captures the service's **logo** from its own page. A favicon belonging to the parent
 company rather than the product — Google's mark for Google Slides — is discarded rather than
@@ -676,7 +676,7 @@ merely looks incomplete.
 
 ## 5. API surface
 
-**The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 17 operations, 14 schemas,
+**The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 15 operations, 16 schemas,
 with every parameter and response shape. It is the single source of truth; drf-spectacular will
 generate it from the code, and it is served through Scalar at `/admin/api-docs/` like your other
 projects. This section records only the decisions behind it, so the two cannot drift.
@@ -762,20 +762,23 @@ page, so a chip is correct on page four.
 
 There is no client-side fallback. One rule, one implementation.
 
-### Refresh is one call
+### There is no manual refresh
 
-`POST /refresh/` nudges every service the caller tracks, skipping any inside its global
-per-service cooldown, waits up to three seconds, then returns the board exactly as the `GET`
-would. One press, one request, and the screen either changed or it did not. POST-then-GET forces
-the client to guess a wait, and it guesses too early.
+An earlier draft had `POST /refresh/` behind a header button and a **Refresh now** row menu item.
+Both are gone. Reloading the page already shows the freshest data the poller holds, so the button
+bought a second path to the same result and carried its own cooldown handling, its own signed-out
+routing, and its own failure state.
 
-**The cooldown is on the service, globally.** The thing needing protection is somebody else's
-status page. A per-user or per-board limit would guard our endpoint while leaving theirs exposed,
-and would poll one service twice for two boards that both track it. A per-user rate limit sits on
-top only to stop one client hammering us.
+**What is kept is the freshness itself.** The header pill still reads "2 min ago" from
+`aggregates.oldest_refreshed_at` — the age of the *stalest* row, not an average, so the number is
+a floor rather than a flattering middle. Since nothing can be pressed, the pill also answers when
+that improves: hovering shows "next check in 3 min" from `aggregates.next_refresh_at`, the soonest
+`Service.poller.next_at` in the collection.
 
-Signed out, the button routes to sign-in: an unauthenticated nudge is a way for strangers to spend
-our request budget on other people's servers.
+**The cooldown stays on the service, globally.** The thing needing protection is somebody else's
+status page, and a per-user or per-board limit would poll one service twice for two boards that
+both track it. Without a user-triggered path the cooldown now guards only the scheduler, but it
+guards the right thing, and it is what makes a second board free.
 
 ### Sparse fieldsets are a framework concern
 
@@ -1083,9 +1086,8 @@ caching and rate limits.
 | Home · Incidents | `…/components/?event=incident` |
 | Home · Maintenance | `…/components/?event=maintenance` |
 | Home, signed out | `GET /catalog/services/?overall_component__status__severity__lte=` |
-| Header refresh | `POST /refresh/` |
-| Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
-| Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` |
+| Header pill | no call — `aggregates.oldest_refreshed_at` and `next_refresh_at`, both already in the list response |
+| Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` — the only item left in that menu |
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |

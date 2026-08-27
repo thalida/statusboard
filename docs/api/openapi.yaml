@@ -107,7 +107,6 @@ tags:
   - name: catalog
     description: Public. Services, their components, and incidents.
   - name: board
-  - name: refresh
 
 paths:
   /meta/:
@@ -404,38 +403,6 @@ paths:
         '204': { description: No content }
         '404': { description: Not tracked }
 
-  /refresh/:
-    post:
-      tags: [refresh]
-      summary: Refresh now
-      description: |
-        With no body, this refreshes every service the caller tracks. With `component_id`, it
-        refreshes that component's service only.
-
-        The endpoint skips any service inside its cooldown. It waits up to three seconds. It
-        returns the same payload as the `GET`. Do not refetch after the call.
-
-        The cooldown is global and per service. Two boards that track one service cost one poll.
-      requestBody:
-        content:
-          application/json:
-            schema: { type: object, properties: { component_id: { type: string, format: uuid } } }
-      parameters:
-        - { $ref: '#/components/parameters/Fields' }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
-                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
-        '429': { $ref: '#/components/responses/Throttled' }
-
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -491,8 +458,8 @@ components:
           type: integer
           example: 60
           description: |
-            The default gap between manual refreshes of one page. A single page can differ; read
-            `Service.status_page.poll_cooldown_seconds` for that page's value.
+            The default shortest gap between two reads of one page. A single page can differ;
+            read `Service.poller.cooldown_seconds` for that page's value.
         default_page_size: { type: integer, example: 50 }
         max_page_size: { type: integer, example: 200 }
         enums:
@@ -591,6 +558,17 @@ components:
                 Neither can be read off `by_severity`. A maintenance window three days out leaves
                 the component at severity 5, and a provider can open an incident on components it
                 still reports as operational.
+            next_refresh_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                The soonest scheduled check across the collection — the earliest
+                `Service.poller.next_at`. Null if nothing here is being polled.
+
+                The header pill reads "2 min ago" from `oldest_refreshed_at` and, on hover, "next
+                check in 3 min" from this. There is no refresh control, so this is how a reader
+                learns when the number improves.
             oldest_refreshed_at:
               type: string
               format: date-time
@@ -637,8 +615,7 @@ components:
         cooldown_seconds:
           type: integer
           description: |
-            The shortest gap allowed between two reads, manual ones included. `POST /refresh/`
-            obeys it.
+            The shortest gap allowed between two reads of this service's page.
 
             The cooldown is on the service, not on a user or a board. Two boards that track it
             cost one read.
