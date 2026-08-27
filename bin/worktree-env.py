@@ -31,6 +31,23 @@ KNOWN_KEYS = ("postgres", "redis", "django")
 DB_USER = DB_PASSWORD = DB_NAME = "statusboard"
 
 
+def worktree_root() -> pathlib.Path:
+    """This checkout's top level.
+
+    Every path here is anchored to it. Resolving against the cwd would
+    hand a different port file to anyone running from api/, while the
+    containers stayed bound to the first one.
+    """
+    return pathlib.Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+
+
 def slug() -> str:
     try:
         name = subprocess.run(
@@ -41,7 +58,7 @@ def slug() -> str:
         ).stdout.strip()
     except subprocess.CalledProcessError:
         name = ""  # detached HEAD
-    name = name or pathlib.Path.cwd().name
+    name = name or worktree_root().name
     return re.sub(r"-+$", "", re.sub(r"[^a-z0-9]+", "-", name.lower())) or "statusboard"
 
 
@@ -52,7 +69,7 @@ def free_port() -> int:
 
 
 def ports() -> dict[str, int]:
-    path = pathlib.Path(".local/worktree-ports.json")
+    path = worktree_root() / ".local/worktree-ports.json"
     path.parent.mkdir(exist_ok=True)
     raw = json.loads(path.read_text()) if path.exists() else {}
     # Drop anything not in the current schema so the file converges.

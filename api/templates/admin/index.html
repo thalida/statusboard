@@ -1,0 +1,45 @@
+{% extends "unfold/layouts/base_simple.html" %}
+{% load i18n unfold %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    <div class="grid grid-cols-1 gap-4 mb-8 lg:grid-cols-4">
+        {% for card in cards %}
+            {% component "unfold/components/card.html" with icon=card.icon %}
+                <span class="block text-font-important-light dark:text-font-important-dark text-sm">{{ card.title }}</span>
+                <strong class="block font-semibold mt-2 text-2xl {% if card.danger %}text-red-600 dark:text-red-500{% else %}text-font-important-light dark:text-font-important-dark{% endif %}">{{ card.value }}</strong>
+                <span class="block mt-1 text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ card.detail }}</span>
+            {% endcomponent %}
+        {% endfor %}
+    </div>
+
+    {% if recent_failures %}
+        <div class="mb-8">
+            {% component "unfold/components/card.html" with title=_("Recent failed polls") %}
+                <div class="flex flex-col gap-2">
+                    {% for run in recent_failures %}
+                        <div class="flex flex-row gap-3 items-baseline text-sm">
+                            <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ run.poller.service.name }}</span>
+                            <span class="text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ run.started_at }}</span>
+                            <span class="grow truncate text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ run.error|default:"—" }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endcomponent %}
+        </div>
+    {% endif %}
+
+    <div class="flex flex-col lg:flex-row lg:gap-8">
+        <div class="grow">
+            {% include "unfold/helpers/app_list_default.html" %}
+        </div>
+        {% include "unfold/helpers/history.html" %}
+    </div>
+{% endblock %}

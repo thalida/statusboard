@@ -1,9 +1,31 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <title>Statusboard API</title>
+    <meta name="description" content="{{ description }}">
+
+    {# The mark carries its own dark background, so one file works on any tab. #}
+    <link rel="icon" type="image/svg+xml" href="{% static 'statusboard/favicon.svg' %}">
+    <link rel="apple-touch-icon" href="{% static 'statusboard/apple-touch-icon.png' %}">
+
+    {# Brand near-black and cream, so the browser chrome matches the page. #}
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#F5EDD6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0D0D0D" media="(prefers-color-scheme: dark)">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Statusboard">
+    <meta property="og:title" content="Statusboard API">
+    <meta property="og:description" content="{{ description }}">
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'statusboard/apple-touch-icon.png' %}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Statusboard API">
+    <meta name="twitter:description" content="{{ description }}">
+
+    <style>body { margin: 0; }</style>
   </head>
   <body>
     <script id="api-reference" data-url="{{ schema_url }}"></script>

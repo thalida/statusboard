@@ -1111,7 +1111,7 @@ requires-dist = [
     { name = "django-cors-headers", specifier = ">=4.4" },
     { name = "django-filter", specifier = ">=24.3" },
     { name = "django-simple-history", specifier = ">=3.7" },
-    { name = "django-unfold", specifier = ">=0.40" },
+    { name = "django-unfold", specifier = ">=0.104" },
     { name = "djangorestframework", specifier = ">=3.15" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.3" },
     { name = "drf-spectacular", specifier = ">=0.27" },

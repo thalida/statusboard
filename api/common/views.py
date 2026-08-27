@@ -53,5 +53,12 @@ class ApiDocsView(TemplateView):
 
     template_name = "common/api_docs.html"
 
+    DESCRIPTION = (
+        "The Statusboard API. Track services from a catalog and read their "
+        "current status, incidents and maintenance windows."
+    )
+
     def get_context_data(self, **kwargs):
-        return super().get_context_data(schema_url=reverse("schema"), **kwargs)
+        return super().get_context_data(
+            schema_url=reverse("schema"), description=self.DESCRIPTION, **kwargs
+        )

@@ -21,7 +21,16 @@ PROMPTS = {
     "DJANGO_SUPERUSER_PASSWORD": ("admin password: ", getpass),
 }
 
-TEMPLATE = pathlib.Path(".env.local.example")
+# Anchored to the checkout, not the cwd: `just` recipes cd into api/.
+ROOT = pathlib.Path(
+    subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+)
+TEMPLATE = ROOT / ".env.local.example"
 
 
 def main_checkout() -> pathlib.Path:
@@ -75,7 +84,7 @@ def ensure(path: pathlib.Path) -> str:
 
 def main() -> None:
     shared = main_checkout() / ".env.local"
-    local = pathlib.Path(".env.local").resolve()
+    local = (ROOT / ".env.local").resolve()
 
     text = ensure(shared)
     if shared.resolve() == local:
