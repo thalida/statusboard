@@ -84,6 +84,7 @@ def test_me_returns_the_signed_in_user():
     body = client.get(reverse("me")).json()
     assert body["email"] == "a@b.com"
     assert set(body) == {"id", "email", "default_dashboard_id"}
+    assert body["default_dashboard_id"] is not None
 
 
 @pytest.mark.django_db
