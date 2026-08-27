@@ -72,6 +72,59 @@ def test_a_service_can_be_added_from_a_related_popup(staff_client):
             "homepage_url": "",
             "watcher_count": 0,
             "_popup": "1",
+            # The events inline. A browser posts this; the test must too.
+            "events-TOTAL_FORMS": "0",
+            "events-INITIAL_FORMS": "0",
+            "events-MIN_NUM_FORMS": "0",
+            "events-MAX_NUM_FORMS": "0",
         },
     )
     assert Service.objects.filter(slug="from-popup").exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "model",
+    sorted(admin.site._registry, key=lambda m: m._meta.label),
+    ids=lambda m: m._meta.label,
+)
+def test_every_add_form_renders(staff_client, model):
+    # Inlines, readonly fields and widgets only fail on the change form.
+    # The changelist test above never touches them.
+    opts = model._meta
+    url = reverse(f"admin:{opts.app_label}_{opts.model_name}_add")
+    assert staff_client.get(url).status_code in (200, 403)
+
+
+# Written by apply_fetch and poll_service, never by hand.
+POLLER_WRITTEN = [
+    "status.ComponentStatus",
+    "status.ServiceEvent",
+    "status.EventUpdate",
+    "status.PollRun",
+]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("label", POLLER_WRITTEN)
+def test_poller_written_tables_are_not_editable(staff_client, label):
+    # A hand-written row invents history the API serves, or trips the
+    # one-open-status constraint, and the next poll overwrites it anyway.
+    model = next(m for m in admin.site._registry if m._meta.label == label)
+    site_admin = admin.site._registry[model]
+    request = staff_client.request().wsgi_request
+    assert not site_admin.has_add_permission(request)
+    assert not site_admin.has_change_permission(request)
+    assert not site_admin.has_delete_permission(request)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "label", ["catalog.Service", "catalog.StatusPage", "catalog.Poller"]
+)
+def test_the_admin_tunable_tables_stay_editable(staff_client, label):
+    # A Poller's interval and pause flag are meant to be changed here.
+    model = next(m for m in admin.site._registry if m._meta.label == label)
+    site_admin = admin.site._registry[model]
+    request = staff_client.request().wsgi_request
+    assert site_admin.has_change_permission(request)

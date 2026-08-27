@@ -111,3 +111,24 @@ class BaseModelAdmin:
     list_fullwidth = True
     warn_unsaved_form = True
     list_per_page = 25
+
+
+class PollerWrittenAdmin(BaseModelAdmin):
+    """A record the poller writes. Readable here, never editable.
+
+    `apply_fetch` and `poll_service` own these tables. A hand-written row
+    either invents history the API then serves, or trips a constraint the
+    poller relies on, and the next poll overwrites the edit anyway.
+
+    Only the three permissions are refused. Django still renders the
+    detail page read-only, so a poll error stays readable.
+    """
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

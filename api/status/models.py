@@ -22,6 +22,8 @@ class ComponentStatus(BaseModel):
     ended_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseModel.Meta):
+        verbose_name = "component status"
+        verbose_name_plural = "component statuses"
         constraints = [
             models.UniqueConstraint(
                 fields=["component"],

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
-from unfold.admin import ModelAdmin
+from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
     ChoicesDropdownFilter,
@@ -15,6 +15,7 @@ from catalog.models import Poller, Service, ServiceComponent, StatusPage
 from common.admin import BaseModelAdmin
 from common.ordering import CURRENT_SEVERITY
 from status.choices import Severity
+from status.models import ComponentStatus, ServiceEvent
 
 # Lower is worse, so the scale runs danger to success.
 SEVERITY_VARIANTS = {
@@ -31,6 +32,50 @@ def _severity_label(value):
     return Severity(value).label if value is not None else "—"
 
 
+class ComponentStatusInline(TabularInline):
+    """The component's status history, read only.
+
+    The table is append-only: a poll closes the open row and opens a new
+    one, and a partial unique constraint allows exactly one open row. Hand
+    editing it would either rewrite history the API serves or trip that
+    constraint, so this shows the spans and offers no way to change them.
+    """
+
+    model = ComponentStatus
+    tab = True
+    extra = 0
+    max_num = 0
+    can_delete = False
+    per_page = 10
+    fields = ["severity", "source", "started_at", "ended_at"]
+    readonly_fields = fields
+    ordering = ["-started_at"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class ServiceEventInline(TabularInline):
+    """The service's incidents and maintenance, read only.
+
+    A poll upserts these from the provider. Editing one here would make
+    the admin disagree with the status page it mirrors.
+    """
+
+    model = ServiceEvent
+    tab = True
+    extra = 0
+    max_num = 0
+    can_delete = False
+    per_page = 10
+    fields = ["kind", "title", "phase", "starts_at", "ends_at"]
+    readonly_fields = fields
+    ordering = ["-starts_at"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = ["display_service", "display_severity", "watcher_count", "provider"]
@@ -44,6 +89,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ordering = ["-watcher_count", "name"]
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
+    inlines = [ServiceEventInline]
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("status_page", "poller")
@@ -179,6 +225,7 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
+    inlines = [ComponentStatusInline]
 
     def get_queryset(self, request):
         return (
