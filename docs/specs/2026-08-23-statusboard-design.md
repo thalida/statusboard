@@ -48,7 +48,7 @@ statusboard/
 │  ├─ common/              BaseModel, pagination, schema, mixins
 │  ├─ docs/                drf-spectacular + Scalar, served inside Unfold admin
 │  ├─ authentication/      User, magic link
-│  ├─ catalog/             Service, StatusPage, PollSchedule, ServiceComponent, adapters/
+│  ├─ catalog/             Service, StatusPage, Poller, ServiceComponent, adapters/
 │  ├─ dashboards/          Dashboard, DashboardItem
 │  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
@@ -88,12 +88,12 @@ erDiagram
     DashboardItem }o--|| ServiceComponent : "tracks one"
 
     Service ||--|| StatusPage : "read from"
-    Service ||--|| PollSchedule : "polled per"
+    Service ||--|| Poller : "read by"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
 
-    Service ||--o{ PollRun : "attempts to read"
+    Poller ||--o{ PollRun : "attempts"
     Service ||--o{ Incident : "reported on"
     Service ||--o{ MaintenanceWindow : "scheduled on"
     Incident ||--o{ IncidentUpdate : "log of"
@@ -141,7 +141,7 @@ erDiagram
         enum provider "TextChoices"
         url api_url "null unless the derivation fails"
     }
-    PollSchedule {
+    Poller {
         uuid id PK
         uuid service_id FK "one-to-one, created with the service"
         int interval_seconds "admin, null inherits"
@@ -197,7 +197,7 @@ erDiagram
     }
     PollRun {
         uuid id PK
-        uuid service_id FK
+        uuid poller_id FK
         url url "snapshot, survives a migration"
         enum provider "snapshot"
         datetime started_at
@@ -210,11 +210,11 @@ erDiagram
     Dashboard ||--o{ DashboardItem : holds
     DashboardItem }o--|| ServiceComponent : "tracks one"
     Service ||--|| StatusPage : "read from"
-    Service ||--|| PollSchedule : "polled per"
+    Service ||--|| Poller : "read by"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
-    Service ||--o{ PollRun : "attempts to read"
+    Poller ||--o{ PollRun : "attempts"
     Service ||--o{ Incident : "reported on"
     Service ||--o{ MaintenanceWindow : "scheduled on"
     Incident ||--o{ IncidentUpdate : "log of"
@@ -275,8 +275,8 @@ is a different concept from a permission role.
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
   `provider`, `api_url` (nullable override). What and where — nothing about polling.
-- `PollSchedule` — `OneToOneField` to **`Service`**, created with it. How often we read this
-  service, when we read it next, and how that is going.
+- `Poller` — `OneToOneField` to **`Service`**, created with it. The thing that reads a service:
+  how often, when next, and how it is going.
 
   On the service, not the page, for the reason `PollRun` is: the schedule answers "how often do we
   check Twilio", which outlives any particular page. A service migrating from Statuspage to
@@ -295,7 +295,7 @@ is a different concept from a permission role.
   | `consecutive_failure_count` | poller — resets to zero on success |
 
   ```python
-  interval = service.poll_schedule.interval_seconds or meta.poll_interval_seconds
+  interval = service.poller.interval_seconds or meta.poll_interval_seconds
   ```
 
   **A null field means "inherit"**, and there is exactly one way to say it. An earlier draft made
@@ -306,9 +306,14 @@ is a different concept from a permission role.
   default, this holds a deliberate choice, and the effective interval is computed from both plus
   the backoff. Nothing before recorded that an admin *chose* 60s rather than inheriting 300s.
 
-  Settings and state live together because they are one concern — a schedule — read together by
-  the poller on every pass. Splitting them was a second one-to-one row for the same thing, which
-  bought a join and nothing else.
+  Settings and state live together because they are one thing — the poller — read together on
+  every pass. Splitting them was a second one-to-one row for the same object, which bought a join
+  and nothing else.
+
+  **`PollRun` hangs off the `Poller`**, not off `Service` directly. A run is an attempt this poller
+  made, so its history belongs to it. The poller is one-to-one with the service and created with
+  it, so that history still survives a page migration — which is what putting runs on `Service`
+  was protecting.
 
   `is_paused` stops polling without deleting the service: a status page that has gone for good, or
   one rate-limiting us hard enough to be worth leaving alone. `note` is why — a tuned value with no
