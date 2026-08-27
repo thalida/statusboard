@@ -677,6 +677,16 @@ components:
             A screen that shows a derived status says so. "Degraded" from a published indicator
             and "Degraded" because an RSS entry exists are different claims.
         started_at: { type: string, format: date-time, description: When it entered this severity }
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When it left this severity. **Always null here**, because this is the open row.
+
+            `ComponentStatus` is append-only and each row is an interval; a closed row carries the
+            time it ended. Reading `ended_at: null` is how you know you are looking at the current
+            state and not a historical one.
         last_refreshed_at:
           type: string
           format: date-time

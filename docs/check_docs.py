@@ -37,6 +37,7 @@ DERIVED = {
     "Service.overall_component":          "ServiceComponent where is_overall",
     "Service.status_page":                "OneToOneField",
     "Component.status":                   "ComponentStatus where ended_at is null",
+    "Status.ended_at":                    "always null on the open row; a closed row carries it",
     "Status.last_refreshed_at":           "component.service.poller.last_success_at",
     "Poller.interval_seconds":            "own override or /meta/ default, scaled by backoff",
     "Poller.cooldown_seconds":            "own override or /meta/ default",
