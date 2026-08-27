@@ -769,6 +769,12 @@ Both are gone. Reloading the page already shows the freshest data the poller hol
 bought a second path to the same result and carried its own cooldown handling, its own signed-out
 routing, and its own failure state.
 
+**A page load reads stored state. It never triggers a poll.** Every `GET` serves what the last
+poll wrote, so the data a reader sees is at most one `interval_seconds` old and the response time
+does not depend on a third party being reachable. The alternative — a `GET` that polls anything
+stale and waits — would delete the button while moving its cost into every page view, including
+the failure mode where someone else's status page is slow.
+
 **What is kept is the freshness itself.** The header pill still reads "2 min ago" from
 `aggregates.oldest_refreshed_at` — the age of the *stalest* row, not an average, so the number is
 a floor rather than a flattering middle. Since nothing can be pressed, the pill also answers when
@@ -777,8 +783,12 @@ that improves: hovering shows "next check in 3 min" from `aggregates.next_refres
 
 **The cooldown stays on the service, globally.** The thing needing protection is somebody else's
 status page, and a per-user or per-board limit would poll one service twice for two boards that
-both track it. Without a user-triggered path the cooldown now guards only the scheduler, but it
-guards the right thing, and it is what makes a second board free.
+both track it.
+
+It still has a user-triggered path to guard, just not this one: `POST /catalog/import/` fetches
+the URL to detect the provider and read the component list. That is a stranger's request causing
+a fetch of a stranger's server, which is the case the cooldown exists for. It also keeps an
+import's first poll from stacking on the scheduled one.
 
 ### Sparse fieldsets are a framework concern
 
