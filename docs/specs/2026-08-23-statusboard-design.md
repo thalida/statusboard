@@ -48,7 +48,7 @@ statusboard/
 │  ├─ common/              BaseModel, pagination, schema, mixins
 │  ├─ docs/                drf-spectacular + Scalar, served inside Unfold admin
 │  ├─ authentication/      User, magic link
-│  ├─ catalog/             Service, StatusPage, PollSettings, ServiceComponent, adapters/
+│  ├─ catalog/             Service, StatusPage, PollSchedule, ServiceComponent, adapters/
 │  ├─ dashboards/          Dashboard, DashboardItem
 │  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
@@ -88,7 +88,7 @@ erDiagram
     DashboardItem }o--|| ServiceComponent : "tracks one"
 
     Service ||--|| StatusPage : "read from"
-    StatusPage ||--o| PollSettings : "tuned by"
+    Service ||--|| PollSchedule : "polled per"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
@@ -140,18 +140,18 @@ erDiagram
         url url UK "normalised, dedupe key"
         enum provider "TextChoices"
         url api_url "null unless the derivation fails"
-        datetime poll_last_success_at "poller writes"
-        datetime poll_next_at "poller writes"
-        int poll_consecutive_failure_count "poller writes, resets on success"
     }
-    PollSettings {
+    PollSchedule {
         uuid id PK
-        uuid status_page_id FK "one-to-one, absent means inherit"
-        int interval_seconds "null inherits the default"
-        int cooldown_seconds "null inherits the default"
-        int max_interval_seconds "backoff ceiling"
-        bool is_paused
-        text note "why this was tuned"
+        uuid service_id FK "one-to-one, created with the service"
+        int interval_seconds "admin, null inherits"
+        int cooldown_seconds "admin, null inherits"
+        int max_interval_seconds "admin, backoff ceiling"
+        bool is_paused "admin"
+        text note "admin, why this was tuned"
+        datetime next_at "poller, the queue key"
+        datetime last_success_at "poller"
+        int consecutive_failure_count "poller, resets on success"
     }
     ServiceComponent {
         uuid id PK
@@ -210,7 +210,7 @@ erDiagram
     Dashboard ||--o{ DashboardItem : holds
     DashboardItem }o--|| ServiceComponent : "tracks one"
     Service ||--|| StatusPage : "read from"
-    StatusPage ||--o| PollSettings : "tuned by"
+    Service ||--|| PollSchedule : "polled per"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
@@ -274,54 +274,54 @@ is a different concept from a permission role.
   "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
-  `provider`, `api_url` (nullable override), and the poller's runtime state:
-  `poll_last_success_at`, `poll_next_at`, `poll_consecutive_failure_count`
-- `PollSettings` — nullable `OneToOneField` to `StatusPage`. Every field is an **override**:
-  `interval_seconds`, `cooldown_seconds`, `max_interval_seconds`, `is_paused`, `note`
+  `provider`, `api_url` (nullable override). What and where — nothing about polling.
+- `PollSchedule` — `OneToOneField` to **`Service`**, created with it. How often we read this
+  service, when we read it next, and how that is going.
 
-  **A row exists only for a page someone has tuned.** Absent means "inherit everything", so the
-  table holds exceptions rather than a copy of the defaults for every service in the catalogue.
+  On the service, not the page, for the reason `PollRun` is: the schedule answers "how often do we
+  check Twilio", which outlives any particular page. A service migrating from Statuspage to
+  Instatus keeps its tuning and its `note`, and the poller's schedule and its history stay at the
+  same level.
+
+  | field | who writes it |
+  | --- | --- |
+  | `interval_seconds` | admin — null inherits the `/meta/` default |
+  | `cooldown_seconds` | admin — null inherits |
+  | `max_interval_seconds` | admin — the backoff ceiling, null inherits |
+  | `is_paused` | admin |
+  | `note` | admin |
+  | `next_at` | poller — the scheduler's queue key |
+  | `last_success_at` | poller |
+  | `consecutive_failure_count` | poller — resets to zero on success |
 
   ```python
-  interval = settings.interval_seconds if settings else meta.poll_interval_seconds
+  interval = service.poll_schedule.interval_seconds or meta.poll_interval_seconds
   ```
 
-  This is the layering that a single effective column could not express: `/meta/` holds the
-  deployment default, `PollSettings` holds a deliberate choice, and the effective interval is
-  computed from both plus the backoff. Nothing before recorded that an admin *chose* 60s rather
-  than inheriting 300s.
+  **A null field means "inherit"**, and there is exactly one way to say it. An earlier draft made
+  the row itself optional, so "not tuned" could be a missing row *or* a row full of nulls — two
+  absences for one fact, plus a null check on the relation in front of every read.
 
-  `is_paused` stops polling a page without deleting the service — a status page that has gone for
-  good, or one rate-limiting us hard enough to be worth leaving alone.
+  That is the layering a single effective column could not express: `/meta/` holds the deployment
+  default, this holds a deliberate choice, and the effective interval is computed from both plus
+  the backoff. Nothing before recorded that an admin *chose* 60s rather than inheriting 300s.
 
-  `note` is why. A tuned value with no reason attached becomes undeletable: nobody later knows
-  whether it still matters.
+  Settings and state live together because they are one concern — a schedule — read together by
+  the poller on every pass. Splitting them was a second one-to-one row for the same thing, which
+  bought a join and nothing else.
 
-  `url` is the page a person visits. `api_url` is the machine-readable endpoint behind it —
-  `https://status.twilio.com` versus `https://status.twilio.com/api/v2/summary.json`.
+  `is_paused` stops polling without deleting the service: a status page that has gone for good, or
+  one rate-limiting us hard enough to be worth leaving alone. `note` is why — a tuned value with no
+  reason attached becomes undeletable, because nobody later knows whether it still matters.
 
-  **It is null in the normal case**, because the adapter derives the endpoint from `url` and
-  `provider`. It is set only where that derivation does not hold: a page on a custom domain whose
-  API lives elsewhere, or a feed that is not published where the page is. Storing a derivable
-  value would be a second copy that goes stale when an adapter changes its path.
+  `consecutive_failure_count` is a denormalised count of `PollRun`, kept because the scheduler
+  reads it every cycle; deriving it would be a count-since-last-success query per service per tick.
+  It drives the backoff that scales the interval, and tips a component to severity 3 once the data
+  is too stale to trust.
 
-  The source of a service's data, separate from the service itself. The unique constraint on
-  `url` is what makes two people pasting the same page share one service and one poll, so the
-  dedupe rule lives on the thing being deduplicated.
+  A `last_error` column was dropped for failing that same test: it is the newest `PollRun.error`,
+  read only in admin, and a copy that can disagree with the row it came from.
 
-  **Configuration and runtime state are separate models.** `StatusPage` carries only what the
-  poller writes each cycle; `PollSettings` carries what an admin chose. Hand-editing the former is
-  pointless — it is overwritten within the interval.
-
-  It also gives the poller somewhere to keep state. `poll_next_at` is what the scheduler reads;
-  `poll_consecutive_failure_count` counts failed reads in a row, resets to zero on success, drives the
-  backoff that grows `poll_interval_seconds`, and is what tips a component to severity 3 once the
-  data is too stale to trust.
-
-  `poll_consecutive_failure_count` is a denormalised count of `PollRun`, kept because the scheduler reads it
-  every cycle — deriving it would be a count-since-last-success query per service per tick. A
-  `last_error` column was dropped for failing that test: it is the newest `PollRun.error`, read
-  only in admin, and a copy that can disagree with the row it came from.
 - `ServiceComponent` — `service`, `external_id`, `name`, self-FK `parent`, `status_page_order`,
   `is_overall`, `archived_at`. Unique on `(service, external_id)`.
 
