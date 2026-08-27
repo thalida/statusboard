@@ -2683,6 +2683,9 @@ curl -s https://www.githubstatus.com/history.rss -o api/tests/fixtures/rss_feed.
 
 - [ ] **Step 2: Write the failing test**
 
+The last four tests pin the resolution rule to the recorded payload, which carries 24
+resolved entries and 1 still open — both directions, from real data rather than a stub.
+
 ```python
 # api/tests/adapters/test_rss.py
 from pathlib import Path
@@ -2690,19 +2693,29 @@ from pathlib import Path
 import pytest
 
 from catalog.adapters.rss import RSSAdapter
-from status.choices import EventKind, Severity, StatusSource
+from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 
 
 class StubTextSession:
+    """Return one recorded feed body. No network."""
+
     def __init__(self, text):
         self.text = text
 
     def get(self, url, **kwargs):
-        return type("R", (), {"text": self.text, "content": self.text.encode(),
-                              "status_code": 200, "raise_for_status": lambda self: None,
-                              "headers": {}})()
+        return type(
+            "R",
+            (),
+            {
+                "text": self.text,
+                "content": self.text.encode(),
+                "status_code": 200,
+                "raise_for_status": lambda self: None,
+                "headers": {},
+            },
+        )()
 
 
 @pytest.fixture
@@ -2726,13 +2739,14 @@ def test_the_synthetic_component_has_no_parent_and_no_children(adapter):
 
 
 def test_severity_is_operational_when_nothing_is_open(adapter, monkeypatch):
-    monkeypatch.setattr(adapter, "fetch_incidents", lambda: [])
+    monkeypatch.setattr(adapter, "fetch_incidents", list)
     assert adapter.fetch_status()[0].severity == Severity.OPERATIONAL
 
 
 def test_severity_is_degraded_while_an_incident_is_open(adapter, monkeypatch):
-    from catalog.adapters.base import NormalisedEvent
     from django.utils import timezone
+
+    from catalog.adapters.base import NormalisedEvent
 
     monkeypatch.setattr(
         adapter,
@@ -2742,7 +2756,7 @@ def test_severity_is_degraded_while_an_incident_is_open(adapter, monkeypatch):
                 external_id="1",
                 kind=EventKind.INCIDENT,
                 title="x",
-                phase="investigating",
+                phase=IncidentPhase.INVESTIGATING,
                 starts_at=timezone.now(),
                 ends_at=None,
             )
@@ -2760,7 +2774,57 @@ def test_it_returns_events_from_the_feed(adapter):
     events = adapter.fetch_incidents()
     assert len(events) > 0
     assert all(e.kind == EventKind.INCIDENT for e in events)
+
+
+# The next four pin the resolution rule to the recorded payload. A feed
+# entry's title never announces resolution — GitHub titles the entry for
+# the fault ("Incident with Actions"). The phase marker is the first
+# <strong> in the description, which is the newest update.
+
+
+def test_no_entry_title_announces_resolution(adapter):
+    # The guard against reintroducing a title-prefix heuristic.
+    assert not any(
+        e.title.lower().startswith("resolved") for e in adapter.fetch_incidents()
+    )
+
+
+def test_an_entry_whose_newest_update_is_resolved_reads_closed(adapter):
+    event = next(
+        e for e in adapter.fetch_incidents() if e.title == "Incident with Actions"
+    )
+    assert event.phase == IncidentPhase.RESOLVED
+    assert event.ends_at is not None
+
+
+def test_an_entry_still_being_updated_reads_open(adapter):
+    event = next(
+        e
+        for e in adapter.fetch_incidents()
+        if e.title == "Disruption with GitHub Billing"
+    )
+    assert event.phase != IncidentPhase.RESOLVED
+    assert event.ends_at is None
+
+
+def test_the_real_feed_exercises_both_directions(adapter):
+    # Both branches come from the recorded payload, not a stub. If the
+    # feed shape changes so one branch vanishes, this fails loudly.
+    events = adapter.fetch_incidents()
+    assert any(e.ends_at is None for e in events)
+    assert any(e.ends_at is not None for e in events)
+
+
+def test_service_metadata_comes_from_the_channel(adapter):
+    assert adapter.fetch_service_metadata() == {
+        "name": "GitHub Status - Incident History",
+        "homepage_url": "https://www.githubstatus.com",
+    }
 ```
+
+
+Run: `cd api && uv run pytest tests/adapters/test_rss.py -v --no-cov`
+Expected: FAIL — `NotImplementedError`.
 
 - [ ] **Step 3: Run it to verify it fails**
 
@@ -2769,8 +2833,15 @@ Expected: FAIL — `NotImplementedError`.
 
 - [ ] **Step 4: Write `api/catalog/adapters/rss.py`**
 
+Resolution is read from the first `<strong>` marker in the description, which is the newest
+update. Not from the title: a feed titles an entry for the fault it describes — GitHub's are
+`"Incident with Actions and Pull Requests"`, `"Disruption with GitHub Billing"` — and keeps
+that title after the entry closes. A title heuristic leaves every entry open, so an RSS
+service would sit at `DEGRADED` forever and never show green.
+
 ```python
-from datetime import datetime, timezone as dt_timezone
+import re
+from datetime import UTC, datetime
 
 import feedparser
 import requests
@@ -2779,7 +2850,10 @@ from catalog.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from catalog.choices import StatusPageProvider
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
-OPEN_WINDOW_HOURS = 24
+# A status feed writes its newest update first, each one led by a bolded
+# phase word: "<strong>Resolved</strong> - This incident has been resolved."
+# The first marker in the body is therefore the entry's current phase.
+PHASE_MARKER = re.compile(r"<strong>\s*(.*?)\s*</strong>", re.IGNORECASE | re.DOTALL)
 
 
 class RSSAdapter(Adapter):
@@ -2792,8 +2866,20 @@ class RSSAdapter(Adapter):
     provider = StatusPageProvider.RSS
     status_source = StatusSource.INCIDENTS
 
+    # The vocabulary Statuspage-backed feeds bold. "Update" is a progress
+    # note with no phase of its own, so it leaves the entry open.
+    PHASE = {
+        "investigating": IncidentPhase.INVESTIGATING,
+        "identified": IncidentPhase.IDENTIFIED,
+        "monitoring": IncidentPhase.MONITORING,
+        "resolved": IncidentPhase.RESOLVED,
+        "completed": IncidentPhase.RESOLVED,
+        "postmortem": IncidentPhase.RESOLVED,
+    }
+
     @classmethod
     def matches(cls, url: str) -> bool:
+        # The registry only reaches this adapter when nothing else matched.
         return True
 
     def _feed(self):
@@ -2813,21 +2899,36 @@ class RSSAdapter(Adapter):
             )
         ]
 
+    def _phase(self, description: str) -> str:
+        """Read the entry's phase off its newest update.
+
+        Never off the title: a feed titles an entry for the fault it
+        describes ("Incident with Actions"), and keeps that title after
+        it is resolved. Reading the title would leave every entry open
+        and hold the service at DEGRADED forever.
+        """
+        match = PHASE_MARKER.search(description or "")
+        if not match:
+            return IncidentPhase.INVESTIGATING
+        return self.PHASE.get(match.group(1).lower(), IncidentPhase.INVESTIGATING)
+
     def fetch_incidents(self):
         events = []
         for entry in self._feed().entries:
             published = entry.get("published_parsed")
-            starts_at = (
-                datetime(*published[:6], tzinfo=dt_timezone.utc) if published else None
-            )
+            starts_at = datetime(*published[:6], tzinfo=UTC) if published else None
+            phase = self._phase(entry.get("description", ""))
+            resolved = phase == IncidentPhase.RESOLVED
             title = entry.get("title", "")
-            resolved = title.lower().startswith("resolved")
             events.append(
                 NormalisedEvent(
                     external_id=entry.get("id") or entry.get("link") or title,
                     kind=EventKind.INCIDENT,
                     title=title,
-                    phase=IncidentPhase.RESOLVED if resolved else IncidentPhase.INVESTIGATING,
+                    phase=phase,
+                    # A feed dates an entry by its newest update, so a
+                    # resolved entry's pubDate is when it closed. That is
+                    # the only end time on offer here.
                     starts_at=starts_at,
                     ends_at=starts_at if resolved else None,
                 )
