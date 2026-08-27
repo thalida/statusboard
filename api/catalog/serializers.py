@@ -1,4 +1,5 @@
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from catalog.models import Poller, Service, ServiceComponent, StatusPage
@@ -79,6 +80,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             )
         return queryset
 
+    @extend_schema_field(StatusSerializer(allow_null=True))
     def get_status(self, row):
         current = row.statuses.filter(ended_at__isnull=True).first()
         return (
@@ -91,6 +93,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             else None
         )
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_path(self, row):
         # Null on the overall component: it is not under anything.
         if row.is_overall or row.parent is None:
@@ -101,9 +104,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             node = node.parent
         return " › ".join(reversed(names))
 
+    @extend_schema_field(serializers.IntegerField())
     def get_child_count(self, row):
         return 0 if row.is_overall else row.children.count()
 
+    @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):
         soonest = self._events(row, EventKind.MAINTENANCE).order_by("starts_at").first()
         return (
@@ -116,9 +121,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             else None
         )
 
+    @extend_schema_field(serializers.IntegerField())
     def get_upcoming_maintenance_count(self, row):
         return self._events(row, EventKind.MAINTENANCE).count()
 
+    @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_active_incident(self, row):
         newest = self._events(row, EventKind.INCIDENT).order_by("-starts_at").first()
         return (
@@ -131,9 +138,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             else None
         )
 
+    @extend_schema_field(serializers.IntegerField())
     def get_active_incident_count(self, row):
         return self._events(row, EventKind.INCIDENT).count()
 
+    @extend_schema_field(serializers.BooleanField(allow_null=True))
     def get_is_tracked(self, row):
         user = getattr(self.context.get("request"), "user", None)
         if user is None or not user.is_authenticated:
@@ -166,6 +175,7 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
             "tracked_component_count",
         ]
 
+    @extend_schema_field(ComponentSerializer(allow_null=True))
     def get_overall_component(self, service):
         row = service.components.filter(is_overall=True).first()
         return (
@@ -178,12 +188,14 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
             else None
         )
 
+    @extend_schema_field(serializers.IntegerField())
     def get_component_count(self, service):
         # The overall component is excluded: it is the service, not a part of it.
         return service.components.filter(
             is_overall=False, archived_at__isnull=True
         ).count()
 
+    @extend_schema_field(serializers.IntegerField())
     def get_tracked_component_count(self, service):
         user = getattr(self.context.get("request"), "user", None)
         if user is None or not user.is_authenticated:
@@ -195,3 +207,13 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
             .distinct()
             .count()
         )
+
+
+class ImportRequestSerializer(serializers.Serializer):
+    """The body of POST /catalog/import/.
+
+    Named `status_page_url`, not `url`, because that is what the contract
+    documents and the contract is what the client is written against.
+    """
+
+    status_page_url = serializers.URLField()

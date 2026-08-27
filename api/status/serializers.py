@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from common.mixins import FieldsMixin
@@ -11,6 +12,7 @@ class StatusSerializer(FieldsMixin, serializers.ModelSerializer):
         model = ComponentStatus
         fields = ["severity", "source", "started_at", "ended_at", "last_refreshed_at"]
 
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
     def get_last_refreshed_at(self, row):
         poller = getattr(row.component.service, "poller", None)
         return poller.last_success_at if poller else None

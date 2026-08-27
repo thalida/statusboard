@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -8,7 +9,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from authentication.models import MagicLinkToken
-from authentication.serializers import MeSerializer
+from authentication.serializers import (
+    MagicLinkRequestSerializer,
+    MeSerializer,
+    TokenPairSerializer,
+    VerifyRequestSerializer,
+)
 
 User = get_user_model()
 
@@ -16,6 +22,13 @@ User = get_user_model()
 class MagicLinkView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=MagicLinkRequestSerializer,
+        responses={
+            202: OpenApiResponse(description="Sent, if the address can receive it."),
+            429: OpenApiResponse(description="Too many requests."),
+        },
+    )
     def post(self, request):
         # Always create the user and send mail. An error here would reveal
         # that the email is unregistered.
@@ -36,6 +49,13 @@ class MagicLinkView(APIView):
 class VerifyView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=VerifyRequestSerializer,
+        responses={
+            200: TokenPairSerializer,
+            400: OpenApiResponse(description="Invalid or expired token."),
+        },
+    )
     def post(self, request):
         link = MagicLinkToken.objects.filter(
             token=request.data.get("token") or ""
@@ -53,9 +73,11 @@ class VerifyView(APIView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: MeSerializer})
     def get(self, request):
         return Response(MeSerializer(request.user, context={"request": request}).data)
 
+    @extend_schema(responses={204: OpenApiResponse(description="Account deleted.")})
     def delete(self, request):
         request.user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

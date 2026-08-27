@@ -1,6 +1,7 @@
 from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics
 from rest_framework import status as http
 from rest_framework.permissions import AllowAny
@@ -9,7 +10,11 @@ from rest_framework.views import APIView
 
 from catalog.import_service import import_from_url
 from catalog.models import Service, ServiceComponent
-from catalog.serializers import ComponentSerializer, ServiceSerializer
+from catalog.serializers import (
+    ComponentSerializer,
+    ImportRequestSerializer,
+    ServiceSerializer,
+)
 from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.filters import FieldsBackend
 from common.ordering import CURRENT_SEVERITY, MappedOrderingFilter
@@ -100,6 +105,12 @@ class ServiceListView(generics.ListAPIView):
         return queryset.filter(name__icontains=q) if q else queryset
 
 
+@extend_schema(
+    responses={
+        200: ServiceSerializer,
+        404: OpenApiResponse(description="No service with that slug."),
+    }
+)
 class ServiceDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = ServiceSerializer
@@ -108,6 +119,9 @@ class ServiceDetailView(generics.RetrieveAPIView):
 
 
 class ServiceComponentListView(generics.ListAPIView):
+    # get_queryset reads self.kwargs, which schema generation has
+    # not set. This names the model without running it.
+    queryset = ServiceComponent.objects.none()
     permission_classes = [AllowAny]
     serializer_class = ComponentSerializer
     aggregate_set = StatusAggregateSet
@@ -126,6 +140,9 @@ class ServiceComponentListView(generics.ListAPIView):
 
 
 class ServiceEventListView(generics.ListAPIView):
+    # get_queryset reads self.kwargs, which schema generation has
+    # not set. This names the model without running it.
+    queryset = ServiceEvent.objects.none()
     permission_classes = [AllowAny]
     aggregate_set = EventAggregateSet
     filterset_fields = {
@@ -159,11 +176,19 @@ class CatalogImportView(APIView):
 
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=ImportRequestSerializer,
+        responses={
+            200: ServiceSerializer,
+            201: ServiceSerializer,
+            400: OpenApiResponse(description="Missing or malformed status_page_url."),
+        },
+    )
     def post(self, request):
-        url = (request.data.get("url") or "").strip()
-        if not url:
-            return Response({"detail": "url is required"}, status=400)
-        service, created = import_from_url(url)
+        body = ImportRequestSerializer(data=request.data)
+        if not body.is_valid():
+            return Response(body.errors, status=400)
+        service, created = import_from_url(body.validated_data["status_page_url"])
         return Response(
             ServiceSerializer(service, context={"request": request}).data,
             status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,

@@ -34,7 +34,9 @@ def fake_detect(monkeypatch):
 @pytest.mark.django_db
 def test_importing_creates_the_service_its_status_page_and_its_poller():
     response = APIClient().post(
-        reverse("catalog-import"), {"url": "https://status.twilio.com/"}, format="json"
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.twilio.com/"},
+        format="json",
     )
     assert response.status_code == 201
     service = Service.objects.get()
@@ -45,8 +47,12 @@ def test_importing_creates_the_service_its_status_page_and_its_poller():
 @pytest.mark.django_db
 def test_the_same_url_resolves_to_the_same_service_and_returns_200():
     url = reverse("catalog-import")
-    first = APIClient().post(url, {"url": "https://status.twilio.com/"}, format="json")
-    second = APIClient().post(url, {"url": "https://status.twilio.com/"}, format="json")
+    first = APIClient().post(
+        url, {"status_page_url": "https://status.twilio.com/"}, format="json"
+    )
+    second = APIClient().post(
+        url, {"status_page_url": "https://status.twilio.com/"}, format="json"
+    )
     assert first.status_code == 201
     assert second.status_code == 200
     assert Service.objects.count() == 1
@@ -56,8 +62,12 @@ def test_the_same_url_resolves_to_the_same_service_and_returns_200():
 def test_urls_are_deduplicated_after_normalising():
     # One status page gives one service and one poll.
     url = reverse("catalog-import")
-    APIClient().post(url, {"url": "https://status.twilio.com/"}, format="json")
-    APIClient().post(url, {"url": "https://status.twilio.com"}, format="json")
+    APIClient().post(
+        url, {"status_page_url": "https://status.twilio.com/"}, format="json"
+    )
+    APIClient().post(
+        url, {"status_page_url": "https://status.twilio.com"}, format="json"
+    )
     assert Service.objects.count() == 1
 
 
@@ -68,7 +78,7 @@ def test_the_imported_service_is_identical_in_shape_to_a_listed_one():
         APIClient()
         .post(
             reverse("catalog-import"),
-            {"url": "https://status.twilio.com/"},
+            {"status_page_url": "https://status.twilio.com/"},
             format="json",
         )
         .json()
@@ -83,7 +93,7 @@ def test_the_response_carries_the_detected_provider():
         APIClient()
         .post(
             reverse("catalog-import"),
-            {"url": "https://status.twilio.com/"},
+            {"status_page_url": "https://status.twilio.com/"},
             format="json",
         )
         .json()
@@ -92,7 +102,7 @@ def test_the_response_carries_the_detected_provider():
 
 
 @pytest.mark.django_db
-def test_a_missing_url_is_a_400():
+def test_a_missing_status_page_url_is_a_400():
     assert (
         APIClient().post(reverse("catalog-import"), {}, format="json").status_code
         == 400

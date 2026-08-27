@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from drf_spectacular.drainage import GENERATOR_STATS, reset_generator_stats
 from drf_spectacular.generators import SchemaGenerator
 
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "api" / "openapi.yaml"
@@ -78,3 +79,20 @@ def test_there_is_no_refresh_endpoint(generated):
     assert not [
         p for p in generated["paths"] if p.endswith("/refresh/") and "auth" not in p
     ]
+
+
+def test_the_schema_generates_without_a_single_warning():
+    """A warning means the schema is guessing.
+
+    Every one of them was a field typed `string` that is really an object
+    or an integer, or a view dropped from the schema entirely. A client is
+    generated from this file, so a guess ships as a bug.
+    """
+    reset_generator_stats()
+    with GENERATOR_STATS.silence():
+        SchemaGenerator().get_schema(request=None, public=True)
+    complaints = sorted(GENERATOR_STATS._warn_cache) + sorted(
+        GENERATOR_STATS._error_cache
+    )
+    reset_generator_stats()
+    assert not complaints, "\n".join(complaints)

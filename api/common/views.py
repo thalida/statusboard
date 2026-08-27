@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.urls import reverse
 from django.views.generic import TemplateView
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.choices import StatusPageProvider
+from common.serializers import MetaSerializer
 from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSource
 
 
@@ -16,6 +18,7 @@ def _labels(choices):
 class MetaView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(responses={200: MetaSerializer})
     def get(self, request):
         return Response(
             {

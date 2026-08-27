@@ -1,6 +1,7 @@
 from django.db.models import F
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from common.filters import FieldsBackend
 from common.ordering import CURRENT_SEVERITY, NEXT_TRANSITION, MappedOrderingFilter
 from dashboards.filters import BoardComponentFilter
 from dashboards.models import Dashboard, DashboardItem
+from dashboards.serializers import TrackComponentSerializer
 
 
 def _board(request, uuid):
@@ -21,6 +23,9 @@ def _board(request, uuid):
 
 
 class BoardComponentListView(generics.ListCreateAPIView):
+    # get_queryset reads self.kwargs, which schema generation has
+    # not set. This names the model without running it.
+    queryset = ServiceComponent.objects.none()
     permission_classes = [IsAuthenticated]
     serializer_class = ComponentSerializer
     aggregate_set = StatusAggregateSet
@@ -43,6 +48,16 @@ class BoardComponentListView(generics.ListCreateAPIView):
             .distinct()
         )
 
+    @extend_schema(
+        request=TrackComponentSerializer,
+        responses={
+            201: ComponentSerializer,
+            200: OpenApiResponse(
+                response=ComponentSerializer,
+                description="Already tracked. Tracking twice is not an error.",
+            ),
+        },
+    )
     def create(self, request, *args, **kwargs):
         board = _board(request, self.kwargs["uuid"])
         component = get_object_or_404(
@@ -64,6 +79,12 @@ class BoardComponentListView(generics.ListCreateAPIView):
 class BoardComponentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={
+            204: OpenApiResponse(description="No longer tracked."),
+            404: OpenApiResponse(description="Not on this board."),
+        }
+    )
     def delete(self, request, uuid, component_id):
         board = _board(request, uuid)
         item = get_object_or_404(
