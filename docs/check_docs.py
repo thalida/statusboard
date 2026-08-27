@@ -24,11 +24,10 @@ BACKED = {
     "Service": "Service", "ServiceDetail": "Service", "ServiceRef": "Service",
     "StatusPage": "StatusPage", "Poller": "Poller", "Component": "ServiceComponent",
     "OverallComponent": "ServiceComponent", "TrackedComponent": "ServiceComponent",
-    "Status": "ComponentStatus", "MaintenanceWindow": "MaintenanceWindow",
-    "Incident": "Incident", "IncidentRef": "Incident",
+    "Status": "ComponentStatus", "ServiceEvent": "ServiceEvent", "EventRef": "ServiceEvent",
     "Dashboard": "Dashboard", "Me": "User",
 }
-PLAIN = {"Meta", "Envelope", "Aggregates", "StatusAggregates", "IncidentAggregates",
+PLAIN = {"Meta", "Envelope", "Aggregates", "StatusAggregates", "EventAggregates",
          "TokenPair", "Error"}
 
 # ── fields that are computed, annotated or traversed, with how ─────────────
@@ -45,13 +44,13 @@ DERIVED = {
     "Component.path":                     "walk of parent",
     "Component.child_count":              "Count of reverse parent",
     "Component.is_tracked":               "per-user annotation over DashboardItem",
-    "Component.maintenance_windows":      "reverse M2M from MaintenanceWindow",
+    "Component.maintenance_windows":      "ServiceEvent kind=maintenance across the reverse M2M",
     "Component.next_maintenance_window":  "soonest of maintenance_windows",
     "Component.maintenance_window_count": "Count of maintenance_windows",
-    "Component.latest_incident":          "newest across the reverse M2M from Incident",
+    "Component.latest_incident":          "newest ServiceEvent kind=incident across the reverse M2M",
     "Component.active_incident_count":    "Count of unresolved across that M2M",
-    "Incident.affected_component_ids":    "M2M ids",
-    "Incident.updates":                   "reverse FK from IncidentUpdate",
+    "ServiceEvent.affected_component_ids": "M2M ids",
+    "ServiceEvent.updates":               "reverse FK from EventUpdate",
     "Dashboard.components_url":           "built from the request",
     "Dashboard.aggregates":               "pagination aggregate block",
     "Me.default_dashboard_id":            "Dashboard where is_default",

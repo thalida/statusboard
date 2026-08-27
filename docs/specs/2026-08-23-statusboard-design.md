@@ -50,7 +50,7 @@ statusboard/
 │  ├─ authentication/      User, magic link
 │  ├─ catalog/             Service, StatusPage, Poller, ServiceComponent, adapters/
 │  ├─ dashboards/          Dashboard, DashboardItem
-│  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, tasks.py
+│  └─ status/              ComponentStatus, ServiceEvent, EventUpdate, PollRun, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
 ├─ justfile                infisical run --env=dev wrapping everything
 └─ docker-compose.yml      postgres 17, redis 7
@@ -94,11 +94,9 @@ erDiagram
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
 
     Poller ||--o{ PollRun : "attempts"
-    Service ||--o{ Incident : "reported on"
-    Service ||--o{ MaintenanceWindow : "scheduled on"
-    Incident ||--o{ IncidentUpdate : "log of"
-    Incident }o--o{ ServiceComponent : affects
-    MaintenanceWindow }o--o{ ServiceComponent : affects
+    Service ||--o{ ServiceEvent : "published on"
+    ServiceEvent ||--o{ EventUpdate : "log of"
+    ServiceEvent }o--o{ ServiceComponent : affects
 ```
 
 Every field and relationship:
@@ -171,29 +169,22 @@ erDiagram
         datetime started_at
         datetime ended_at "null while current, partial unique"
     }
-    Incident {
+    ServiceEvent {
         uuid id PK
         uuid service_id FK
         string external_id "unique with service"
+        enum kind "incident or maintenance"
         string title
-        enum phase "TextChoices"
-        datetime started_at
-        datetime resolved_at
+        enum phase "valid set depends on kind"
+        datetime starts_at "began, or the window opens"
+        datetime ends_at "resolved, or the window closes"
     }
-    IncidentUpdate {
+    EventUpdate {
         uuid id PK
-        uuid incident_id FK
+        uuid event_id FK
         enum phase "TextChoices"
         text body "written by the provider"
         datetime posted_at
-    }
-    MaintenanceWindow {
-        uuid id PK
-        uuid service_id FK
-        string external_id "unique with service"
-        datetime starts_at
-        datetime ends_at
-        text summary
     }
     PollRun {
         uuid id PK
@@ -215,11 +206,9 @@ erDiagram
     ServiceComponent ||--o| ServiceComponent : "parent of"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
     Poller ||--o{ PollRun : "attempts"
-    Service ||--o{ Incident : "reported on"
-    Service ||--o{ MaintenanceWindow : "scheduled on"
-    Incident ||--o{ IncidentUpdate : "log of"
-    Incident }o--o{ ServiceComponent : affects
-    MaintenanceWindow }o--o{ ServiceComponent : affects
+    Service ||--o{ ServiceEvent : "published on"
+    ServiceEvent ||--o{ EventUpdate : "log of"
+    ServiceEvent }o--o{ ServiceComponent : affects
 ```
 
 Every model also carries `common.BaseModel`: `created_at`, `updated_at`, `created_by`,
@@ -233,10 +222,9 @@ Reading it:
   unique URL and the poller's state live.
 - **`ComponentStatus` is append-only**, one row per severity change, with a partial unique index
   marking the current one. Current state and history are the same table.
-- **`MaintenanceWindow` hangs off a component**, not a service — several per component if the
-  provider schedules that way.
-- **`Incident` belongs to the service** and names the components it affects, which is why it is
-  many-to-many with `ServiceComponent` while maintenance is not.
+
+- **`ServiceEvent` is one model for incidents and maintenance**, because a provider publishes them
+  as one object. `kind` separates them; the API and the screens filter on it.
 
 
 `User(BaseModel, AbstractUser)` with a UUID pk and email as the login field.
@@ -488,32 +476,35 @@ where every add has two possible shapes.
   filters the whole catalogue without a latest-per-group query.
 
   The manager defaults to the open row. A query that wants history asks for it by name.
-- `Incident` — FK to **`Service`**, upstream id, title, phase, started/resolved, M2M
-  `affected_components`; `IncidentUpdate` child for the log
+- `ServiceEvent` — FK to **`Service`**, `external_id`, `kind`, `title`, `phase`, `starts_at`,
+  `ends_at`, M2M `affected_components`; `EventUpdate` child for the log
 
-  **Incidents belong to the service because that is how providers publish them.** One record on
-  Twilio's status page, naming the components it affects — and frequently naming none, which is
-  the most common shape early in an outage: "investigating elevated error rates" before anyone
-  knows where.
+  **One model for incidents and maintenance windows**, because that is how providers publish them.
+  On Atlassian Statuspage a scheduled maintenance *is* an incident — same object, a maintenance
+  impact, a scheduled window, the same update log. Two tables meant two ingestion paths for one
+  payload, and two near-identical shapes to keep in step.
 
-  An FK to a component would need six rows for an incident affecting six components, or a
-  many-to-many anyway, and would leave the ones naming nothing homeless. So the M2M carries
-  which components, and `Component.latest_incident` is a **projection through it**, not a field.
-  On the overall component it is the most recent incident anywhere in the service, which is what
-  gives an unattributed incident somewhere to appear.
-- `MaintenanceWindow` — FK to **`Service`**, M2M `affected_components`, `starts_at`, `ends_at`,
-  `summary`
+  `kind` is `incident` or `maintenance`. `phase` is a `TextChoices` whose valid values depend on
+  it: `investigating, identified, monitoring, resolved` for an incident; `scheduled, in_progress,
+  verifying, completed` for maintenance. Validated on save, so the pair cannot drift into a
+  meaningless combination.
 
-  **Shaped exactly like `Incident`, and for the same reason.** A provider publishes one scheduled
-  maintenance and names the components it touches — or names none, which is common: "Scheduled
-  maintenance, Sunday 02:00" against the whole service.
+  `starts_at` and `ends_at` are one interval either way — when an incident began and resolved, or
+  when a window opens and closes. That is what lets one query answer "what is happening to this
+  service between now and Thursday" without a union.
 
-  An FK to a component cannot hold that one. It would also need three rows for a window touching
-  three components, or an M2M anyway.
+  **Both belong to the service, and both frequently name no component at all** — "Scheduled
+  maintenance, Sunday 02:00" against the whole service, or "investigating elevated error rates"
+  before anyone knows where. An FK to a component could hold neither, and would need six rows for
+  an event touching six components. So `affected_components` is many-to-many, and
+  `Component.latest_incident` and `Component.maintenance_windows` are both **projections through
+  it**, filtered by `kind`. On the overall component they cover the whole service, which is where
+  an unattributed event appears.
 
-  So `Component.maintenance_windows` is a **projection through the M2M**, not a field: the windows
-  naming that component. On the overall component it is every window in the service, which is
-  where an unattributed one appears.
+  The API and the screens keep them apart — `/incidents/` filters `kind=incident`, the Maintenance
+  tab filters `kind=maintenance`. They are different things to a reader. They are the same thing to
+  a provider, and to the ingestion that reads one payload.
+
 - `PollRun` — FK to **`Service`**, per-attempt success/error, plus the `url` and `provider` it
   actually fetched
 
@@ -536,10 +527,10 @@ it is and what it holds**.
 | model | whose | holds | written when |
 | --- | --- | --- | --- |
 | `ComponentStatus` | ours | a severity, no prose | only when severity changes |
-| `IncidentUpdate` | **theirs** | a paragraph they wrote, and a phase | when the provider posts one |
+| `EventUpdate` | **theirs** | a paragraph they wrote, and a phase | when the provider posts one |
 | `PollRun` | ours | did the fetch succeed, and of what URL | every attempt, success or failure |
 
-`ComponentStatus` is us diffing two polls. `IncidentUpdate` is ingested verbatim, carrying the
+`ComponentStatus` is us diffing two polls. `EventUpdate` is ingested verbatim, carrying the
 provider's own `external_id`. They come apart constantly: a component flaps with no incident open
 and you get status rows but no updates; a provider posts "monitoring a fix" while every component
 reads operational and you get updates but no status rows.

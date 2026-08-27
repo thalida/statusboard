@@ -54,8 +54,8 @@ info:
     | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
     | `Component.status` | the `ComponentStatus` row where `ended_at` is null |
     | `Component.maintenance_windows` | reverse M2M from `MaintenanceWindow` |
-    | `Component.latest_incident` | newest across the reverse M2M from `Incident` |
-    | `Incident.updates` | reverse FK from `IncidentUpdate` |
+    | `Component.latest_incident` | newest `ServiceEvent` with `kind=incident`, across the reverse M2M |
+    | `ServiceEvent.updates` | reverse FK from `EventUpdate` |
     | `TrackedComponent.service` | `ForeignKey` |
 
     `status` is its own object because `ComponentStatus` is its own table. A `ModelSerializer`
@@ -296,8 +296,9 @@ paths:
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Slug' }
-        - { name: resolved_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the active set. Omit for all.' }
-        - { name: phase, in: query, schema: { type: string, enum: [investigating, identified, monitoring, resolved] } }
+        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance], default: incident }, description: 'Incidents and maintenance are one model. This endpoint defaults to incidents; the Maintenance tab passes `maintenance`.' }
+        - { name: ends_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the open set — unresolved, or a window still to close. Omit for all.' }
+        - { name: phase, in: query, schema: { type: string }, description: 'Valid values depend on `kind`.' }
         - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated, django-filter's `in` lookup }
         - { name: ordering, in: query, schema: { type: string, enum: [-started_at, started_at], default: -started_at } }
         - { $ref: '#/components/parameters/PageSize' }
@@ -313,8 +314,8 @@ paths:
                   - $ref: '#/components/schemas/Envelope'
                   - type: object
                     properties:
-                      aggregates: { $ref: '#/components/schemas/IncidentAggregates' }
-                      results: { type: array, items: { $ref: '#/components/schemas/Incident' } }
+                      aggregates: { $ref: '#/components/schemas/EventAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
 
   /dashboards/{uuid}/:
     get:
@@ -477,10 +478,36 @@ components:
             `Service.status_page.poll_cooldown_seconds` for that page's value.
         default_page_size: { type: integer, example: 50 }
         max_page_size: { type: integer, example: 200 }
-        severity_labels:
+        enums:
           type: object
-          additionalProperties: { type: string }
-          description: 'The 0–5 map, so the client renders labels from one source: {"0": "Major outage", …}'
+          description: |
+            Every fixed set the API uses, as value-to-label maps. One source, so a client never
+            carries its own copy and a new value reaches every screen without a release.
+
+            Each key matches the field it belongs to.
+          properties:
+            severity:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"0": "Major outage", "1": "Partial outage", … "5": "Operational"}'
+            status_source:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"provider": "Published by the provider", "components": "Worst of its components", "incidents": "Derived from open incidents"}'
+            status_page_provider:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"statuspage": "Atlassian Statuspage", "instatus": "Instatus", "betterstack": "Better Stack", "rss": "RSS feed"}'
+            event_kind:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"incident": "Incident", "maintenance": "Maintenance"}'
+            event_phase:
+              type: object
+              additionalProperties: { type: string }
+              description: |
+                Both sets, keyed by kind:
+                `{"incident": {"investigating": "Investigating", …}, "maintenance": {"scheduled": "Scheduled", …}}`
     TokenPair:
       type: object
       properties:
@@ -505,7 +532,7 @@ components:
         `results` is the page. `next` is the cursor.
 
         A list endpoint keeps this envelope and supplies its own `aggregates` schema. See
-        `StatusAggregates` and `IncidentAggregates`.
+        `StatusAggregates` and `EventAggregates`.
 
         Do not add a collection-wide value at the top level. Put it in `aggregates`.
       properties:
@@ -538,7 +565,7 @@ components:
               description: |
                 The oldest refresh time in the collection. The header shows it. "2 min ago" means
                 no item is older than two minutes. This covers the whole collection, not the page.
-    IncidentAggregates:
+    EventAggregates:
       allOf:
         - $ref: '#/components/schemas/Aggregates'
         - type: object
@@ -546,7 +573,7 @@ components:
             by_phase:
               type: object
               additionalProperties: { type: integer }
-              description: Keys are the four phases; the Incidents tab count is the sum of the three unresolved ones.
+              description: Keys are the phases valid for the `kind` being listed. The Incidents tab count is the sum of the unresolved ones.
     StatusPage:
       type: object
       description: |
@@ -557,9 +584,8 @@ components:
           type: string
           enum: [statuspage, instatus, betterstack, rss]
           description: |
-            The adapter that reads this page. The client maps the value to a display name:
-            `statuspage` is "Atlassian Statuspage", `instatus` is "Instatus", `betterstack` is
-            "Better Stack", `rss` is "RSS feed".
+            The adapter that reads this page. Render the label from `/meta/`
+            `enums.status_page_provider`.
     Poller:
       type: object
       description: |
@@ -616,8 +642,7 @@ components:
           minimum: 0
           maximum: 5
           description: |
-            Lower is worse. An `IntegerChoices` class, which is where `/meta/severity_labels` gets
-            its labels. Render from there, not from a copy in the client.
+            Lower is worse. An `IntegerChoices` class, which is where `/meta/` `enums.severity` gets its labels. Render from there, not from a copy in the client.
         source:
           type: string
           enum: [provider, components, incidents]
@@ -716,14 +741,15 @@ components:
         maintenance_windows:
           type: array
           description: |
-            Every window that names this component. A component can have several.
+            Every maintenance event that names this component — `ServiceEvent` with
+            `kind=maintenance`. A component can have several.
 
             A provider schedules maintenance against the service and names the components it
             touches, often naming none. On the **overall** component this is every window in the
             service, which is where an unnamed one appears.
-          items: { $ref: '#/components/schemas/MaintenanceWindow' }
+          items: { $ref: '#/components/schemas/EventRef' }
         next_maintenance_window:
-          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: |
             The soonest of `maintenance_windows`. Null if there are none.
 
@@ -738,7 +764,7 @@ components:
             Read it instead of the array when rendering a row. On the overall component the array
             covers the whole service and can be long.
         latest_incident:
-          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: |
             The most recently started incident affecting this component. Null if there is none.
 
@@ -763,54 +789,57 @@ components:
         id: { type: string, format: uuid, description: Track this to track the service as a whole. }
         status: { $ref: '#/components/schemas/Status' }
         next_maintenance_window:
-          allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: The soonest window scheduled anywhere in this service. Null if none.
         maintenance_window_count: { type: integer, description: How many are scheduled across the service. }
         latest_incident:
-          allOf: [{ $ref: '#/components/schemas/IncidentRef' }]
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: The most recent incident anywhere in this service. Null if there is none.
         active_incident_count: { type: integer, description: How many are unresolved across the service. }
         is_tracked: { type: boolean, nullable: true, description: Null when unauthenticated, so the client renders ＋ without a second code path. }
-    MaintenanceWindow:
+    EventRef:
       type: object
       nullable: true
       description: |
-        Times are absolute. The client shows them relative. Show `in 4 hrs` before the window
-        starts. Show `ends in 40 min` while it runs.
+        A `ServiceEvent` as it appears on a component. A subset with no `updates` array, so a list
+        row costs one title and not a log.
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [incident, maintenance] }
+        title: { type: string }
+        phase: { type: string, description: 'Valid values depend on `kind`. Render from `/meta/` `enums.event_phase`.' }
+        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
+        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
+    ServiceEvent:
+      type: object
+      description: |
+        A provider's narrative record — an incident or a scheduled maintenance. Providers publish
+        both as one object, so this is one schema with a `kind`.
 
-        Show the window in the duration slot. Do not show a second time on the line below.
-      properties:
-        starts_at: { type: string, format: date-time }
-        ends_at: { type: string, format: date-time }
-        summary: { type: string, nullable: true }
-    IncidentRef:
-      type: object
-      nullable: true
-      description: |
-        An incident as it appears on its service. This is a subset of `Incident` with no `updates`
-        array, so a list row costs one title and not a log.
+        `phase` is workflow, not state. It is unrelated to `severity`.
       properties:
         id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [incident, maintenance]
+          description: Render the label from `/meta/` `enums.event_kind`.
         title: { type: string }
-        phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
-        started_at: { type: string, format: date-time }
-        resolved_at: { type: string, format: date-time, nullable: true }
-    Incident:
-      type: object
-      description: A provider's narrative record. `phase` is workflow, not state.
-      properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
-        started_at: { type: string, format: date-time }
-        resolved_at: { type: string, format: date-time, nullable: true }
+        phase:
+          type: string
+          description: |
+            `investigating, identified, monitoring, resolved` for an incident.
+            `scheduled, in_progress, verifying, completed` for maintenance.
+
+            Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
+        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
+        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
         affected_component_ids: { type: array, items: { type: string, format: uuid } }
         updates:
           type: array
           items:
             type: object
             properties:
-              phase: { type: string, enum: [investigating, identified, monitoring, resolved] }
+              phase: { type: string }
               body: { type: string }
               posted_at: { type: string, format: date-time }
     Dashboard:
