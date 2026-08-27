@@ -2282,8 +2282,9 @@ def test_nested_components_carry_their_parent_id(adapter):
 
 
 def test_incidents_and_maintenance_both_come_back_as_events(adapter):
+    # `==`, not `<=`. A subset assertion passes when maintenance never loads.
     kinds = {e.kind for e in adapter.fetch_incidents()}
-    assert kinds <= {EventKind.INCIDENT, EventKind.MAINTENANCE}
+    assert kinds == {EventKind.INCIDENT, EventKind.MAINTENANCE}
 
 
 def test_an_event_carries_its_update_log(adapter):
@@ -2440,11 +2441,17 @@ class StatuspageAdapter(Adapter):
         )
 
     def fetch_incidents(self):
-        body = self._get("api/v2/incidents.json")
-        events = [self._event(raw, EventKind.INCIDENT) for raw in body.get("incidents", [])]
+        # Statuspage keeps maintenance on its own endpoint. incidents.json
+        # never carries a scheduled_maintenances key, unlike summary.json.
+        incidents = self._get("api/v2/incidents.json")
+        maintenances = self._get("api/v2/scheduled-maintenances.json")
+        events = [
+            self._event(raw, EventKind.INCIDENT)
+            for raw in incidents.get("incidents", [])
+        ]
         events += [
             self._event(raw, EventKind.MAINTENANCE)
-            for raw in body.get("scheduled_maintenances", [])
+            for raw in maintenances.get("scheduled_maintenances", [])
         ]
         return events
 
