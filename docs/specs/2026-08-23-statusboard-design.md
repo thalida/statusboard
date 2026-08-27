@@ -109,12 +109,14 @@ erDiagram
         string email UK
         bool is_active
         bool is_staff
+        datetime last_login "stamped on magic-link verify"
+        datetime last_active_at "stamped on token refresh"
     }
     Dashboard {
         uuid id PK
         uuid owner_id FK
         string name
-        int position
+        bool is_default "partial unique per owner"
     }
     DashboardItem {
         uuid id PK
@@ -230,7 +232,20 @@ Reading it:
   many-to-many with `ServiceComponent` while maintenance is not.
 
 
-`User(BaseModel, AbstractUser)` with a UUID pk and email as the login field. Django's stock
+`User(BaseModel, AbstractUser)` with a UUID pk and email as the login field.
+
+**Activity is tracked in two fields, both written without a per-request cost.**
+
+`last_login` comes with `AbstractUser`, but Django only sets it inside
+`django.contrib.auth.login()`, which magic-link auth never calls — it mints tokens on verify. It is
+stamped explicitly there, or it stays null forever.
+
+`last_active_at` is stamped on `POST /auth/refresh/`. The client rotates a 15-minute access token,
+so that endpoint is already a heartbeat throttled to once per session per 15 minutes. No
+middleware, no write on every request, no throttling logic to tune.
+
+Neither is exposed on `/me/`; nothing in the app renders them. They exist for admin: seeing whether
+an account is live, and finding dormant ones. Django's stock
 `auth.Group`, unregistered and re-registered with Unfold's admin. No custom Group: it is not
 swappable, and the thing worth extending later is `DashboardMembership` in `dashboards`, which
 is a different concept from a permission role.
@@ -292,7 +307,21 @@ time something is promoted, and a value of 37 carries no meaning to whoever inhe
 
 ### dashboards
 
-- `Dashboard` — owner, name, position. Exactly one per user in v1.
+- `Dashboard` — owner, name, `is_default`. Exactly one per user in v1.
+
+  ```python
+  constraints = [
+      UniqueConstraint(fields=["owner"], condition=Q(is_default=True),
+                       name="one_default_dashboard_per_user"),
+  ]
+  ```
+
+  `GET /me/` returns `default_dashboard_id`, which today can only mean "the only one". The flag
+  makes it a real lookup, so the day a second board exists nothing about that endpoint changes.
+
+  An earlier draft had `position` instead, left over from the multi-dashboard concept that was cut
+  — it ordered boards in a switcher. With one board there is nothing to order, and a default is
+  the part of that idea worth keeping.
 - `DashboardItem` — dashboard, **component**
 
   Every row is a component. There is no nullable service field and no "is this a service or a

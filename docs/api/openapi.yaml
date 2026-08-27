@@ -490,7 +490,13 @@ components:
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
-        default_dashboard_id: { type: string, format: uuid, description: 'Use it on /dashboards/{uuid}/. One per user in v1; the name survives sharing.' }
+        default_dashboard_id:
+          type: string
+          format: uuid
+          description: |
+            The dashboard where `is_default` is true. Use it on `/dashboards/{uuid}/`.
+
+            One per user in v1. The name survives a second board arriving.
     Envelope:
       type: object
       description: |
