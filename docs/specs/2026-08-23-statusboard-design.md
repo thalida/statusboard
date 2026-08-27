@@ -150,7 +150,7 @@ erDiagram
     ServiceComponent {
         uuid id PK
         uuid service_id FK
-        string upstream_id "unique with service"
+        string external_id "unique with service"
         string name
         uuid parent_id FK "self, null at top level"
         int status_page_order
@@ -168,7 +168,7 @@ erDiagram
     Incident {
         uuid id PK
         uuid service_id FK
-        string upstream_id "unique with service"
+        string external_id "unique with service"
         string title
         string phase "investigating|identified|monitoring|resolved"
         datetime started_at
@@ -184,7 +184,7 @@ erDiagram
     MaintenanceWindow {
         uuid id PK
         uuid service_id FK
-        string upstream_id "unique with service"
+        string external_id "unique with service"
         datetime starts_at
         datetime ends_at
         text summary
@@ -265,12 +265,26 @@ is a different concept from a permission role.
   It also gives the poller somewhere to keep state. `consecutive_failures` drives the backoff that
   grows `poll_interval_seconds`; `next_poll_at` is what the scheduler reads. Those were homeless
   while the URL was a field on `Service`.
-- `ServiceComponent` — `service`, `upstream_id`, `name`, self-FK `parent`, `status_page_order`,
-  `is_overall`, `archived_at`. Unique on `(service, upstream_id)`.
+- `ServiceComponent` — `service`, `external_id`, `name`, self-FK `parent`, `status_page_order`,
+  `is_overall`, `archived_at`. Unique on `(service, external_id)`.
+
+  `external_id` is the provider's own id for the thing, carried on components, incidents and
+  maintenance windows alike. It says the id is **not ours**, which `status_page_component_id`
+  would only say for components, and which `status_page_id` would say wrongly — that reads as a
+  foreign key to `StatusPage`.
 
   There is no `is_group` flag: a component is a group when it has children, so the flag would be a
-  second copy of a fact the tree already holds. `status_page_order` preserves the order the status
-  page lists them in, which is the order the components tab shows by default.
+  second copy of a fact the tree already holds.
+
+  `status_page_order` is the position the provider lists a component in, and it is the components
+  tab's default sort. That ordering carries the provider's judgement about what matters —
+  Twilio puts *Programmable Messaging* near the top and regional endpoints near the bottom.
+  Sorted by name you get *API, Console, Elastic SIP, Lookup*, which is a different page from the
+  one the user just came from. Severity and name remain available.
+
+  It is also the only ordering that cannot be reconstructed later: it exists only in the payload
+  being parsed, and one integer written during the upsert that already reconciles names and
+  parents costs nothing to keep in step.
 
 Custom URLs dedupe on `StatusPage.url`, so two users pasting the same status page share one
 `Service` and one poll. A popular custom entry becomes curated by flipping a flag
@@ -461,7 +475,7 @@ it is and what it holds**.
 | `PollRun` | ours | did the fetch succeed, and of what URL | every attempt, success or failure |
 
 `ComponentStatus` is us diffing two polls. `IncidentUpdate` is ingested verbatim, carrying the
-provider's own `upstream_id`. They come apart constantly: a component flaps with no incident open
+provider's own `external_id`. They come apart constantly: a component flaps with no incident open
 and you get status rows but no updates; a provider posts "monitoring a fix" while every component
 reads operational and you get updates but no status rows.
 
@@ -542,7 +556,7 @@ not just a status read.
 
 Each successful poll:
 
-1. **Upserts components by `upstream_id`.** New ones are created, renames are applied, and the
+1. **Upserts components by `external_id`.** New ones are created, renames are applied, and the
    parent/child structure and `status_page_order` are refreshed.
 2. **Marks vanished components `archived_at`** rather than deleting them. Someone may be tracking
    one, and deleting the row would silently remove it from their board. An archived component
@@ -550,7 +564,7 @@ Each successful poll:
 3. **Refreshes the service's own metadata** — name, description, logo — for curated and custom
    entries alike, so a rename upstream does not leave a stale name on someone's board.
 
-Component identity is the provider's `upstream_id`, never the display name. Names change; ids do
+Component identity is the provider's `external_id`, never the display name. Names change; ids do
 not, and matching on names would orphan a tracked row the first time a provider edits its wording.
 
 ### Polling
