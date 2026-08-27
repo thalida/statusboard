@@ -14,7 +14,7 @@ init: env up sync migrate seed
     pre-commit install
     @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
 
-# Create .env if missing, reusing the main checkout's so worktrees share it.
+# Write .env, asking for the admin once. Worktrees copy the main checkout's.
 env:
     @python3 bin/make-env.py
 
@@ -43,13 +43,9 @@ sync:
 migrate:
     @{{wt}} ; cd api && uv run python manage.py migrate
 
-# Seed the dev admin from .env, if set. Idempotent, and local-only.
+# Create the admin in this worktree's database, from .env. Never asks.
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
-
-# Create an admin. Ordinary users are passwordless; the admin form needs one.
-superuser email:
-    @{{wt}} ; cd api && uv run python manage.py createsuperuser --email {{email}}
 
 # Run the test suite.
 test:

@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Create .env if this checkout has none.
+"""Make sure this checkout has a .env with the local admin in it.
 
-A worktree reuses the main checkout's .env. So the admin credentials are
-entered once, not once per branch.
+The canonical .env lives in the main checkout. A worktree copies it. So
+the credentials are entered once, not once per branch.
 
-With no .env anywhere, this copies .env.example and asks for the admin.
-It only asks on a terminal, which keeps CI unattended. An empty answer
-leaves the value blank, and seed_admin then asks instead.
+Blank values are filled by asking. A missing file is not the trigger: a
+.env can exist and still have nothing in it. Asking only happens on a
+terminal, which keeps CI unattended.
 """
 
 import pathlib
-import shutil
 import subprocess
 import sys
 from getpass import getpass
 
+# The keys this script owns, and how to ask for each.
 PROMPTS = {
     "DJANGO_SUPERUSER_EMAIL": ("admin email: ", input),
     "DJANGO_SUPERUSER_PASSWORD": ("admin password: ", getpass),
 }
 
+TEMPLATE = pathlib.Path(".env.example")
+
 
 def main_checkout() -> pathlib.Path:
+    """The repository the worktrees hang off. Its .env is the shared one."""
     common = subprocess.run(
         ["git", "rev-parse", "--git-common-dir"],
         capture_output=True,
@@ -31,36 +34,57 @@ def main_checkout() -> pathlib.Path:
     return pathlib.Path(common).resolve().parent
 
 
+def values(text: str) -> dict[str, str]:
+    out = {}
+    for line in text.splitlines():
+        if line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        out[key.strip()] = value.strip()
+    return out
+
+
+def blanks(text: str) -> list[str]:
+    found = values(text)
+    return [key for key in PROMPTS if not found.get(key)]
+
+
 def fill(text: str, key: str, value: str) -> str:
-    return (
-        "\n".join(
-            f"{key}={value}" if line.startswith(f"{key}=") else line
-            for line in text.splitlines()
-        )
-        + "\n"
-    )
+    lines = [
+        f"{key}={value}" if line.startswith(f"{key}=") else line
+        for line in text.splitlines()
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def ensure(path: pathlib.Path) -> str:
+    """Create the file if needed. Ask for anything still blank."""
+    text = path.read_text() if path.exists() else TEMPLATE.read_text()
+    missing = blanks(text)
+    if missing and sys.stdin.isatty():
+        print(f"Setting the local admin in {path}. Press Enter to skip.")
+        for key in missing:
+            prompt, reader = PROMPTS[key]
+            answer = reader(prompt).strip()
+            if answer:
+                text = fill(text, key, answer)
+    path.write_text(text)
+    return text
 
 
 def main() -> None:
-    env = pathlib.Path(".env")
-    if env.exists():
-        return
-
     shared = main_checkout() / ".env"
-    if shared.exists() and shared.resolve() != env.resolve():
-        shutil.copy(shared, env)
-        print(f"copied .env from {shared.parent}")
+    local = pathlib.Path(".env").resolve()
+
+    text = ensure(shared)
+    if shared.resolve() == local:
         return
 
-    text = pathlib.Path(".env.example").read_text()
-    if sys.stdin.isatty():
-        print("No .env yet. Set the local admin, or press Enter to skip.")
-        for key, (prompt, reader) in PROMPTS.items():
-            value = reader(prompt).strip()
-            if value:
-                text = fill(text, key, value)
-    env.write_text(text)
-    print("created .env")
+    # A worktree. Copy the shared file unless this one already has values.
+    if local.exists() and not blanks(local.read_text()):
+        return
+    local.write_text(text)
+    print(f"copied .env from {shared.parent}")
 
 
 if __name__ == "__main__":
