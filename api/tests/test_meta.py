@@ -1,0 +1,54 @@
+import pytest
+from django.urls import reverse
+from rest_framework.test import APIClient
+
+from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity
+
+
+def test_lower_severity_is_worse():
+    assert Severity.MAJOR_OUTAGE == 0
+    assert Severity.PARTIAL_OUTAGE == 1
+    assert Severity.DEGRADED == 2
+    assert Severity.UNKNOWN == 3
+    assert Severity.MAINTENANCE == 4
+    assert Severity.OPERATIONAL == 5
+
+
+def test_unknown_sorts_with_the_problems_not_the_healthy():
+    # A service we cannot reach belongs with the problems.
+    # This makes `severity <= 3` mean "needs attention".
+    needs_attention = [s for s in Severity if s <= 3]
+    assert Severity.UNKNOWN in needs_attention
+    assert Severity.MAINTENANCE not in needs_attention
+    assert Severity.OPERATIONAL not in needs_attention
+
+
+def test_every_event_kind_has_a_phase_set():
+    assert set(EVENT_PHASES_BY_KIND) == {EventKind.INCIDENT, EventKind.MAINTENANCE}
+
+
+@pytest.mark.django_db
+def test_meta_publishes_every_enum():
+    body = APIClient().get(reverse("meta")).json()
+    assert set(body["enums"]) == {
+        "severity",
+        "status_source",
+        "status_page_provider",
+        "event_kind",
+        "event_phase",
+    }
+    assert body["enums"]["severity"]["0"] == "Major outage"
+    assert body["enums"]["severity"]["5"] == "Operational"
+    # event_phase is keyed by kind, because the valid set depends on it
+    assert set(body["enums"]["event_phase"]) == {"incident", "maintenance"}
+    assert "investigating" in body["enums"]["event_phase"]["incident"]
+    assert "scheduled" in body["enums"]["event_phase"]["maintenance"]
+
+
+@pytest.mark.django_db
+def test_meta_publishes_the_deployment_defaults():
+    body = APIClient().get(reverse("meta")).json()
+    assert body["poll_interval_seconds"] == 300
+    assert body["poll_cooldown_seconds"] == 60
+    assert body["default_page_size"] == 50
+    assert body["max_page_size"] == 200
