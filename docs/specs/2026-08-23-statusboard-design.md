@@ -138,13 +138,12 @@ erDiagram
         uuid service_id FK "one-to-one"
         url url UK "normalised, dedupe key"
         enum provider "TextChoices"
-        url api_url
+        url api_url "null unless the derivation fails"
         datetime last_fetched_at
         datetime next_poll_at
         int poll_interval_seconds "grows with backoff"
         int refresh_cooldown_seconds
-        int consecutive_failures
-        text last_error
+        int consecutive_failures "resets on success"
     }
     ServiceComponent {
         uuid id PK
@@ -266,16 +265,30 @@ is a different concept from a permission role.
   "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
-  `provider`, `api_url`, `last_fetched_at`, `next_poll_at`, `poll_interval_seconds`,
-  `refresh_cooldown_seconds`, `consecutive_failures`, `last_error`
+  `provider`, `api_url` (nullable override), `last_fetched_at`, `next_poll_at`,
+  `poll_interval_seconds`, `refresh_cooldown_seconds`, `consecutive_failures`
+
+  `url` is the page a person visits. `api_url` is the machine-readable endpoint behind it —
+  `https://status.twilio.com` versus `https://status.twilio.com/api/v2/summary.json`.
+
+  **It is null in the normal case**, because the adapter derives the endpoint from `url` and
+  `provider`. It is set only where that derivation does not hold: a page on a custom domain whose
+  API lives elsewhere, or a feed that is not published where the page is. Storing a derivable
+  value would be a second copy that goes stale when an adapter changes its path.
 
   The source of a service's data, separate from the service itself. The unique constraint on
   `url` is what makes two people pasting the same page share one service and one poll, so the
   dedupe rule lives on the thing being deduplicated.
 
-  It also gives the poller somewhere to keep state. `consecutive_failures` drives the backoff that
-  grows `poll_interval_seconds`; `next_poll_at` is what the scheduler reads. Those were homeless
-  while the URL was a field on `Service`.
+  It also gives the poller somewhere to keep state. `next_poll_at` is what the scheduler reads;
+  `consecutive_failures` counts failed reads in a row, resets to zero on success, drives the
+  backoff that grows `poll_interval_seconds`, and is what tips a component to severity 3 once the
+  data is too stale to trust.
+
+  `consecutive_failures` is a denormalised count of `PollRun`, kept because the scheduler reads it
+  every cycle — deriving it would be a count-since-last-success query per service per tick. A
+  `last_error` column was dropped for failing that test: it is the newest `PollRun.error`, read
+  only in admin, and a copy that can disagree with the row it came from.
 - `ServiceComponent` — `service`, `external_id`, `name`, self-FK `parent`, `status_page_order`,
   `is_overall`, `archived_at`. Unique on `(service, external_id)`.
 

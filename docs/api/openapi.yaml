@@ -588,8 +588,11 @@ components:
         consecutive_failures:
           type: integer
           description: |
-            How many reads have failed in a row. Zero after a success. This drives the backoff
-            that grows `poll_interval_seconds`, and severity 3 once a status goes stale.
+            How many reads have failed in a row. Zero after a success.
+
+            It drives the backoff that grows `poll_interval_seconds`, and tips a component to
+            severity 3 once the data is too stale to trust. Read it with `last_fetched_at` to say
+            why a status is unknown.
     Status:
       type: object
       description: |
