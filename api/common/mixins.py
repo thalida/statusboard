@@ -8,9 +8,9 @@ class FieldsMixin:
     Set `fields_param = None` to always return the full shape.
 
     A serializer built by hand inside a `SerializerMethodField` must be
-    handed its own branch via `fields_tree=parent.child_tree(name)`. Left
-    to read the request itself it would prune by the parent's names, and
-    `?fields=id,overall_component.status` would leave the nested object
+    handed its own branch. Use `fields_tree=parent.child_tree(name)`.
+    Left to read the request itself, it prunes by the parent's names.
+    Then `?fields=id,overall_component.status` leaves the nested object
     holding `id` rather than `status`.
     """
 

@@ -16,9 +16,9 @@ class FieldsAutoSchema(AutoSchema):
     """Declare `?fields=` on every GET, list or detail.
 
     drf-spectacular only asks filter backends for parameters on list
-    operations. Sparse fieldsets are a base-layer concern and prune a
-    detail response too, so the parameter is declared here rather than
-    annotated onto each view that happens to be a detail.
+    operations. Sparse fieldsets are a base-layer concern. They prune a
+    detail response too. So the parameter is declared here. It is not
+    annotated onto each detail view.
     """
 
     def get_override_parameters(self):

@@ -10,8 +10,8 @@ class FieldsBackend(BaseFilterBackend):
     """Declare `?fields=` for drf-spectacular.
 
     `FieldsMixin` does the pruning. This adds the parameter to every
-    list operation; `common.schema.FieldsAutoSchema` adds it to detail
-    operations, which drf-spectacular never asks a backend about.
+    list operation. `common.schema.FieldsAutoSchema` adds it to detail
+    operations. drf-spectacular never asks a backend about those.
     """
 
     def filter_queryset(self, request, queryset, view):

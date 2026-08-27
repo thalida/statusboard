@@ -27,10 +27,10 @@ class ServiceFilter(filters.FilterSet):
     # Declared: django-filter cannot generate a count comparison off a related set.
     tracked_component_count__gt = filters.NumberFilter(method="filter_tracked_gt")
 
-    # Declared for a second reason. `overall_component` is not a relation on
-    # Service and the current severity is not a column — it is the open row of
-    # a component's status history. The contract's parameter name is kept and
-    # pointed at the `severity_now` annotation the view adds.
+    # Declared for a second reason. `overall_component` is not a relation
+    # on Service. The current severity is not a column either. It is the
+    # open row of a component's status history. So the contract's name is
+    # kept, pointed at the view's `severity_now` annotation.
     overall_component__status__severity = filters.NumberFilter(
         field_name="severity_now"
     )
@@ -152,8 +152,8 @@ class ServiceEventListView(generics.ListAPIView):
 class CatalogImportView(APIView):
     """`POST /catalog/services/` is reserved.
 
-    A future admin create takes a service body and a bulk create takes a
-    list, so importing by URL gets its own path rather than overloading
+    A future admin create takes a service body. A bulk create takes a
+    list. So importing by URL gets its own path. It does not overload
     the standard collection.
     """
 

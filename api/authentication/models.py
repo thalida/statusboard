@@ -27,10 +27,21 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, **extra):
+    def create_superuser(self, email, password=None, **extra):
+        """An admin is the one user who needs a password.
+
+        The magic-link flow signs ordinary users in without one, so
+        `create_user` marks every password unusable. Django's admin login
+        form authenticates by password, so without this a superuser is
+        created successfully and then cannot get in.
+        """
         extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
-        return self.create_user(email, **extra)
+        user = self.create_user(email, **extra)
+        if password:
+            user.set_password(password)
+            user.save(using=self._db, update_fields=["password"])
+        return user
 
 
 class User(BaseModel, AbstractBaseUser, PermissionsMixin):

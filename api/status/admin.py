@@ -8,8 +8,8 @@ from status.models import ComponentStatus, EventUpdate, PollRun, ServiceEvent
 class PollRunAdmin(ModelAdmin):
     """We are the thing that tells you when services break.
 
-    So we cannot quietly break ourselves: a service failing N consecutive
-    polls is visibly flagged rather than silently showing stale green.
+    So we cannot quietly break ourselves. A service failing N consecutive
+    polls is flagged here. It does not sit showing stale green.
     """
 
     list_display = ["poller", "provider", "started_at", "ok"]

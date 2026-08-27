@@ -17,9 +17,10 @@ class BoardComponentFilter(filters.FilterSet):
 
     event = filters.ChoiceFilter(choices=EventKind.choices, method="filter_event")
 
-    # Declared for the same reason as the catalog's: a component has a history
-    # of `statuses` and the open one is current, so there is no `status`
-    # relation to generate from. The contract's name points at the annotation.
+    # Declared for the same reason as the catalog's. A component has a
+    # history of `statuses`. The open one is current. So there is no
+    # `status` relation to generate from. The contract's name points at
+    # the annotation instead.
     status__severity = filters.NumberFilter(field_name="severity_now")
     status__severity__lte = filters.NumberFilter(
         field_name="severity_now", lookup_expr="lte"

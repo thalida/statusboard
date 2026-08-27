@@ -43,9 +43,9 @@ class MetaView(APIView):
 class ApiDocsView(TemplateView):
     """Scalar, inside the admin, reading the generated schema.
 
-    It lives here rather than in its own `docs` app: the repository already
-    has a top-level `docs/` holding the spec and the contract, and a second
-    thing called docs next to it is one name for two ideas.
+    It lives here, not in its own `docs` app. The repository already has
+    a top-level `docs/` for the spec and the contract. A second thing
+    called docs would be one name for two ideas.
     """
 
     template_name = "common/api_docs.html"

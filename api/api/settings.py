@@ -5,9 +5,10 @@ import dj_database_url
 from celery.schedules import crontab
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# The .env sits at the repository root, one level above api/.
+load_dotenv(BASE_DIR.parent / ".env")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "local")

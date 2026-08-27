@@ -37,3 +37,6 @@ htmlcov/
 
 # Superpowers subagent run state (briefs, reports, ledger)
 .superpowers/
+
+# Generated local state (per-worktree ports). Never hand-edited.
+.local/

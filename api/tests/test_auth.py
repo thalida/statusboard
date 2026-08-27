@@ -96,3 +96,24 @@ def test_deleting_the_account_removes_the_user():
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {pair['access']}")
     assert client.delete(reverse("me")).status_code == 204
     assert User.objects.filter(email="a@b.com").exists() is False
+
+
+@pytest.mark.django_db
+def test_a_superuser_given_a_password_can_sign_in_to_the_admin():
+    # Ordinary users stay passwordless. An admin cannot. The admin login
+    # form authenticates by password. A superuser without one is locked
+    # out of the site it administers.
+    from django.contrib.auth import authenticate
+
+    User.objects.create_superuser("admin@example.com", password="s3cret-for-a-test")
+    user = authenticate(username="admin@example.com", password="s3cret-for-a-test")
+    assert user is not None
+    assert user.is_staff and user.is_superuser
+
+
+@pytest.mark.django_db
+def test_a_superuser_created_without_a_password_stays_locked_out():
+    # Not a bug to fix by guessing a password — it is the honest outcome
+    # of `createsuperuser --noinput` with no DJANGO_SUPERUSER_PASSWORD.
+    User.objects.create_superuser("noauth@example.com")
+    assert User.objects.get(email="noauth@example.com").has_usable_password() is False

@@ -1,23 +1,73 @@
 set dotenv-load
 
-init:
-    docker compose up -d --wait
-    cd api && uv sync
+# Per-worktree ports, compose project name and DATABASE_URL. Every recipe
+# touching Postgres, Redis or the server evaluates this first. Two worktrees
+# then never share a port or a database. See bin/worktree-env.py.
+wt := 'eval "$(python3 bin/worktree-env.py)"'
+
+# List the recipes. Keep first: bare `just` runs whatever recipe comes first.
+default:
+    @just --list
+
+# One-time setup. Every step it calls is runnable on its own.
+init: env up sync migrate seed
     pre-commit install
-    cd api && uv run python manage.py migrate
-    cd api && uv run python manage.py collectstatic --noinput
+    @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
 
+# Create .env if missing, reusing the main checkout's so worktrees share it.
+env:
+    @python3 bin/make-env.py
+
+# Show this worktree's ports, database and compose project.
+info:
+    @{{wt}} ; echo "worktree   $WORKTREE_SLUG" ; \
+      echo "compose    $COMPOSE_PROJECT_NAME" ; \
+      echo "postgres   localhost:$POSTGRES_HOST_PORT" ; \
+      echo "redis      localhost:$REDIS_HOST_PORT" ; \
+      echo "server     http://localhost:$DJANGO_PORT/"
+
+# Start Postgres and Redis for this worktree, waiting until they are healthy.
+up:
+    @{{wt}} ; docker compose up -d --wait ; \
+      echo "postgres localhost:$POSTGRES_HOST_PORT  redis localhost:$REDIS_HOST_PORT"
+
+# Stop them, keeping the data. Pass -v yourself to drop this worktree's database.
+down:
+    @{{wt}} ; docker compose down
+
+# Install Python dependencies.
+sync:
+    cd api && uv sync
+
+# Apply migrations to this worktree's database.
+migrate:
+    @{{wt}} ; cd api && uv run python manage.py migrate
+
+# Seed the dev admin from .env, if set. Idempotent, and local-only.
+seed:
+    @{{wt}} ; cd api && uv run python manage.py seed_admin
+
+# Create an admin. Ordinary users are passwordless; the admin form needs one.
+superuser email:
+    @{{wt}} ; cd api && uv run python manage.py createsuperuser --email {{email}}
+
+# Run the test suite.
 test:
-    cd api && uv run pytest -n auto
+    @{{wt}} ; cd api && uv run pytest -n auto
 
+# Run the test suite with the coverage gate.
 test-cov:
-    cd api && uv run pytest -n auto --cov-fail-under=85
+    @{{wt}} ; cd api && uv run pytest -n auto --cov-fail-under=85
 
+# Fix lint and format the code.
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
 
+# Run the dev server on this worktree's port.
 serve:
-    cd api && uv run python manage.py runserver
+    @{{wt}} ; echo "http://localhost:$DJANGO_PORT/" ; \
+      cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
 
+# Run the Celery worker and beat scheduler.
 worker:
-    cd api && uv run celery -A api worker -B -l info
+    @{{wt}} ; cd api && uv run celery -A api worker -B -l info

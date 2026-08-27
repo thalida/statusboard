@@ -8,9 +8,9 @@ from catalog.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from catalog.choices import StatusPageProvider
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
-# A status feed writes its newest update first, each one led by a bolded
-# phase word: "<strong>Resolved</strong> - This incident has been resolved."
-# The first marker in the body is therefore the entry's current phase.
+# A status feed writes its newest update first. Each update is led by a
+# bolded phase word, such as "<strong>Resolved</strong>". So the first
+# marker in the body is the entry's current phase.
 PHASE_MARKER = re.compile(r"<strong>\s*(.*?)\s*</strong>", re.IGNORECASE | re.DOTALL)
 
 
@@ -60,10 +60,10 @@ class RSSAdapter(Adapter):
     def _phase(self, description: str) -> str:
         """Read the entry's phase off its newest update.
 
-        Never off the title: a feed titles an entry for the fault it
-        describes ("Incident with Actions"), and keeps that title after
-        it is resolved. Reading the title would leave every entry open
-        and hold the service at DEGRADED forever.
+        Never off the title. A feed titles an entry for the fault it
+        describes, such as "Incident with Actions". It keeps that title
+        after the entry resolves. Reading the title leaves every entry
+        open. The service would then sit at DEGRADED forever.
         """
         match = PHASE_MARKER.search(description or "")
         if not match:

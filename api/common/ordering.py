@@ -26,8 +26,8 @@ class MappedOrderingFilter(OrderingFilter):
         return out
 
 
-# The open status row is the current one, so the severity a board sorts on
-# is a subquery, not a column.
+# The open status row is the current one. So the severity a board sorts
+# on is a subquery, not a column.
 CURRENT_SEVERITY = Subquery(
     ComponentStatus.objects.filter(
         component=OuterRef("pk"), ended_at__isnull=True
