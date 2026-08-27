@@ -76,7 +76,7 @@ USE_TZ = True
 TIME_ZONE = "UTC"
 
 REST_FRAMEWORK = {
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": "common.schema.FieldsAutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication"
     ],
@@ -104,6 +104,21 @@ CELERY_BEAT_SCHEDULE = {
         "task": "status.tasks.enqueue_due_polls",
         "schedule": crontab(minute="*"),
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "statusboard",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SCHEMA_PATH_PREFIX": "/api",
+    "COMPONENT_SPLIT_REQUEST": True,
+    "TAGS": [
+        {"name": "meta"},
+        {"name": "auth"},
+        {"name": "me"},
+        {"name": "catalog"},
+        {"name": "board"},
+    ],
 }
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
