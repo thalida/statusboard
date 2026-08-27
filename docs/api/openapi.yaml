@@ -289,18 +289,27 @@ paths:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Component' } }
 
-  /catalog/services/{slug}/incidents/:
+  /catalog/services/{slug}/events/:
     get:
       tags: [catalog]
-      summary: List a service's incidents
+      summary: List a service's events
+      description: |
+        Incidents and maintenance are one collection. Filter with `kind`.
+
+        The Incidents tab passes `kind=incident&ends_at__isnull=true`. The Maintenance tab passes
+        `kind=maintenance` with a window filter.
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Slug' }
-        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance], default: incident }, description: 'Incidents and maintenance are one model. This endpoint defaults to incidents; the Maintenance tab passes `maintenance`.' }
-        - { name: ends_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the open set — unresolved, or a window still to close. Omit for all.' }
-        - { name: phase, in: query, schema: { type: string }, description: 'Valid values depend on `kind`.' }
-        - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated, django-filter's `in` lookup }
-        - { name: ordering, in: query, schema: { type: string, enum: [-started_at, started_at], default: -started_at } }
+        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] }, description: Omit for both. }
+        - { name: phase, in: query, schema: { type: string }, description: 'Valid values depend on `kind`. See `/meta/` `enums.event_phase`.' }
+        - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated. }
+        - { name: ends_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the open set — unresolved, or a window still to close.' }
+        - { name: starts_at__gte, in: query, schema: { type: string, format: date-time } }
+        - { name: starts_at__lte, in: query, schema: { type: string, format: date-time }, description: 'With `ends_at__gte`, answers "what happens between now and Thursday".' }
+        - { name: ends_at__gte, in: query, schema: { type: string, format: date-time } }
+        - { name: affected_components, in: query, schema: { type: string, format: uuid }, description: Events naming this component. }
+        - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Fields' }
@@ -570,10 +579,14 @@ components:
         - $ref: '#/components/schemas/Aggregates'
         - type: object
           properties:
+            by_kind:
+              type: object
+              additionalProperties: { type: integer }
+              description: '`{"incident": 2, "maintenance": 1}` — the two tab counts in one response.'
             by_phase:
               type: object
               additionalProperties: { type: integer }
-              description: Keys are the phases valid for the `kind` being listed. The Incidents tab count is the sum of the unresolved ones.
+              description: Keys are every phase present. The Incidents tab count is the sum of the unresolved ones.
     StatusPage:
       type: object
       description: |

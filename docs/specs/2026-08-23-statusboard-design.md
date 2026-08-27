@@ -501,9 +501,13 @@ where every add has two possible shapes.
   it**, filtered by `kind`. On the overall component they cover the whole service, which is where
   an unattributed event appears.
 
-  The API and the screens keep them apart — `/incidents/` filters `kind=incident`, the Maintenance
-  tab filters `kind=maintenance`. They are different things to a reader. They are the same thing to
-  a provider, and to the ingestion that reads one payload.
+  **The API is one collection too.** `/catalog/services/{slug}/events/` lists both, and `kind`
+  filters. The Incidents tab passes `kind=incident&ends_at__isnull=true`; the Maintenance tab
+  passes `kind=maintenance` with a window filter. `aggregates.by_kind` returns both tab counts in
+  one response, so opening a service costs one request rather than two.
+
+  Two endpoints would have been the same split as two tables, one layer up: two paths, two
+  filtersets and two serializers over one model.
 
 - `PollRun` — FK to **`Service`**, per-attempt success/error, plus the `url` and `provider` it
   actually fetched
@@ -977,7 +981,8 @@ caching and rate limits.
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/import/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
-| Service · Incidents | `GET /catalog/services/{slug}/incidents/?resolved_at__isnull=true` |
+| Service · Incidents | `GET /catalog/services/{slug}/events/?kind=incident&ends_at__isnull=true` |
+| Service · Maintenance | `GET /catalog/services/{slug}/events/?kind=maintenance` |
 | Service · About | `GET /catalog/services/{slug}/` |
 | Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
 | ＋ on any row | `POST /dashboards/{uuid}/components/` |
