@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -95,6 +96,15 @@ SIMPLE_JWT = {
 
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Beat runs every minute and enqueues only what is due. The interval
+# itself lives on each Poller.next_at, so a service can be tuned in
+# admin without touching this schedule.
+CELERY_BEAT_SCHEDULE = {
+    "enqueue-due-polls": {
+        "task": "status.tasks.enqueue_due_polls",
+        "schedule": crontab(minute="*"),
+    }
+}
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
