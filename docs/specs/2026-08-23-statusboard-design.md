@@ -504,7 +504,7 @@ One class per provider, same interface: given a URL, return normalised component
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
-`POST /api/catalog/services/` detects the provider from a pasted URL and creates the service.
+`POST /api/catalog/import/` detects the provider from a pasted URL and creates the service.
 
 ### Keeping names and component trees current
 
@@ -570,20 +570,22 @@ everywhere except one: `Service` also carries a stable `slug`, used on public ca
 because those URLs get shared during an outage and a UUID would be hostile there. Anything the
 user owns stays UUID, so nothing personal is enumerable. Writes always address the UUID.
 
-Creating a service derives its slug from the host and de-duplicates on collision (`linear`,
-`linear-2`).
+An import derives the slug from the host and de-duplicates on collision (`linear`, `linear-2`).
 
-**`POST /catalog/services/` takes a status page URL.** It detects the provider, then creates the
-service, its `StatusPage` and its components. `201` when it created one, `200` when the URL already
-resolved to one. Nothing is stored about the attempt itself.
+**`POST /catalog/import/` creates a service from a status page URL.** It detects the provider,
+creates the `Service`, its `StatusPage` and its components, and returns the service — `201` when it
+created one, `200` when the URL already resolved to one. Nothing is stored about the attempt.
 
-Two earlier drafts got this wrong in opposite directions. One called it `resolve/`, naming the
-mechanism rather than the thing. The other split it to `import/` and persisted an `Import` row, so
-the endpoint could return a resource with an id — reserving the plain `POST` for an admin create
-that may never exist, which is the kind of speculation this document removes everywhere else.
+**`POST /catalog/services/` is deliberately not defined.** Creating a service has several possible
+inputs: a URL, a filled-in form, a bulk file. Each takes a different body, so each needs its own
+path. If the plain collection `POST` meant "from a URL", the other two would have to invent names
+while the standard endpoint sat spent on one special case.
 
-It creates a service. A URL is the body because that is the only way a service enters the
-catalogue.
+So none of them takes it. That is a reservation with three known claimants, not a guess about the
+future.
+
+An earlier draft called this `resolve/`, which named the mechanism rather than the thing being
+made.
 
 `Import.service` is the **same shape the catalog list returns**, not the detail shape. One service
 representation, whatever produced it — so a client can drop an imported service straight into the
@@ -861,7 +863,7 @@ caching and rate limits.
 | Discover, suggested | `GET /catalog/services/` |
 | Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
-| Add by URL | `POST /catalog/services/` |
+| Add by URL | `POST /catalog/import/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
 | Service · Incidents | `GET /catalog/services/{slug}/incidents/?resolved_at__isnull=true` |
 | Service · About | `GET /catalog/services/{slug}/` |

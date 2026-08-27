@@ -214,9 +214,10 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Service' } }
+  /catalog/import/:
     post:
       tags: [catalog]
-      summary: Add a service from its status page URL
+      summary: Import a service from its status page URL
       description: |
         The importer detects the provider. If the service is new, it creates the service and its
         components. It returns the service either way: `201` when it created one, `200` when the
