@@ -171,7 +171,10 @@ extend-select = ["I", "F"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "api.settings"
 python_files = ["test_*.py"]
-addopts = "--cov=. --cov-report=term-missing --cov-fail-under=85"
+addopts = "--cov=. --cov-report=term-missing"
+# The gate lives in `just test-cov`, not here. In addopts it fails every run
+# until coverage crosses 85%, which is not until the last task — so the
+# everyday command would be red for the whole build.
 ```
 
 - [ ] **Step 4: Write `docker-compose.yml`**
@@ -354,6 +357,9 @@ init:
 
 test:
     cd api && uv run pytest -n auto
+
+test-cov:
+    cd api && uv run pytest -n auto --cov-fail-under=85
 
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
@@ -4846,8 +4852,9 @@ confirm the change still maps to a model column or a declared derivation.
 
 - [ ] **Step 7: Run the whole suite with the coverage gate**
 
-Run: `cd api && uv run pytest -n auto`
-Expected: PASS, coverage at or above 85%.
+Run: `just test-cov`
+Expected: PASS, coverage at or above 85%. This is the first run that enforces the
+gate — `just test` and the per-task commands do not, so a shortfall surfaces here.
 
 - [ ] **Step 8: Commit**
 
