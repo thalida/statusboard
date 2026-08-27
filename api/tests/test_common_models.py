@@ -25,4 +25,6 @@ def test_audit_columns_exist_and_are_optional():
         assert BaseModel._meta.get_field(name) is not None
     for name in ("created_by", "updated_by"):
         field = BaseModel._meta.get_field(name)
-        assert field.null is True, f"{name} must be null — the poller writes rows with no user"
+        assert field.null is True, (
+            f"{name} must be null — the poller writes rows with no user"
+        )

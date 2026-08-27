@@ -35,6 +35,8 @@ dev = [
 
 [tool.ruff.lint]
 extend-select = ["I", "F"]
+# Django Meta requires lists: ordering, constraints, indexes, list_display.
+ignore = ["RUF012"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "api.settings"
