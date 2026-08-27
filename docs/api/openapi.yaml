@@ -628,7 +628,15 @@ components:
             A screen that shows a derived status says so. "Degraded" from a published indicator
             and "Degraded" because an RSS entry exists are different claims.
         started_at: { type: string, format: date-time, description: When it entered this severity }
-        last_refreshed_at: { type: string, format: date-time }
+        last_refreshed_at:
+          type: string
+          format: date-time
+          description: |
+            When this severity was last confirmed. It is the service's
+            `status_page.last_fetched_at`, because one fetch reads every component of a service.
+
+            It is not stored per component. Doing so would mean a write for every component on
+            every poll, and `ComponentStatus` only writes when severity changes.
     Service:
       type: object
       properties:

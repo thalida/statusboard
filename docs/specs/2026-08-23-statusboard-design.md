@@ -127,11 +127,10 @@ erDiagram
         uuid id PK
         string slug UK
         string name
+        text description "from the provider's page"
         url logo
         url homepage_url
-        bool is_curated
-        uuid added_by_id FK "null for catalog entries"
-        bool is_featured
+        bool is_featured "first key of the suggested sort"
         int watcher_count "distinct users"
     }
     StatusPage {
@@ -252,8 +251,20 @@ is a different concept from a permission role.
 
 ### catalog
 
-- `Service` — slug, name, logo, homepage URL, `is_curated`, `added_by` (null for catalog
-  entries), `is_featured`, `watcher_count`
+- `Service` — slug, name, `description`, logo, homepage URL, `is_featured`, `watcher_count`
+
+  `description` and `logo` come from the provider's page and are refreshed on every poll, so a
+  rename or a rebrand upstream does not leave a stale entry in the catalogue. The service screen's
+  About tab renders the description.
+
+  `is_featured` is a boolean ticked in admin for services worth surfacing regardless of usage. It
+  is the first key of the suggestion sort, and on day one — every `watcher_count` zero — it is the
+  whole list.
+
+  Two earlier fields are gone. `added_by` duplicated `BaseModel.created_by`, which every model
+  already carries. `is_curated` had no consumer: nothing sorted, filtered or rendered by it.
+  "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
+  `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
   `provider`, `api_url`, `last_fetched_at`, `next_poll_at`, `poll_interval_seconds`,
   `refresh_cooldown_seconds`, `consecutive_failures`, `last_error`
@@ -287,12 +298,9 @@ is a different concept from a permission role.
   parents costs nothing to keep in step.
 
 Custom URLs dedupe on `StatusPage.url`, so two users pasting the same status page share one
-`Service` and one poll. A popular custom entry becomes curated by flipping a flag
-in admin.
+`Service` and one poll. A popular pasted entry is surfaced by ticking `is_featured` in admin.
 
 **Suggestion ordering** is `(-is_featured, -watcher_count, name)`.
-
-`is_featured` is a boolean you tick in admin for services worth surfacing regardless of usage.
 
 **`watcher_count` is distinct users, not items.** Someone tracking five Twilio components is one
 watcher, not five:
@@ -580,7 +588,7 @@ Each successful poll:
 2. **Marks vanished components `archived_at`** rather than deleting them. Someone may be tracking
    one, and deleting the row would silently remove it from their board. An archived component
    still renders, reads `unknown`, and says the provider no longer publishes it.
-3. **Refreshes the service's own metadata** — name, description, logo — for curated and custom
+3. **Refreshes the service's own metadata** — name, description, logo — for seeded and pasted
    entries alike, so a rename upstream does not leave a stale name on someone's board.
 
 Component identity is the provider's `external_id`, never the display name. Names change; ids do
