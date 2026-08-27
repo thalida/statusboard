@@ -577,8 +577,10 @@ components:
     Status:
       type: object
       description: |
-        The state the provider reports now. This is its own model, `ComponentStatus`, so it is
-        nested. It is unrelated to incident phase.
+        The state the provider reports now.
+
+        `ComponentStatus` is append-only, one row per severity change. This is the current row.
+        It is unrelated to incident phase.
       properties:
         severity: { type: integer, minimum: 0, maximum: 5, description: Lower is worse. Render the label from /meta/ severity_labels. }
         source:
@@ -667,10 +669,11 @@ components:
         maintenance_windows:
           type: array
           description: |
-            Every window scheduled for this component. A component can have several.
+            Every window that names this component. A component can have several.
 
-            On the **overall** component this is every window in the service, from any component.
-            Follow the overall component and you see all of the service's maintenance.
+            A provider schedules maintenance against the service and names the components it
+            touches, often naming none. On the **overall** component this is every window in the
+            service, which is where an unnamed one appears.
           items: { $ref: '#/components/schemas/MaintenanceWindow' }
         next_maintenance_window:
           allOf: [{ $ref: '#/components/schemas/MaintenanceWindow' }]

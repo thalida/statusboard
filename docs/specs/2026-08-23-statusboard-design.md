@@ -27,7 +27,7 @@ current state, read the provider's incident log, and browse a public view withou
 | Shared dashboards, invites | Sub-project #2. The `Dashboard` model exists with one row per user so sharing needs no migration. |
 | Community issue reporting, comments | Sub-project #3. The Figma set already contains `status dot - user reported`, a split-circle variant, so the dot component should accept a shape from day one. |
 | Notifications | Sub-project #2. The Figma set contains a `Toggle Notifications` button; nothing in v1 uses it. |
-| Uptime history charts | `StatusEvent` accumulates from first poll, so any chart is empty on day one. Ships when there is data. |
+| Uptime history charts | `ComponentStatus` accumulates from first poll, so any chart is empty on day one. Ships when there is data. |
 | Service categories | Cut deliberately. `is_featured` plus `watcher_count` orders the suggested list instead. |
 
 ### Non-goals
@@ -50,7 +50,7 @@ statusboard/
 │  ├─ authentication/      User, magic link
 │  ├─ catalog/             Service, ServiceComponent
 │  ├─ dashboards/          Dashboard, DashboardItem
-│  └─ status/              ComponentStatus, StatusEvent, Incident, PollRun, adapters/, tasks.py
+│  └─ status/              ComponentStatus, Incident, MaintenanceWindow, PollRun, adapters/, tasks.py
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
 ├─ justfile                infisical run --env=dev wrapping everything
 └─ docker-compose.yml      postgres 17, redis 7
@@ -90,14 +90,14 @@ erDiagram
     Service ||--|| StatusPage : "read from"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
-    ServiceComponent ||--|| ComponentStatus : "current state"
-    ServiceComponent ||--o{ StatusEvent : "history of"
-    ServiceComponent ||--o{ MaintenanceWindow : "scheduled on"
+    ServiceComponent ||--o{ ComponentStatus : "severity over time"
 
-    StatusPage ||--o{ PollRun : "attempts against"
+    Service ||--o{ PollRun : "attempts to read"
     Service ||--o{ Incident : "reported on"
+    Service ||--o{ MaintenanceWindow : "scheduled on"
     Incident ||--o{ IncidentUpdate : "log of"
     Incident }o--o{ ServiceComponent : affects
+    MaintenanceWindow }o--o{ ServiceComponent : affects
 ```
 
 Reading it:
@@ -106,8 +106,8 @@ Reading it:
   these, so the arrow from `DashboardItem` has one destination.
 - **`StatusPage` is separate from `Service`** because it is the *source*, and it is where the
   unique URL and the poller's state live.
-- **`ComponentStatus` is one row per component**, updated in place; `StatusEvent` is append-only
-  and written only on change. Board reads touch the first and never the second.
+- **`ComponentStatus` is append-only**, one row per severity change, with a partial unique index
+  marking the current one. Current state and history are the same table.
 - **`MaintenanceWindow` hangs off a component**, not a service — several per component if the
   provider schedules that way.
 - **`Incident` belongs to the service** and names the components it affects, which is why it is
@@ -241,10 +241,29 @@ where every add has two possible shapes.
 
 ### status
 
-- `ComponentStatus` — current state, one row per component, updated in place. Dashboard reads hit
-  only this table.
-- `StatusEvent` — append-only, written **only when a status changes**. Full history at a fraction
-  of the rows a per-poll snapshot would cost, and the trigger source for notifications later.
+- `ComponentStatus` — append-only, one row per severity change, with `is_current` marking the
+  live one. Current state and history in one table.
+
+  ```python
+  class Meta:
+      constraints = [
+          UniqueConstraint(fields=["component"], condition=Q(is_current=True),
+                           name="one_current_status_per_component"),
+      ]
+      indexes = [
+          Index(fields=["severity"], condition=Q(is_current=True), name="current_by_severity"),
+      ]
+  ```
+
+  A change flips the old row's `is_current` to false and inserts the new one. Nothing is written
+  when severity is unchanged, so a service that is fine all week costs no rows.
+
+  **The partial unique index makes "exactly one current row per component" a database
+  guarantee**, not something the polling code has to be careful about. The partial index on
+  `severity` is what keeps Discover fast: `WHERE is_current AND severity <= 3` filters the whole
+  catalogue without a latest-per-group query.
+
+  The manager defaults to `is_current=True`. A query that wants history asks for it by name.
 - `Incident` — FK to **`Service`**, upstream id, title, phase, started/resolved, M2M
   `affected_components`; `IncidentUpdate` child for the log
 
@@ -258,14 +277,32 @@ where every add has two possible shapes.
   which components, and `Component.latest_incident` is a **projection through it**, not a field.
   On the overall component it is the most recent incident anywhere in the service, which is what
   gives an unattributed incident somewhere to appear.
-- `MaintenanceWindow` — **hangs off a component, not a service**, and there can be several.
-  Providers schedule maintenance per component, and a service with three components under
-  maintenance has three windows with three different times. A service-level field would have to
-  pick one and lie about the rest, so the API exposes `Component.maintenance_windows[]` and
-  derives `Service.next_maintenance_window` as the soonest across them.
-- `PollRun` — per-attempt success/error against a `StatusPage`, so "everything is fine" is
-  distinguishable from "we have not successfully checked in six hours". `StatusPage` holds the
-  rolled-up state; `PollRun` holds the history.
+- `MaintenanceWindow` — FK to **`Service`**, M2M `affected_components`, `starts_at`, `ends_at`,
+  `summary`
+
+  **Shaped exactly like `Incident`, and for the same reason.** A provider publishes one scheduled
+  maintenance and names the components it touches — or names none, which is common: "Scheduled
+  maintenance, Sunday 02:00" against the whole service.
+
+  An FK to a component cannot hold that one. It would also need three rows for a window touching
+  three components, or an M2M anyway.
+
+  So `Component.maintenance_windows` is a **projection through the M2M**, not a field: the windows
+  naming that component. On the overall component it is every window in the service, which is
+  where an unattributed one appears.
+- `PollRun` — FK to **`Service`**, per-attempt success/error, plus the `url` and `provider` it
+  actually fetched
+
+  It answers "could we check Twilio", which outlives any particular page. A service that migrates
+  from Statuspage to Instatus keeps its history; an FK to `StatusPage` would be one cascade from
+  losing it.
+
+  The snapshotted `url` and `provider` are what makes that history still readable afterwards — a
+  run from before the migration says which page it read.
+
+  `StatusPage` holds the rolled-up state (`consecutive_failures`, `last_fetched_at`); `PollRun`
+  holds the attempts. This is what makes "everything is fine" distinguishable from "we have not
+  successfully checked in six hours".
 
 #### Four kinds of record, and how to tell them apart
 
@@ -274,23 +311,29 @@ it is and what it holds**.
 
 | model | whose | holds | written when |
 | --- | --- | --- | --- |
-| `ComponentStatus` | ours | the current severity | every poll, in place |
-| `StatusEvent` | ours | a severity change, no prose | only when severity changes |
+| `ComponentStatus` | ours | a severity, no prose | only when severity changes |
 | `IncidentUpdate` | **theirs** | a paragraph they wrote, and a phase | when the provider posts one |
-| `PollRun` | ours | did the fetch succeed | every attempt, success or failure |
+| `PollRun` | ours | did the fetch succeed, and of what URL | every attempt, success or failure |
 
-`StatusEvent` is us diffing two polls. `IncidentUpdate` is ingested verbatim, carrying the
+`ComponentStatus` is us diffing two polls. `IncidentUpdate` is ingested verbatim, carrying the
 provider's own `upstream_id`. They come apart constantly: a component flaps with no incident open
-and you get events but no updates; a provider posts "monitoring a fix" while every component reads
-operational and you get updates but no events.
+and you get status rows but no updates; a provider posts "monitoring a fix" while every component
+reads operational and you get updates but no status rows.
 
 `PollRun` is the third axis and is about neither — it records whether we could *read* the page. It
 is what makes "everything is fine" distinguishable from "we have not successfully checked in six
 hours", which look identical if you only store status.
 
-`ComponentStatus` is separate from `StatusEvent` for access, not principle. A board read is one
-indexed row per component. Against an append-only table it would be a latest-per-group query over
-something that grows forever — on the hottest path in the app.
+An earlier draft split current state and history into two tables, `ComponentStatus` and
+`StatusEvent`, so that filtering the catalogue by current severity had a small table to index. The
+partial index does that in one table, and removes the risk of the two disagreeing — there is only
+one write path now, and the unique constraint enforces the invariant that the two-table version
+asked the polling code to maintain.
+
+**Nothing is written on an unchanged poll.** A row per poll would be 12 components × 288 polls a
+day, about 630M rows a year across 500 services, nearly all identical to the row before them.
+"When did we last check" does not need to be there: `StatusPage.last_fetched_at` answers it,
+because one fetch covers every component of a service.
 
 ### Status and incidents are different things
 
