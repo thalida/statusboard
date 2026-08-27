@@ -63,7 +63,7 @@ what makes sharing a change to `dashboards` alone.
 
 - `uv`, `ruff` (`extend-select = ["I","F"]`), pre-commit with markdownlint and whitespace hooks
 - `django-unfold`, with per-environment static dirs and `ENVIRONMENT` callbacks
-- `drf-spectacular` + Scalar at `/admin/api-docs/` via `UnfoldModelAdminViewMixin`, with tag-group,
+- `drf-spectacular` + Scalar at `/docs/`, with tag-group,
   logo and schema-name postprocessing hooks and a markdown introduction
 - `dj-database-url`, `python-dotenv`, `psycopg2-binary`, `django-cors-headers`, `django-filter`
 - `django-simple-history` on `catalog` models only
@@ -627,7 +627,7 @@ One class per provider, same interface: given a URL, return normalised component
 
 Each exposes `fetch_status()` and `fetch_incidents()`. Adding provider #5 is one new class.
 
-`POST /api/catalog/import/` detects the provider from a pasted URL and creates the service.
+`POST /catalog/import/` detects the provider from a pasted URL and creates the service.
 
 ### Keeping names and component trees current
 
@@ -678,7 +678,7 @@ merely looks incomplete.
 
 **The contract is [`docs/api/openapi.yaml`](../api/openapi.yaml)** — 15 operations, 16 schemas,
 with every parameter and response shape. It is the single source of truth; drf-spectacular will
-generate it from the code, and it is served through Scalar at `/admin/api-docs/` like your other
+generate it from the code, and it is served through Scalar at `/docs/` like your other
 projects. This section records only the decisions behind it, so the two cannot drift.
 
 ### Identifiers

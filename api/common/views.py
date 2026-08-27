@@ -1,7 +1,5 @@
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.urls import reverse
-from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -39,13 +37,15 @@ class MetaView(APIView):
         )
 
 
-@method_decorator(staff_member_required, name="dispatch")
 class ApiDocsView(TemplateView):
-    """Scalar, inside the admin, reading the generated schema.
+    """Scalar at /docs/, reading the generated schema.
 
-    It lives here, not in its own `docs` app. The repository already has
-    a top-level `docs/` for the spec and the contract. A second thing
-    called docs would be one name for two ideas.
+    Public, because /schema/ already is. Gating the page while the
+    schema it renders stays open would protect nothing.
+
+    The view lives in `common`, not in a `docs` app. The repository has a
+    top-level `docs/` for the spec and the contract. A second thing called
+    docs would be one name for two ideas.
     """
 
     template_name = "common/api_docs.html"

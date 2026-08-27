@@ -27,18 +27,12 @@ def _paths(schema):
 
 
 def test_every_documented_operation_exists_in_the_code(committed, generated):
-    documented = {op.replace(" /", " /api/") for op in _paths(committed)}
-    missing = documented - _paths(generated)
+    missing = _paths(committed) - _paths(generated)
     assert not missing, f"documented but not implemented: {sorted(missing)}"
 
 
 def test_no_operation_exists_that_the_contract_does_not_document(committed, generated):
-    documented = {op.replace(" /", " /api/") for op in _paths(committed)}
-    extra = {
-        p
-        for p in _paths(generated)
-        if p.startswith(("GET /api/", "POST /api/", "DELETE /api/"))
-    } - documented
+    extra = _paths(generated) - _paths(committed)
     assert not extra, f"implemented but undocumented: {sorted(extra)}"
 
 

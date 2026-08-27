@@ -113,7 +113,6 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "statusboard",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    "SCHEMA_PATH_PREFIX": "/api",
     "COMPONENT_SPLIT_REQUEST": True,
     "TAGS": [
         {"name": "meta"},
