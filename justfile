@@ -59,6 +59,10 @@ test-cov:
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
 
+# Run the server and the poller together. Ctrl-C stops both.
+dev:
+    @trap 'kill 0' EXIT INT TERM ; just worker & just serve
+
 # Run the dev server on this worktree's port.
 serve:
     @{{wt}} ; echo "http://localhost:$DJANGO_PORT/" ; \

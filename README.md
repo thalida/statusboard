@@ -12,13 +12,14 @@
 
 ```bash
 just init
-just serve
+just dev
 ```
 
 `just init` starts the services, installs dependencies, applies migrations,
 seeds the dev admin, and installs the pre-commit hooks.
 
-`just serve` prints the URL.
+`just dev` runs the server and the poller, and prints the URL. Without the
+poller nothing refreshes.
 
 Run `just` on its own to list every recipe.
 
