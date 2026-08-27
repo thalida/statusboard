@@ -42,6 +42,4 @@ ignore = ["RUF012"]
 DJANGO_SETTINGS_MODULE = "api.settings"
 python_files = ["test_*.py"]
 addopts = "--cov=. --cov-report=term-missing"
-# The gate lives in `just test-cov`, not here. In addopts it fails every run
-# until coverage crosses 85%, which is not until the last task — so the
-# everyday command would be red for the whole build.
+# The gate is in `just test-cov`. Here it fails every run until the last task.

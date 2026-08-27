@@ -167,14 +167,14 @@ dev = [
 
 [tool.ruff.lint]
 extend-select = ["I", "F"]
+# Django Meta requires lists: ordering, constraints, indexes, list_display.
+ignore = ["RUF012"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "api.settings"
 python_files = ["test_*.py"]
 addopts = "--cov=. --cov-report=term-missing"
-# The gate lives in `just test-cov`, not here. In addopts it fails every run
-# until coverage crosses 85%, which is not until the last task — so the
-# everyday command would be red for the whole build.
+# The gate is in `just test-cov`. Here it fails every run until the last task.
 ```
 
 - [ ] **Step 4: Write `docker-compose.yml`**
@@ -553,8 +553,8 @@ def test_lower_severity_is_worse():
 
 
 def test_unknown_sorts_with_the_problems_not_the_healthy():
-    # A service we cannot reach belongs with the problems. This is what makes
-    # `severity <= 3` mean "needs attention" without naming a band.
+    # A service we cannot reach belongs with the problems.
+    # This makes `severity <= 3` mean "needs attention".
     needs_attention = [s for s in Severity if s <= 3]
     assert Severity.UNKNOWN in needs_attention
     assert Severity.MAINTENANCE not in needs_attention
@@ -642,8 +642,7 @@ EVENT_PHASES_BY_KIND = {
     EventKind.MAINTENANCE: MaintenancePhase,
 }
 
-# A phase that means the event is over. Everything else is open, which is what
-# `?event=` filters on and what active_incident_count counts.
+# A closed phase means the event is over. All other phases are open.
 CLOSED_PHASES = frozenset({IncidentPhase.RESOLVED, MaintenancePhase.COMPLETED})
 OPEN_INCIDENT_PHASES = frozenset(set(IncidentPhase) - CLOSED_PHASES)
 ```
@@ -829,11 +828,10 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'common.mixins'`
 
 ```python
 class FieldsMixin:
-    """Prune serializer fields from ?fields=.
+    """Prune serializer fields from `?fields=`.
 
-    A dotted path prunes inside a nested serializer rather than dropping it, so
-    ?fields=id,status.severity returns id and a status object holding only severity.
-    Set `fields_param = None` on a serializer that must always return its full shape.
+    A dotted path prunes inside a nested serializer. It does not drop it.
+    Set `fields_param = None` to always return the full shape.
     """
 
     fields_param = "fields"
@@ -875,10 +873,9 @@ from rest_framework.filters import BaseFilterBackend
 
 
 class FieldsBackend(BaseFilterBackend):
-    """Declares ?fields= so drf-spectacular documents it on every operation.
+    """Declare `?fields=` for drf-spectacular.
 
-    FieldsMixin does the pruning; this exists only so the parameter appears in
-    the schema without an @extend_schema on each view.
+    `FieldsMixin` does the pruning. This adds the parameter to every operation.
     """
 
     def filter_queryset(self, request, queryset, view):
@@ -904,8 +901,8 @@ class FieldsBackend(BaseFilterBackend):
 class AggregateSet:
     """Values computed over the whole collection, not the page.
 
-    An endpoint subclasses this and adds its own. Nothing collection-wide belongs
-    at the top level of a response; it belongs here.
+    An endpoint subclasses this and adds its own.
+    Put every collection-wide value here, never at the top level.
     """
 
     def __init__(self, queryset):
@@ -1013,8 +1010,7 @@ from authentication.models import MagicLinkToken, User
 
 @pytest.mark.django_db
 def test_user_has_no_usable_password():
-    # There is no password flow at all. A user who cannot be signed in by password
-    # cannot be phished for one either.
+    # There is no password flow. A user with no password cannot be phished for one.
     user = User.objects.create(email="a@b.com")
     assert user.has_usable_password() is False
     assert User.USERNAME_FIELD == "email"
@@ -1334,8 +1330,8 @@ from tests.factories import ComponentFactory, ServiceFactory
 
 @pytest.mark.django_db
 def test_a_component_is_identified_by_external_id_not_by_name():
-    # Names change; provider ids do not. Matching on name would orphan a tracked
-    # row the first time a provider edits its wording.
+    # Names change. Provider ids do not.
+    # A name match orphans a tracked row on the first rename.
     service = ServiceFactory()
     ComponentFactory(service=service, external_id="abc", name="SMS")
     with pytest.raises(IntegrityError):
@@ -1373,8 +1369,8 @@ def test_a_service_can_override_the_interval():
 
 @pytest.mark.django_db
 def test_a_component_can_be_archived_rather_than_deleted():
-    # Someone may be tracking it. Deleting the row would silently remove it from
-    # their board; archiving keeps it rendering as unknown.
+    # Someone may track this component.
+    # Deletion removes it from their board with no warning.
     component = ComponentFactory(archived_at=None)
     assert Service.objects.count() == 1
     component.archived_at = "2026-08-26T00:00:00Z"
@@ -1578,8 +1574,7 @@ from tests.factories import ComponentFactory, ServiceFactory
 
 @pytest.mark.django_db
 def test_a_component_has_at_most_one_open_status():
-    # The open row is the current one. Two would make "current" ambiguous and
-    # every read would need a tiebreak.
+    # The open row is the current one. Two open rows make every read ambiguous.
     component = ComponentFactory()
     ComponentStatus.objects.create(
         component=component,
@@ -1647,8 +1642,8 @@ def test_a_matching_phase_validates():
 
 @pytest.mark.django_db
 def test_an_event_may_name_no_component_at_all():
-    # "Scheduled maintenance, Sunday 02:00" is published against the service.
-    # An FK to a component could not hold it.
+    # A provider publishes some events against the service.
+    # A component FK cannot hold them.
     event = ServiceEvent.objects.create(
         service=ServiceFactory(),
         external_id="1",
@@ -1678,10 +1673,9 @@ from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSour
 
 
 class ComponentStatus(BaseModel):
-    """One row per severity span. The open row — ended_at null — is the current one.
+    """One row per severity span. The open row is the current one.
 
-    Every poll appends rather than overwrites, so the history is the table and
-    'when did this change' needs no separate log.
+    A poll appends. It never overwrites. The table is the history.
     """
 
     component = models.ForeignKey(
@@ -1710,9 +1704,9 @@ class ComponentStatus(BaseModel):
 
 
 class ServiceEvent(BaseModel):
-    """A provider's narrative record — an incident or a scheduled maintenance.
+    """A provider's record of an incident or a maintenance window.
 
-    Providers publish both as one object with a type, so this is one model with a kind.
+    Providers publish both as one object. This is one model with a `kind`.
     """
 
     service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="events")
@@ -1752,8 +1746,10 @@ class EventUpdate(BaseModel):
 
 
 class PollRun(BaseModel):
-    """One attempt. url and provider are snapshots so a historical row stays
-    readable after a service changes status page."""
+    """One attempt. `url` and `provider` are snapshots.
+
+    A service can change status page. The old row stays readable.
+    """
 
     poller = models.ForeignKey(Poller, on_delete=models.CASCADE, related_name="runs")
     url = models.URLField()
@@ -1847,8 +1843,7 @@ def test_a_component_is_tracked_once_per_dashboard():
 
 @pytest.mark.django_db
 def test_an_item_carries_no_position():
-    # Order is a query, not a stored column. Sorting is server-side by severity
-    # or name, and a stored position would need rewriting on every insert.
+    # Order is a query, not a column. A stored position needs a rewrite on every insert.
     assert not hasattr(DashboardItem, "position")
 ```
 
@@ -1998,8 +1993,7 @@ def test_detect_picks_the_provider_from_the_url(url, expected):
 
 
 def test_anything_unrecognised_falls_back_to_rss():
-    # RSS is the fallback rather than an error: a feed is still data, and a
-    # service we can read incidents from is better than one we cannot add.
+    # RSS is the fallback, not an error. A feed is still data.
     assert detect("https://weird.example.org/status").provider == StatusPageProvider.RSS
 
 
@@ -2060,10 +2054,10 @@ class NormalisedEvent:
 
 
 class Adapter(ABC):
-    """One class per provider, same interface.
+    """One class per provider. One interface.
 
-    Given a URL, return normalised components and events. Nothing downstream
-    learns which provider produced them, so adding provider #5 is one new class.
+    Read a URL. Return normalised components and events.
+    Nothing downstream knows the provider, so a new provider is one new class.
     """
 
     provider: str = ""
@@ -2260,8 +2254,8 @@ def test_it_returns_one_overall_component(adapter):
 
 
 def test_the_overall_component_uses_the_providers_own_indicator(adapter):
-    # Never the worst of its components — a worst-of rollup leaves a large
-    # service permanently orange, because something among 109 components always is.
+    # Use the provider's own indicator.
+    # A worst-of-components rollup leaves a large service always orange.
     overall = next(c for c in adapter.fetch_status() if c.is_overall)
     assert overall.severity in {s.value for s in Severity}
 
@@ -2775,8 +2769,11 @@ OPEN_WINDOW_HOURS = 24
 
 
 class RSSAdapter(Adapter):
-    """The fallback. A feed has no component list, so severity comes from
-    whether an incident is open — which is what StatusSource.INCIDENTS records."""
+    """The fallback adapter.
+
+    A feed has no component list. Severity comes from any open incident.
+    `StatusSource.INCIDENTS` records this.
+    """
 
     provider = StatusPageProvider.RSS
     status_source = StatusSource.INCIDENTS
@@ -3008,9 +3005,9 @@ from status.models import ComponentStatus, EventUpdate, ServiceEvent
 def apply_fetch(service, components, events, source):
     """Write one adapter fetch to the database.
 
-    A poll is a reconciliation, not a status read: components are upserted on the
-    provider's external_id, vanished ones are archived rather than deleted, and a
-    severity that has not changed leaves the open status row alone.
+    A poll is a reconciliation, not a status read.
+    Components upsert on `external_id`. Vanished ones archive.
+    An unchanged severity leaves the open status row alone.
     """
     rows = _upsert_components(service, components)
     _archive_vanished(service, components)
@@ -3135,8 +3132,7 @@ from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 @pytest.mark.django_db
 def test_only_watched_services_are_due():
-    # Polling a service nobody tracks spends our budget on somebody else's server
-    # for no reader.
+    # Poll only what someone tracks. Other polls have no reader.
     watched = PollerFactory(service=ServiceFactory(watcher_count=1))
     PollerFactory(service=ServiceFactory(watcher_count=0))
     assert list(due_pollers()) == [watched]
@@ -3285,8 +3281,11 @@ JITTER = 0.1
 
 
 def next_interval_seconds(base, failures, ceiling):
-    """Exponential backoff. A service in backoff is not being checked every five
-    minutes, and that is precisely the service someone opens to ask why."""
+    """Exponential backoff.
+
+    A service in backoff is not checked every five minutes.
+    The service screen shows this interval, not the deployment default.
+    """
     return min(base * (2**failures), ceiling)
 
 
@@ -3330,9 +3329,8 @@ def poll_service(service_id):
         apply_fetch(service, components, events, source)
         _refresh_metadata(service, metadata)
     except Exception as error:  # noqa: BLE001 — every failure is recorded, never raised away
-        # A failed fetch never clobbers the last known value. apply_fetch is not
-        # called, so the open status rows stand and the UI shows how long it has
-        # been stale.
+        # A failed fetch keeps the last known value.
+        # `apply_fetch` does not run, so the open rows stand.
         poller.consecutive_failure_count += 1
         run.ok, run.error = False, str(error)
     else:
@@ -3515,8 +3513,7 @@ def test_a_dotted_field_path_prunes_inside_a_nested_object():
 
 @pytest.mark.django_db
 def test_active_incident_excludes_resolved_ones():
-    # A resolved incident beside a count of unresolved ones would put "+0 more"
-    # against something already over.
+    # A resolved incident with a count of unresolved ones shows "+0 more".
     service = ServiceFactory()
     StatusPageFactory(service=service)
     component = _with_status(service, Severity.OPERATIONAL, is_overall=True)
@@ -3614,8 +3611,10 @@ class StatusSerializer(FieldsMixin, serializers.ModelSerializer):
 
 
 class EventRefSerializer(FieldsMixin, serializers.ModelSerializer):
-    """An event as it appears on a component. No updates array, so a list row
-    costs one title and not a log."""
+    """An event as it appears on a component.
+
+    There is no `updates` array. A list row costs one title, not a log.
+    """
 
     class Meta:
         model = ServiceEvent
@@ -3694,8 +3693,10 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
         ]
 
     def _events(self, row, kind):
-        """Scoped to what is still live. A count over a wider set than the item
-        beside it produces '+3 more' pointing at nothing a screen can reach."""
+        """Scope to what is still live.
+
+        A wider count than the item beside it shows "+3 more" for nothing.
+        """
         queryset = row.events.filter(kind=kind).exclude(phase__in=CLOSED_PHASES)
         if kind == EventKind.MAINTENANCE:
             queryset = queryset.filter(ends_at__isnull=True) | queryset.filter(
@@ -4093,10 +4094,8 @@ def test_a_resolved_incident_does_not_put_a_row_on_the_incidents_tab(client, boa
 
 @pytest.mark.django_db
 def test_the_event_filter_binds_both_conditions_to_the_same_event(client, board):
-    # ServiceEvent and ServiceComponent are many-to-many. Two generated
-    # parameters would apply as two .filter() calls and could be satisfied by
-    # two different events, so a component with one closed incident and one
-    # running maintenance would match event=incident. It must not.
+    # `ServiceEvent` and `ServiceComponent` are many-to-many.
+    # Two parameters filter twice and can match two different events.
     component = _track(board)
     _event(component, EventKind.INCIDENT, IncidentPhase.RESOLVED, ends_at=timezone.now())
     _event(component, EventKind.MAINTENANCE, MaintenancePhase.IN_PROGRESS)
@@ -4108,8 +4107,8 @@ def test_the_event_filter_binds_both_conditions_to_the_same_event(client, board)
 def test_scheduled_maintenance_appears_on_the_maintenance_tab_while_reading_operational(
     client, board
 ):
-    # A window three days out leaves the component at severity 5, so severity
-    # cannot select it. That is why the tab filters on the event, not the status.
+    # A window three days out leaves severity 5.
+    # Severity cannot select it, so the tab filters on the event.
     component = _track(board, severity=Severity.OPERATIONAL)
     _event(
         component, EventKind.MAINTENANCE, MaintenancePhase.SCHEDULED,
@@ -4123,8 +4122,8 @@ def test_scheduled_maintenance_appears_on_the_maintenance_tab_while_reading_oper
 
 @pytest.mark.django_db
 def test_one_fetch_fills_every_chip(client, board):
-    # All, Incidents and Maintenance must all be answerable from one response,
-    # or the client makes a request per chip before it can draw the chips.
+    # One response must fill all three chips.
+    # Otherwise the client makes a request per chip.
     broken = _track(board, severity=Severity.MAJOR_OUTAGE)
     _event(broken, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
     planned = _track(board)
@@ -4216,10 +4215,10 @@ from status.choices import CLOSED_PHASES, EventKind
 class BoardComponentFilter(filters.FilterSet):
     """`event` is declared, not generated.
 
-    ServiceEvent and ServiceComponent are many-to-many. django-filter applies each
-    parameter as its own .filter() call, and on a many-to-many every call joins the
-    relation again — so ?events__kind=incident&events__phase__in=... lets the two
-    conditions land on two different events. They have to sit in one call.
+    `ServiceEvent` and `ServiceComponent` are many-to-many.
+    django-filter applies each parameter as its own `.filter()` call.
+    On a many-to-many, each call joins again and can match a different event.
+    Both conditions must sit in one call.
     """
 
     event = filters.ChoiceFilter(choices=EventKind.choices, method="filter_event")
