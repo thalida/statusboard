@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "simple_history",
     "django_celery_beat",
+    "rest_framework_simplejwt.token_blacklist",
     "common",
     "authentication",
     "catalog",
@@ -85,6 +86,11 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
     "PAGE_SIZE": 50,
+}
+
+SIMPLE_JWT = {
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

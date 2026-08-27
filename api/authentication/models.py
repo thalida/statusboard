@@ -1,14 +1,68 @@
-# Task 1 placeholder. Task 5 replaces it with the real User model.
-#
-# AUTH_USER_MODEL must resolve to a real class before django.setup() runs.
-# unfold and django.contrib.admin both import django.contrib.auth.forms.
-# That module calls get_user_model() at import time.
-#
-# AbstractBaseUser, not AbstractUser: it carries no auth.Group relations.
-# This app has no migrations package, so pytest-django syncs its table
-# directly. auth_group does not exist yet at that point.
-from django.contrib.auth.models import AbstractBaseUser
+import secrets
+from datetime import timedelta
+
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
+from django.db import models
+from django.utils import timezone
+
+from common.models import BaseModel
+
+MAGIC_LINK_TTL = timedelta(minutes=15)
 
 
-class User(AbstractBaseUser):
-    pass
+def _unusable_password():
+    # Give every new row an unusable password, even outside `create_user`.
+    return make_password(None)
+
+
+class UserManager(BaseUserManager):
+    def create_user(self, email, **extra):
+        user = self.model(email=self.normalize_email(email), **extra)
+        user.set_unusable_password()
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, **extra):
+        extra.setdefault("is_staff", True)
+        extra.setdefault("is_superuser", True)
+        return self.create_user(email, **extra)
+
+
+class User(BaseModel, AbstractBaseUser, PermissionsMixin):
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=128, default=_unusable_password)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    last_active_at = models.DateTimeField(null=True, blank=True)
+
+    objects = UserManager()
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    class Meta(BaseModel.Meta):
+        abstract = False
+
+    def __str__(self):
+        return self.email
+
+
+class MagicLinkToken(BaseModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="magic_links")
+    token = models.CharField(max_length=64, unique=True, default=secrets.token_urlsafe)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        # Set the expiry only on first save. A later save must not extend it.
+        if not self.expires_at:
+            self.expires_at = timezone.now() + MAGIC_LINK_TTL
+        super().save(*args, **kwargs)
+
+    @property
+    def is_usable(self):
+        return self.used_at is None and self.expires_at > timezone.now()
