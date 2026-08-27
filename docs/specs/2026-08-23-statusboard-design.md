@@ -737,7 +737,8 @@ public view.
 ### Components are their own collection
 
 Cloudflare publishes 109 and nothing caps that, so the service detail reports `component_count`
-and the Components tab pages through `/components/`. Its `aggregates` gives the tab labels. A
+and the Components tab pages through `/components/`. The tab labels come from the service —
+`component_count` and `tracked_component_count` — not from `aggregates`. A
 component is a group when `child_count > 0`; there is no separate flag.
 
 ### Filtering, sorting and pagination are server-side, without exception
@@ -876,8 +877,12 @@ third key, and a client could not read them generically.
 
 `Aggregates` defines the floor — `total`, present everywhere, so it can be read without knowing
 which endpoint produced it. An endpoint extends rather than replaces: `StatusAggregates` adds the
-severity histogram, the tracked count and `oldest_refreshed_at`; `IncidentAggregates` adds a phase
-histogram. A new list endpoint declares its own subclass and the envelope never changes shape.
+severity histogram and `oldest_refreshed_at`; `EventAggregates` adds histograms by kind and phase.
+
+**An aggregate has to mean the same thing on every endpoint that returns it.** A `tracked` count
+was dropped for failing that: on a service's components it duplicated
+`Service.tracked_component_count`, and on the board it always equalled `total`, because everything
+on a board is tracked by definition. Either a duplicate or a tautology, depending on the caller. A new list endpoint declares its own subclass and the envelope never changes shape.
 
 In DRF this is one pagination class emitting the three keys, with each viewset supplying
 `get_aggregates(queryset)` — so adopting the shape is a method, not a new response schema.

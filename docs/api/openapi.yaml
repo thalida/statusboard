@@ -566,7 +566,6 @@ components:
               type: object
               additionalProperties: { type: integer }
               description: 'Keys are severities 0–5, so the client composes any chip without a new parameter.'
-            tracked: { type: integer, nullable: true, description: Authenticated only. }
             oldest_refreshed_at:
               type: string
               format: date-time
@@ -880,11 +879,6 @@ components:
           description: |
             Exactly one dashboard per user has this. `GET /me/` returns its id, so a client can
             reach it without listing.
-        aggregates:
-          allOf: [{ $ref: '#/components/schemas/StatusAggregates' }]
-          description: |
-            The same block the board's list returns. Draw the chips before the first page
-            arrives. `aggregates` means the same on a resource as on a list.
     TrackedComponent:
       allOf:
         - $ref: '#/components/schemas/Component'
