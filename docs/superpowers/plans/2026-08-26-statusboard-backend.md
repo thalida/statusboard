@@ -196,7 +196,15 @@ volumes:
 - [ ] **Step 5: Write `api/api/settings.py`**
 
 The `AUTH_USER_MODEL` line is what the smoke test asserts. `authentication` is listed here before
-it exists; Task 4 creates it, so run migrations only from Task 4 onward.
+it exists. Task 5 creates the real model, so run migrations only from Task 5 onward.
+
+**`django.setup()` will not start without a resolvable `AUTH_USER_MODEL`.** `unfold` and
+`django.contrib.admin` both reach `django.contrib.auth.forms`, which calls `get_user_model()` at
+import time, so a missing `authentication.User` crashes before pytest collects anything. Create
+`api/authentication/models.py` holding a placeholder `class User(AbstractBaseUser): pass`, and do
+**not** create `api/authentication/migrations/` — an empty migrations package makes
+`admin.LogEntry`'s `swappable_dependency` resolve to a rootless node and the test database fails
+to build. Task 5 replaces the placeholder and creates the migrations package properly.
 
 ```python
 import os
