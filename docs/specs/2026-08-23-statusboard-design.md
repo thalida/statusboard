@@ -138,7 +138,7 @@ erDiagram
         uuid id PK
         uuid service_id FK "one-to-one"
         url url UK "normalised, dedupe key"
-        string provider "statuspage|instatus|betterstack|rss"
+        enum provider "TextChoices"
         url api_url
         datetime last_fetched_at
         datetime next_poll_at
@@ -160,24 +160,24 @@ erDiagram
     ComponentStatus {
         uuid id PK
         uuid component_id FK
-        int severity "0 worst - 5 operational"
-        string source "provider|components|incidents"
+        enum severity "IntegerChoices, 0 worst"
+        enum source "TextChoices"
         datetime started_at
-        bool is_current "partial unique per component"
+        datetime ended_at "null while current, partial unique"
     }
     Incident {
         uuid id PK
         uuid service_id FK
         string external_id "unique with service"
         string title
-        string phase "investigating|identified|monitoring|resolved"
+        enum phase "TextChoices"
         datetime started_at
         datetime resolved_at
     }
     IncidentUpdate {
         uuid id PK
         uuid incident_id FK
-        string phase
+        enum phase "TextChoices"
         text body "written by the provider"
         datetime posted_at
     }
@@ -193,7 +193,7 @@ erDiagram
         uuid id PK
         uuid service_id FK
         url url "snapshot, survives a migration"
-        string provider "snapshot"
+        enum provider "snapshot"
         datetime started_at
         datetime finished_at
         bool ok
@@ -400,29 +400,35 @@ where every add has two possible shapes.
 
 ### status
 
-- `ComponentStatus` — append-only, one row per severity change, with `is_current` marking the
-  live one. Current state and history in one table.
+- `ComponentStatus` — append-only, one row per severity change. Each row is an interval:
+  `started_at`, and `ended_at` which is null while it is the live one.
 
   ```python
   class Meta:
       constraints = [
-          UniqueConstraint(fields=["component"], condition=Q(is_current=True),
-                           name="one_current_status_per_component"),
+          UniqueConstraint(fields=["component"], condition=Q(ended_at__isnull=True),
+                           name="one_open_status_per_component"),
       ]
       indexes = [
-          Index(fields=["severity"], condition=Q(is_current=True), name="current_by_severity"),
+          Index(fields=["severity"], condition=Q(ended_at__isnull=True), name="open_by_severity"),
       ]
   ```
 
-  A change flips the old row's `is_current` to false and inserts the new one. Nothing is written
-  when severity is unchanged, so a service that is fine all week costs no rows.
+  A change stamps `ended_at` on the open row and inserts a new one. Nothing is written when
+  severity is unchanged, so a service that is fine all week costs no rows.
 
-  **The partial unique index makes "exactly one current row per component" a database
-  guarantee**, not something the polling code has to be careful about. The partial index on
-  `severity` is what keeps Discover fast: `WHERE is_current AND severity <= 3` filters the whole
-  catalogue without a latest-per-group query.
+  **`ended_at IS NULL` is the only definition of "current".** An earlier draft carried an
+  `is_current` boolean as well, which is two columns for one fact and two things to disagree.
 
-  The manager defaults to `is_current=True`. A query that wants history asks for it by name.
+  A closed row is then a self-contained interval. "Was it degraded at 14:00" is
+  `started_at <= T < ended_at`, an index-friendly range query, and uptime is a sum of durations —
+  neither needs a window function nor a lookahead to the next row.
+
+  The partial unique index makes "exactly one open row per component" a database guarantee. The
+  partial index on `severity` keeps Discover fast: `WHERE ended_at IS NULL AND severity <= 3`
+  filters the whole catalogue without a latest-per-group query.
+
+  The manager defaults to the open row. A query that wants history asks for it by name.
 - `Incident` — FK to **`Service`**, upstream id, title, phase, started/resolved, M2M
   `affected_components`; `IncidentUpdate` child for the log
 
@@ -509,6 +515,19 @@ They move independently. A provider can be `monitoring` a fix while every compon
 `operational`, and can report `degraded` with no incident open at all. Statusboard shows both and
 never infers one from the other — which is why the service screen has separate Components and
 Incidents tabs rather than one merged list.
+
+### Every fixed set is a choices class
+
+`severity` is `models.IntegerChoices`; `status.source`, `status_page.provider` and `incident.phase`
+are `models.TextChoices`. None of them is a bare string with values enforced by convention.
+
+That is what lets a set grow in one place. Adding a provider means one line in the class, and
+Django, drf-spectacular and the admin all pick it up — the OpenAPI `enum`, the admin filter and the
+validation come from the same declaration. `severity` as `IntegerChoices` also puts the labels next
+to the numbers, which is where `/meta/` reads them from.
+
+The `PollRun.provider` snapshot uses the same class, so a historical row is readable against the
+current vocabulary rather than being a loose string nobody validates.
 
 ### Normalised status
 

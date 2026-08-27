@@ -51,7 +51,7 @@ info:
     | --- | --- |
     | `Service.status_page` | `OneToOneField` |
     | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
-    | `Component.status` | the `ComponentStatus` row where `is_current` |
+    | `Component.status` | the `ComponentStatus` row where `ended_at` is null |
     | `Component.maintenance_windows` | reverse M2M from `MaintenanceWindow` |
     | `Component.latest_incident` | newest across the reverse M2M from `Incident` |
     | `Incident.updates` | reverse FK from `IncidentUpdate` |
@@ -595,15 +595,26 @@ components:
       description: |
         The state the provider reports now.
 
-        `ComponentStatus` is append-only, one row per severity change. This is the current row.
+        `ComponentStatus` is append-only, one row per severity change. Each row is an interval;
+        this is the open one, where `ended_at` is null.
+
         It is unrelated to incident phase.
       properties:
-        severity: { type: integer, minimum: 0, maximum: 5, description: Lower is worse. Render the label from /meta/ severity_labels. }
+        severity:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: |
+            Lower is worse. An `IntegerChoices` class, which is where `/meta/severity_labels` gets
+            its labels. Render from there, not from a copy in the client.
         source:
           type: string
           enum: [provider, components, incidents]
           description: |
             Where this severity comes from.
+
+            A `TextChoices` class, so a new value is one line and reaches the schema, the admin
+            and validation together.
 
             `provider` — the provider publishes this status. Trust it.
 
