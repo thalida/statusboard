@@ -10,6 +10,9 @@ init:
 test:
     cd api && uv run pytest -n auto
 
+test-cov:
+    cd api && uv run pytest -n auto --cov-fail-under=85
+
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
 

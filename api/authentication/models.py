@@ -1,4 +1,4 @@
-# Task 1 placeholder — Task 4 replaces this with the real User model.
+# Task 1 placeholder — Task 5 replaces this with the real User model.
 #
 # AUTH_USER_MODEL = "authentication.User" must resolve to an actual model class as
 # soon as Django's app registry populates: django-unfold's app config eagerly
@@ -14,7 +14,7 @@
 # subclass here would need auth_group to already exist when that sync runs, which it
 # doesn't yet since sync-created tables are built before migrated apps' tables.
 #
-# Task 4 should replace this file's contents outright with the real model.
+# Task 5 should replace this file's contents outright with the real model.
 from django.contrib.auth.models import AbstractBaseUser
 
 
