@@ -3400,8 +3400,119 @@ git commit -m "feat: poll on one global schedule with backoff and jitter"
 
 **Files:**
 - Create: `api/status/serializers.py`, `api/catalog/serializers.py`, `api/catalog/filters.py`,
-  `api/catalog/views.py`, `api/catalog/urls.py`, `api/common/aggregates.py` (extend)
-- Test: `api/tests/test_catalog_api.py`
+  `api/catalog/views.py`, `api/catalog/urls.py`, `api/common/ordering.py`,
+  `api/common/aggregates.py` (extend)
+- Test: `api/tests/test_catalog_api.py`, `api/tests/test_ordering.py`
+
+**Ordering needs a translation layer. Build it first.**
+
+`CursorPagination.get_ordering` asserts `'__' not in ordering`. The contract's ordering
+enums promise `overall_component__status__severity`, `status__severity`, and two values that
+are not fields at all — `suggested` and `next_transition`. All four need translating to a
+flat field before they reach the paginator.
+
+Create `api/common/ordering.py`:
+
+```python
+from rest_framework.filters import OrderingFilter
+
+
+class MappedOrderingFilter(OrderingFilter):
+    """Translate a public ordering value to a flat field.
+
+    A cursor cannot order on a related path or on a name that is not a field.
+    A view declares `ordering_map` and annotates the flat field it names.
+    """
+
+    def remove_invalid_fields(self, queryset, fields, view, request):
+        mapping = getattr(view, "ordering_map", {})
+        allowed = set(getattr(view, "ordering_fields", ())) | set(mapping)
+        out = []
+        for term in fields:
+            name = term.lstrip("-")
+            if name not in allowed:
+                continue
+            for mapped in mapping.get(name, [name]):
+                out.append(f"-{mapped}" if term.startswith("-") else mapped)
+        return out
+```
+
+Every list view in this task and Task 16 puts `MappedOrderingFilter` in `filter_backends`,
+declares `ordering_map`, and annotates the flat fields. The severity annotation is the same
+subquery everywhere:
+
+```python
+from django.db.models import OuterRef, Subquery
+
+from status.models import ComponentStatus
+
+CURRENT_SEVERITY = Subquery(
+    ComponentStatus.objects.filter(
+        component=OuterRef("pk"), ended_at__isnull=True
+    ).values("severity")[:1]
+)
+```
+
+`next_transition` sorts the Maintenance tab. It is `ends_at` for a running window and
+`starts_at` for one that has not started, so it is also an annotation:
+
+```python
+from django.db.models.functions import Coalesce
+
+NEXT_TRANSITION = Coalesce(
+    Subquery(
+        ServiceEvent.objects.filter(
+            affected_components=OuterRef("pk"),
+            kind=EventKind.MAINTENANCE,
+            ends_at__isnull=False,
+        ).order_by("ends_at").values("ends_at")[:1]
+    ),
+    Subquery(
+        ServiceEvent.objects.filter(
+            affected_components=OuterRef("pk"),
+            kind=EventKind.MAINTENANCE,
+        ).order_by("starts_at").values("starts_at")[:1]
+    ),
+)
+```
+
+Put `CURRENT_SEVERITY`, `NEXT_TRANSITION` and `MappedOrderingFilter` in
+`api/common/ordering.py` so Tasks 15 and 16 share one definition.
+
+Write `api/tests/test_ordering.py` proving the translation:
+
+```python
+import pytest
+from django.urls import reverse
+from rest_framework.test import APIClient
+
+from status.choices import Severity
+from tests.factories import ServiceFactory, StatusPageFactory
+
+
+@pytest.mark.django_db
+def test_a_related_path_ordering_does_not_reach_the_paginator(client_helpers=None):
+    # CursorPagination asserts '__' not in ordering. The map keeps it flat.
+    from common.ordering import MappedOrderingFilter
+
+    view = type("V", (), {
+        "ordering_fields": ["name"],
+        "ordering_map": {"status__severity": ["severity_now"]},
+    })()
+    out = MappedOrderingFilter().remove_invalid_fields(
+        None, ["-status__severity"], view, None
+    )
+    assert out == ["-severity_now"]
+    assert all("__" not in term for term in out)
+
+
+def test_an_unmapped_unknown_value_is_dropped():
+    from common.ordering import MappedOrderingFilter
+
+    view = type("V", (), {"ordering_fields": ["name"], "ordering_map": {}})()
+    assert MappedOrderingFilter().remove_invalid_fields(None, ["nonsense"], view, None) == []
+```
+
 
 **Interfaces:**
 - Consumes: `FieldsMixin`, `EnvelopePagination`, `AggregateSet` (Task 4); all models.
@@ -3841,15 +3952,18 @@ class EventAggregateSet(AggregateSet):
 
 ```python
 # api/catalog/views.py
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters import rest_framework as filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
 from catalog.models import Service, ServiceComponent
 from catalog.serializers import ComponentSerializer, ServiceSerializer
 from common.aggregates import EventAggregateSet, StatusAggregateSet
-from status.models import ServiceEvent
+from common.filters import FieldsBackend
+from common.ordering import CURRENT_SEVERITY, MappedOrderingFilter
+from status.models import ComponentStatus, ServiceEvent
 
 
 class ServiceAggregateSet(StatusAggregateSet):
@@ -3887,14 +4001,26 @@ class ServiceListView(generics.ListAPIView):
     serializer_class = ServiceSerializer
     aggregate_set = ServiceAggregateSet
     filterset_class = ServiceFilter
+    filter_backends = [DjangoFilterBackend, MappedOrderingFilter, FieldsBackend]
     search_fields = ["name", "slug"]
-    ordering_fields = ["name", "watcher_count", "created_at"]
-    queryset = Service.objects.select_related("status_page", "poller").prefetch_related(
-        "components__statuses"
-    )
+    ordering_fields = ["name", "updated_at"]
+    # `suggested` is not a field. Severity sits behind a related path.
+    ordering_map = {
+        "suggested": ["-is_featured", "-watcher_count"],
+        "overall_component__status__severity": ["severity_now"],
+    }
+    ordering = ["-is_featured", "-watcher_count"]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = Service.objects.select_related("status_page", "poller").annotate(
+            severity_now=Subquery(
+                ComponentStatus.objects.filter(
+                    component__service=OuterRef("pk"),
+                    component__is_overall=True,
+                    ended_at__isnull=True,
+                ).values("severity")[:1]
+            )
+        )
         q = self.request.query_params.get("q")
         return queryset.filter(name__icontains=q) if q else queryset
 
@@ -3911,13 +4037,17 @@ class ServiceComponentListView(generics.ListAPIView):
     serializer_class = ComponentSerializer
     aggregate_set = StatusAggregateSet
     filterset_fields = {"status__severity": ["exact", "lte"], "is_overall": ["exact"]}
-    ordering_fields = ["status__severity", "name", "status_page_order", "updated_at"]
+    filter_backends = [DjangoFilterBackend, MappedOrderingFilter, FieldsBackend]
+    ordering_fields = ["name", "status_page_order", "updated_at"]
+    ordering_map = {"status__severity": ["severity_now"]}
     ordering = ["status_page_order"]
 
     def get_queryset(self):
-        return ServiceComponent.objects.filter(
-            service__slug=self.kwargs["slug"]
-        ).select_related("service", "parent")
+        return (
+            ServiceComponent.objects.filter(service__slug=self.kwargs["slug"])
+            .select_related("service", "parent")
+            .annotate(severity_now=CURRENT_SEVERITY)
+        )
 
 
 class ServiceEventListView(generics.ListAPIView):
@@ -4257,6 +4387,7 @@ The subquery form is the one that is unambiguously correct. Prefer it.
 # api/dashboards/views.py
 from django.db.models import F
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -4265,6 +4396,8 @@ from rest_framework.views import APIView
 from catalog.models import Service, ServiceComponent
 from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
+from common.filters import FieldsBackend
+from common.ordering import CURRENT_SEVERITY, NEXT_TRANSITION, MappedOrderingFilter
 from dashboards.filters import BoardComponentFilter
 from dashboards.models import Dashboard, DashboardItem
 
@@ -4279,14 +4412,23 @@ class BoardComponentListView(generics.ListCreateAPIView):
     serializer_class = ComponentSerializer
     aggregate_set = StatusAggregateSet
     filterset_class = BoardComponentFilter
-    ordering_fields = ["status__severity", "name", "updated_at"]
-    ordering = ["status__severity"]  # worst first: lower severity is worse
+    filter_backends = [DjangoFilterBackend, MappedOrderingFilter, FieldsBackend]
+    ordering_fields = ["name", "updated_at"]
+    # `next_transition` is not a field. Severity sits behind a related path.
+    ordering_map = {
+        "status__severity": ["severity_now"],
+        "next_transition": ["next_transition"],
+    }
+    ordering = ["severity_now"]  # worst first: lower severity is worse
 
     def get_queryset(self):
         board = _board(self.request, self.kwargs["uuid"])
-        return ServiceComponent.objects.filter(
-            tracked_by__dashboard=board
-        ).select_related("service", "parent").distinct()
+        return (
+            ServiceComponent.objects.filter(tracked_by__dashboard=board)
+            .select_related("service", "parent")
+            .annotate(severity_now=CURRENT_SEVERITY, next_transition=NEXT_TRANSITION)
+            .distinct()
+        )
 
     def create(self, request, *args, **kwargs):
         board = _board(request, self.kwargs["uuid"])
