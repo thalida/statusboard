@@ -497,14 +497,21 @@ where every add has two possible shapes.
   maintenance, Sunday 02:00" against the whole service, or "investigating elevated error rates"
   before anyone knows where. An FK to a component could hold neither, and would need six rows for
   an event touching six components. So `affected_components` is many-to-many, and
-  `Component.latest_incident` and `Component.maintenance_windows` are both **projections through
+  `Component.active_incident` and `Component.upcoming_maintenance` are both **projections through
   it**, filtered by `kind`. On the overall component they cover the whole service, which is where
   an unattributed event appears.
 
   **The API is one collection too.** `/catalog/services/{slug}/events/` lists both, and `kind`
-  filters. The Incidents tab passes `kind=incident&ends_at__isnull=true`; the Maintenance tab
-  passes `kind=maintenance` with a window filter. `aggregates.by_kind` returns both tab counts in
-  one response, so opening a service costs one request rather than two.
+  filters. The service screen reads it twice: the Incidents tab with `kind=incident`, the
+  Maintenance tab with `kind=maintenance`. Each groups by phase and renders each event's `updates`
+  log, so `aggregates.by_phase` supplies the "ACTIVE 2" heading.
+
+  Neither tab needs a count from this endpoint. `overall_component.active_incident_count` and
+  `overall_component.upcoming_maintenance_count` arrive with the service, so the tab bar draws
+  before either request is made — which is why `EventAggregates` carries no `by_kind`.
+
+  Home's tabs do not use this endpoint at all. They filter components, because a board row is a
+  component — see *The tabs are one axis*.
 
   Two endpoints would have been the same split as two tables, one layer up: two paths, two
   filtersets and two serializers over one model.
@@ -595,7 +602,7 @@ current vocabulary rather than being a loose string nobody validates.
 | `operational` | 5 | `#00E54D` |
 
 **Lower is worse**, matching the SEV0/SEV1 convention people arrive with. Sorting worst-first is
-`ORDER BY severity ASC`, and the Outages filter is `severity <= 3` — which is also why `unknown`
+`ORDER BY severity ASC`, and `severity <= 3` is everything needing attention — which is also why `unknown`
 sits at 3 rather than beside `operational`: a service we cannot reach belongs with the problems,
 not with the healthy ones.
 
@@ -652,7 +659,7 @@ Twilio produce one poll every five minutes, not two hundred.
 - Five-minute default interval, with jitter so we do not stampede
 - Honour `ETag` / `If-Modified-Since`
 - Exponential backoff on failure. **The service screen shows the effective interval, not the
-  deployment default** — `ServiceDetail.poll_interval_seconds`. A service in backoff is not being
+  deployment default** — `Service.poller.interval_seconds`. A service in backoff is not being
   checked every five minutes, and that is precisely the service someone opens to ask why.
 - **A hard per-service cooldown, global across all users**, which the manual refresh also obeys
 
@@ -714,8 +721,8 @@ representation, whatever produced it — so a client can drop an imported servic
 list it already renders.
 
 That forced the status page fields down into the list shape, because the Add-by-URL screen shows
-them in its About block before you press ＋. `ServiceDetail` is now only `description` and
-`in_catalog_since`, which no list has ever needed.
+them in its About block before you press ＋. What was left of `ServiceDetail` — `description` and
+`in_catalog_since` — has since folded into `Service` as well, for the reason below.
 Renaming keeps the old slug as a redirect rather than breaking shared links.
 
 ### Severity is the state, and there is no status string beside it
@@ -726,7 +733,7 @@ transported; `/meta/` publishes the 0–5 label map once and the client renders 
 change ships without touching a serializer.
 
 `status__severity__lte=3` is everything needing attention; `status__severity=4` is maintenance.
-There is no named band parameter — the Outages chip is just a threshold, and a client can compose
+There is no named band parameter — a band is just a threshold, and a client can compose
 any other one without waiting for a new enum value. `aggregates.by_severity` returns the raw histogram for the same
 reason.
 
@@ -807,9 +814,9 @@ holds the source and how we read it, separately from what we read:
 
 Three loose `status_page_*` fields became one model, and the polling facts that had nowhere
 sensible to live joined them. The nesting follows the same rule as everything else here — one
-schema, one model — rather than being a serializer that groups fields for looks. `poll_interval_seconds` was on `ServiceDetail` purely
-because the About tab shows "Refreshed every"; it belongs here, next to the backoff that changes
-it.
+schema, one model — rather than being a serializer that groups fields for looks.
+`poll_interval_seconds` was a loose field on the service purely because the About tab shows
+"Refreshed every"; it belongs here, next to the backoff that changes it.
 
 The split is between **the source and the data**. `status_page` is where a service's information
 comes from and how reliably we are getting it. `overall_component` is the information. A screen
@@ -828,28 +835,31 @@ Three things happen, and a component carries all three:
 | | on `Component` | how many |
 | --- | --- | --- |
 | its current state | `status` | — one by definition |
-| scheduled work | `maintenance_windows`, `next_maintenance_window` | `maintenance_window_count` |
-| a live problem | `latest_incident` | `active_incident_count` |
+| scheduled work | `upcoming_maintenance` | `upcoming_maintenance_count` |
+| a live problem | `active_incident` | `active_incident_count` |
 
-**A count sits with the projection it counts.** A card shows the soonest window and the most
-recent incident; the counts turn those into "+2 more" without shipping either list. Both live on
+**A count sits with the projection it counts, over the same set.** A card shows the soonest
+unfinished window and the most recent unresolved incident; the counts turn those into "+2 more"
+without shipping either list. Both are scoped to what is still live — a count over a wider set
+than the item beside it produces "+3 more" pointing at nothing the screen can reach, which is what
+happened when `active_incident` was `latest_incident` and returned resolved ones. Both live on
 the component, so a board row has them whatever it tracks.
 
 **The overall component carries the same three, scoped to the whole service.** Its
-`maintenance_windows` is every window in the service, from any component. Its `latest_incident` is
-the most recent incident anywhere in it.
+`upcoming_maintenance` is the soonest unfinished window anywhere in the service, from any
+component. Its `active_incident` is the most recent unresolved incident anywhere in it.
 
 **Tracking the overall component means one card for the service**, instead of one per component.
 That is the point of it, and it is why the card compresses: a service with three maintenance
 windows still gets one row.
 
-The row shows `next_maintenance_window` and, when `maintenance_window_count` is above one, "+2
+The row shows `upcoming_maintenance` and, when `upcoming_maintenance_count` is above one, "+2
 more". **Windows are never merged into a combined span** — two windows a week apart are two facts,
 and a single merged window would be true of neither. Same for incidents: the row shows
-`latest_incident` and `active_incident_count` says whether there are others.
+`active_incident` and `active_incident_count` says whether there are others.
 
-Read the counts rather than the arrays when rendering a row. On the overall component the arrays
-cover every component in the service and can be long.
+Neither is accompanied by an array. History is unbounded, a row renders from the soonest plus a
+count, and the full list is `GET /catalog/services/{slug}/events/` with `kind`.
 
 That is what makes tracking a service as a whole work. A board row is a component, so a row for
 Twilio's overall component must answer "is anything scheduled, is anything broken" for Twilio —
@@ -861,8 +871,15 @@ An earlier draft put the maintenance summary, the incident summary and `active_i
 are read there. One fact, one place, and the board gets them for free because a board row already
 is that component.
 
-Real components are scoped normally — `maintenance_windows` is that component's own, and
-`latest_incident` is the most recent incident naming it in `affected_component_ids`.
+Real components are scoped normally — `upcoming_maintenance` is that component's own soonest
+unfinished window, and `active_incident` is the most recent unresolved incident naming it through
+the `affected_components` M2M.
+
+**The projection runs one way only.** A component carries its event; an event does not carry its
+components. `ServiceEvent.affected_component_ids` used to ship the ids on every row and no screen
+read them — the event tabs render titles and update logs, never component names. The M2M filter
+`?affected_components=` stays, since django-filter generates it free and narrowing events to one
+component is a query a screen may want. The field was a prefetch and bytes for nothing.
 
 ### One envelope, and aggregates that grow without changing it
 
@@ -883,7 +900,20 @@ third key, and a client could not read them generically.
 
 `Aggregates` defines the floor — `total`, present everywhere, so it can be read without knowing
 which endpoint produced it. An endpoint extends rather than replaces: `StatusAggregates` adds the
-severity histogram and `oldest_refreshed_at`; `EventAggregates` adds histograms by kind and phase.
+severity histogram and `oldest_refreshed_at`; `EventAggregates` adds a histogram by phase.
+
+**Every chip on a screen must be answerable from one response.** Home has three — All, Incidents,
+Maintenance — and the first fetch has to fill all three, or the client makes a request per chip
+before it can draw the row of chips.
+
+`total` gives All. The other two come from `by_event_kind`, which counts the rows each value of
+`event` returns. Neither can be read off `by_severity`: a maintenance window three days out leaves
+the component at severity 5, and a provider can open an incident on components it still reports as
+operational.
+
+The rule that follows: **if a filter cannot be derived from an existing aggregate, it needs its own
+aggregate.** A chip is a filter and a count, and shipping one without the other means the screen
+cannot be drawn in one request.
 
 **An aggregate has to mean the same thing on every endpoint that returns it.** A `tracked` count
 was dropped for failing that: on a service's components it duplicated
@@ -932,9 +962,34 @@ for something the count already answers — and the same count renders the "3 tr
 The count **includes the overall component**, because overall is a component like any other.
 Excluding it would reintroduce the service-versus-component split this design exists to remove.
 
-`allOf` survives in only one role: a serializer subclassing another **over the same model**.
-`ServiceDetail` extends `Service`; `TrackedComponent` extends `Component`. It never merges two
-models into one flat object.
+### One schema per model, and reference schemas where nesting forces them
+
+There is no list variant and detail variant of the same resource. `ServiceDetail` was `Service`
+plus `description` and `in_catalog_since`; `TrackedComponent` was `Component` plus `service`.
+Both withheld fields that cost nothing — plain columns, or a `select_related` join — so both
+folded into the resource they extended. Trimming a response is `?fields=`, where the client
+chooses, rather than a second schema deciding for it.
+
+`OverallComponent` went the same way. `Service.overall_component` is a plain `Component`, so a
+component has one shape everywhere and one renderer draws every row. Six of its fields are fixed
+by what an overall component is — `parent` and `path` null, `child_count` 0, `is_overall` true,
+`archived_at` null, `name` the service name — and they are returned rather than omitted. A client
+that special-cased them would need a second renderer to gain nothing.
+
+**Reference schemas are a different thing and they stay.** `ServiceRef` and `EventRef` are not
+smaller variants of a resource; embedding the full one is impossible or unbounded:
+
+| Schema | Fields | Why it cannot be the full resource |
+| --- | --- | --- |
+| `ServiceRef` | id, slug, name, logo | `Component.service`. A `Service` nests `overall_component`, which is a `Component`, which nests its service — a full `Service` there never terminates. `ServiceRef` nests nothing, which is what ends the chain. |
+| `EventRef` | id, kind, title, phase, starts_at, ends_at | `active_incident` and `upcoming_maintenance`. A full `ServiceEvent` carries `updates`, a reverse FK with no bound — the same reason the maintenance array was removed. |
+
+The test is whether the omitted fields are *unavailable* or merely *unwanted*. Unavailable is a
+reference schema. Unwanted is `?fields=`. `OverallComponent`'s were neither: they were available
+and wanted, just constant.
+
+`allOf` survives in only one role: a serializer subclassing another **over the same model**. It
+never merges two models into one flat object.
 
 Query parameters use the ORM path, and the nesting is visible in the URL on purpose.
 
@@ -948,7 +1003,49 @@ and costs a declared `NumberFilter` per field per viewset — a `FilterSet` clas
 in sync every time a field is added. The ORM path also means a client can read a response body and
 derive the filter for anything in it, including fields that do not exist yet.
 
-Three parameters cannot follow the rule and are declared: `tracked_component_count__gt` and
+**The tabs are one axis, and severity is a filter that works inside any of them.** An earlier
+draft named them All, Outages and Maintenance. Those straddled two axes: Outages filtered status,
+Maintenance filtered events, and All filtered nothing. Every difficulty came from that — the
+Maintenance filter had to be hand-written to span a status field and an event relation, and its
+count could not come out of `by_severity`.
+
+Incidents and maintenance are both `ServiceEvent`. Naming the tab after the model puts all three
+on the event axis: `event=incident`, `event=maintenance`, and no parameter for All. One generated
+filter, one symmetric aggregate.
+
+Severity then composes with any tab rather than competing with one.
+`event=incident&status__severity__lte=3` is written-up incidents that are also down right now.
+
+`event` is one of the declared filters, and the reason is a Django rule rather than a preference.
+`ServiceEvent` and `ServiceComponent` are many-to-many. django-filter applies each query parameter
+as its own `.filter()` call, and on a many-to-many every call joins the relation again — so
+`?events__kind=incident&events__phase__in=…` lets the two conditions land on two different events.
+A component holding one closed incident and one running maintenance satisfies both and matches
+neither. The conditions have to sit in a single call:
+
+```python
+def filter_event(self, qs, name, value):
+    return qs.filter(
+        events__kind=value,
+        events__phase__in=ServiceEvent.OPEN_PHASES,
+    ).distinct()
+```
+
+`.distinct()` because the join returns a component once per matching event.
+
+**What each tab can promise.** A provider can drop a component to *Major outage* without writing
+an incident, and that row will not appear under Incidents. So the tabs divide as:
+
+| Tab | Answers |
+| --- | --- |
+| All | What is wrong — sorted worst-first, whether or not anyone wrote it up |
+| Incidents | What has been written up |
+| Maintenance | What is planned |
+
+All is the one that promises completeness, which is why its default ordering is `status__severity`
+ascending. Incidents is the narrative, not the alarm.
+
+Four parameters cannot follow the rule and are declared: `tracked_component_count__gt` and
 `overall_component__is_tracked` are per-user annotations with no ORM path behind them, and
 `ordering=suggested` is a multi-key sort. Everything else is generated.
 
@@ -982,7 +1079,9 @@ caching and rate limits.
 
 | Screen | Calls |
 | --- | --- |
-| Home · All / Outages / Maintenance | `GET /dashboards/{uuid}/components/?status__severity__lte=` |
+| Home · All | `GET /dashboards/{uuid}/components/` |
+| Home · Incidents | `…/components/?event=incident` |
+| Home · Maintenance | `…/components/?event=maintenance` |
 | Home, signed out | `GET /catalog/services/?overall_component__status__severity__lte=` |
 | Header refresh | `POST /refresh/` |
 | Row ⋮ → Refresh now | `POST /refresh/` with `{component_id}` |
@@ -992,7 +1091,7 @@ caching and rate limits.
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/import/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |
-| Service · Incidents | `GET /catalog/services/{slug}/events/?kind=incident&ends_at__isnull=true` |
+| Service · Incidents | `GET /catalog/services/{slug}/events/?kind=incident` — both groups; the tab renders ACTIVE and RESOLVED, so it must not filter on `ends_at__isnull` |
 | Service · Maintenance | `GET /catalog/services/{slug}/events/?kind=maintenance` |
 | Service · About | `GET /catalog/services/{slug}/` — Website, Status page, Provider, Components, Active incidents, In catalog since, Refreshed every |
 | Service · Add all / Remove all | the same `POST` / `DELETE`, repeated per component |
@@ -1056,19 +1155,24 @@ differ.
 
 | Screen | States |
 | --- | --- |
-| Home | All · Outages · Maintenance; empty, unreachable, row menu |
+| Home | All · Incidents · Maintenance; empty, unreachable, row menu |
 | Discover | suggested, typing, no results |
 | Add by URL | detected, not found |
-| Service | Components · Incidents · About; not tracked, outage, unknown |
+| Service | Components · Incidents · Maintenance · About; not tracked, outage, unknown |
 | Sign in | request, check your email, verify |
 | Settings | preferences, account, install |
 
 ### Chips and filters
 
-`All` · `Outages` · `Maintenance`. Outages means major, partial, degraded and unknown —
-**not** maintenance, which is planned work and has its own chip. Counts describe whatever the tab
-shows: the catalog when signed out, your tracked set when signed in. Signed out shows no counts,
-because nothing is yours.
+`All` · `Incidents` · `Maintenance`. The two named tabs filter on event kind; All applies no
+filter and sorts worst-first. Counts describe whatever the tab shows: the catalog when signed out,
+your tracked set when signed in. Signed out shows no counts, because nothing is yours.
+
+**Colour follows the dot, and the dot is always the true severity.** Maintenance already under way
+is severity 4, so its row is blue and reads "Maintenance ends in 2 hrs". Maintenance three days out
+leaves the component operational, so its row is **green** and reads "Maintenance in 3 days". The
+tab decides which fact the line describes; severity decides what colour it is. A row never shows a
+colour the component is not in.
 
 Sort is **Smart** by default (`ordering=suggested`): tracked first, then severity ascending
 (worst first), then name.

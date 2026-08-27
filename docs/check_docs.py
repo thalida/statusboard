@@ -21,9 +21,8 @@ for m in re.finditer(r"^\s{4}(\w+) \{\n((?:\s{8}.*\n)+)\s{4}\}", detail, re.M):
 
 # ── which schema is backed by which model ──────────────────────────────────
 BACKED = {
-    "Service": "Service", "ServiceDetail": "Service", "ServiceRef": "Service",
+    "Service": "Service", "ServiceRef": "Service",
     "StatusPage": "StatusPage", "Poller": "Poller", "Component": "ServiceComponent",
-    "OverallComponent": "ServiceComponent", "TrackedComponent": "ServiceComponent",
     "Status": "ComponentStatus", "ServiceEvent": "ServiceEvent", "EventRef": "ServiceEvent",
     "Me": "User",
 }
@@ -45,16 +44,14 @@ DERIVED = {
     "Component.path":                     "walk of parent",
     "Component.child_count":              "Count of reverse parent",
     "Component.is_tracked":               "per-user annotation over DashboardItem",
-    "Component.maintenance_windows":      "ServiceEvent kind=maintenance across the reverse M2M",
-    "Component.next_maintenance_window":  "soonest of maintenance_windows",
-    "Component.maintenance_window_count": "Count of maintenance_windows",
-    "Component.latest_incident":          "newest ServiceEvent kind=incident across the reverse M2M",
+    "Component.upcoming_maintenance":  "soonest unfinished maintenance event across that M2M",
+    "Component.upcoming_maintenance_count": "Count of unfinished maintenance across that M2M",
+    "Component.active_incident":          "newest unresolved ServiceEvent kind=incident across that M2M",
     "Component.active_incident_count":    "Count of unresolved across that M2M",
-    "ServiceEvent.affected_component_ids": "M2M ids",
     "ServiceEvent.updates":               "reverse FK from EventUpdate",
     "Me.default_dashboard_id":            "Dashboard where is_default",
-    "ServiceDetail.in_catalog_since":     "BaseModel.created_at",
-    "TrackedComponent.service":           "ForeignKey",
+    "Service.in_catalog_since":           "BaseModel.created_at",
+    "Component.service":           "ForeignKey",
 }
 INHERITED = {"id", "created_at", "updated_at", "created_by", "updated_by"}
 
@@ -82,21 +79,22 @@ for schema in api["components"]["schemas"]:
     if schema not in BACKED and schema not in PLAIN:
         fail.append(f"{schema} is neither model-backed nor declared plain")
 
-print(f"{len(BACKED)} model-backed schemas, {len(columns)} tables, {len(DERIVED)} declared derivations")
-print("\n".join("  FAIL " + f for f in fail) if fail else "  every API field maps to a column or a declared derivation")
-sys.exit(1 if fail else 0)
+# ── every declared derivation is still in use ───────────────────────────────
+# A derivation left behind after its field is renamed or deleted is a claim the
+# API no longer makes, and nothing else here would notice it.
+used = {f"{schema}.{f}" for schema in api["components"]["schemas"] for f in props(schema)}
+for o in sorted(set(DERIVED) - used):
+    fail.append(f"derivation declared for a field that no longer exists: {o}")
 
 # ── naming conventions ──────────────────────────────────────────────────────
-convention = []
-for table, names in columns.items():
+# Counts are singular: active_incident_count, never active_incidents_count.
+for owner, names in [*columns.items(),
+                     *((sch, props(sch)) for sch in api["components"]["schemas"])]:
     for f in names:
         if f.endswith("s_count"):
-            convention.append(f"{table}.{f} — count fields are singular: {f[:-7]}_count")
-        if f.endswith("_at") and not re.search(r"(_at)$", f):
-            pass
-for schema in api["components"]["schemas"]:
-    for f in props(schema):
-        if f.endswith("s_count"):
-            convention.append(f"{schema}.{f} — count fields are singular")
-if convention:
-    print("\n".join("  FAIL " + c for c in convention)); sys.exit(1)
+            fail.append(f"{owner}.{f} — count fields are singular: {f[:-7]}_count")
+
+print(f"{len(BACKED)} model-backed schemas, {len(columns)} tables, {len(DERIVED)} declared derivations")
+print("\n".join("  FAIL " + f for f in fail) if fail
+      else "  every API field maps to a column or a declared derivation")
+sys.exit(1 if fail else 0)
