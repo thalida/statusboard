@@ -192,9 +192,7 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
     @extend_schema_field(serializers.IntegerField())
     def get_component_count(self, service):
         # The overall component is excluded: it is the service, not a part of it.
-        return service.components.filter(
-            is_overall=False, archived_at__isnull=True
-        ).count()
+        return service.components.filter(is_overall=False, is_archived=False).count()
 
     @extend_schema_field(serializers.IntegerField())
     def get_tracked_component_count(self, service):

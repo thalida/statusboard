@@ -53,11 +53,12 @@ def test_a_service_can_override_the_interval():
 def test_a_component_can_be_archived_rather_than_deleted():
     # Someone may track this component.
     # Deletion removes it from their board with no warning.
-    component = ComponentFactory(archived_at=None)
+    component = ComponentFactory()
     assert Service.objects.count() == 1
-    component.archived_at = "2026-08-26T00:00:00Z"
+    component.is_archived = True
     component.save()
     component.refresh_from_db()
+    assert component.is_archived
     assert component.archived_at is not None
 
 
@@ -92,3 +93,44 @@ def test_renaming_a_service_does_not_move_its_slug():
 @pytest.mark.django_db
 def test_a_name_with_no_slug_characters_still_gets_one():
     assert Service.objects.create(name="!!!").slug == "service"
+
+
+@pytest.mark.django_db
+def test_archiving_sets_the_date():
+    # `updated_at` cannot answer when a provider dropped a component: it
+    # moves on every save, so a later rename would erase it.
+    component = ComponentFactory()
+    assert component.archived_at is None
+
+    component.is_archived = True
+    component.save()
+
+    assert component.archived_at is not None
+
+
+@pytest.mark.django_db
+def test_unarchiving_clears_the_date():
+    component = ComponentFactory()
+    component.is_archived = True
+    component.save()
+
+    component.is_archived = False
+    component.save()
+
+    assert component.archived_at is None
+
+
+@pytest.mark.django_db
+def test_the_flag_and_the_date_cannot_disagree():
+    """One fact, two columns, so the database holds them together.
+
+    A bulk update never reaches `save`, which is the path that would
+    otherwise let them come apart quietly.
+    """
+    from django.db import IntegrityError, transaction
+
+    from catalog.models import ServiceComponent
+
+    component = ComponentFactory()
+    with pytest.raises(IntegrityError), transaction.atomic():
+        ServiceComponent.objects.filter(pk=component.pk).update(is_archived=True)

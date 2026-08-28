@@ -171,7 +171,13 @@ class ServiceComponentInline(TabularInline):
     can_delete = False
     show_change_link = True
     per_page = 20
-    fields = ["name", "display_parent", "display_severity", "is_overall", "archived_at"]
+    fields = [
+        "name",
+        "display_parent",
+        "display_severity",
+        "is_overall",
+        "is_archived",
+    ]
     readonly_fields = fields
     ordering = ["status_page_order", "name"]
 
@@ -486,6 +492,7 @@ class ServiceComponentAdmin(
         ComponentSeverityFilter,
         "is_overall",
         ("status_page_order", RangeNumericFilter),
+        "is_archived",
         ("archived_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
@@ -493,8 +500,21 @@ class ServiceComponentAdmin(
     ordering = ["service__name", "status_page_order"]
     # A parent is one of the same service's components.
     autocomplete_scope = ("service",)
+    # The date follows the flag, so it is shown and never typed.
+    readonly_fields = ["archived_at"]
     fieldsets = [
-        (None, {"fields": ["service", "name", "external_id", "archived_at"]}),
+        (
+            None,
+            {
+                "fields": [
+                    "service",
+                    "name",
+                    "external_id",
+                    "is_archived",
+                    "archived_at",
+                ]
+            },
+        ),
         (
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
@@ -553,12 +573,12 @@ class ServiceComponentAdmin(
     @display(
         description=_("State"),
         label={"Live": "success", "Archived": "default"},
-        ordering="archived_at",
+        ordering="is_archived",
     )
     def display_archived(self, obj):
         # An archived component still reads on the table. Without this
         # it looked like one the provider is still publishing.
-        return "Archived" if obj.archived_at else "Live"
+        return "Archived" if obj.is_archived else "Live"
 
     @display(description=_("View"), dropdown=True)
     def display_related(self, obj):

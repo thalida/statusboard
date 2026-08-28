@@ -395,8 +395,12 @@ def test_only_the_pause_is_open_on_the_polling_schedule():
     readonly = schedule_admin.get_readonly_fields(None)
 
     assert "enabled" not in readonly
-    for name in ["task", "regtask", "args", "kwargs", "interval", "queue"]:
+    for name in ["task", "args", "kwargs", "interval", "queue"]:
         assert name in readonly
+    # `regtask` is not readonly, it is gone: a readonly form-only field
+    # cannot be rendered and took the change page down with it.
+    fields = [f for _, o in schedule_admin.get_fieldsets(None) for f in o["fields"]]
+    assert "regtask" not in fields
 
 
 @pytest.mark.django_db
@@ -631,3 +635,22 @@ def test_a_person_cannot_open_somebody_elses_board():
     mine.default_dashboard = theirs.default_dashboard
     with pytest.raises(Invalid):
         mine.full_clean()
+
+
+@pytest.mark.django_db
+def test_the_polling_schedule_page_opens(staff_client):
+    """Readonly is not free: Django drops a readonly field from the form.
+
+    `regtask` is a form-only picker, so making it readonly left nothing
+    to resolve it against and the change page raised. Nothing else here
+    opens that page.
+    """
+    from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+    every = IntervalSchedule.objects.create(every=5, period=IntervalSchedule.MINUTES)
+    task = PeriodicTask.objects.create(
+        name="poll", task="polling.tasks.enqueue_due_polls", interval=every
+    )
+    url = reverse("admin:django_celery_beat_periodictask_change", args=[task.pk])
+
+    assert staff_client.get(url).status_code == 200

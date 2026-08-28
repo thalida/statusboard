@@ -59,6 +59,7 @@ def _upsert_components(service, components, author):
                 name=incoming.name,
                 status_page_order=incoming.order,
                 is_overall=incoming.is_overall,
+                is_archived=False,
                 archived_at=None,
             ),
         )
@@ -81,9 +82,11 @@ def _upsert_components(service, components, author):
 
 def _archive_vanished(service, components, author):
     seen = {c.external_id for c in components}
-    ServiceComponent.objects.filter(service=service, archived_at__isnull=True).exclude(
+    # A bulk update never reaches `save`, so both columns are written
+    # here. The constraint refuses the pair if they ever come apart.
+    ServiceComponent.objects.filter(service=service, is_archived=False).exclude(
         external_id__in=seen
-    ).update(archived_at=timezone.now(), updated_by=author)
+    ).update(is_archived=True, archived_at=timezone.now(), updated_by=author)
 
 
 def _write_statuses(components, rows, source, author, run=None):

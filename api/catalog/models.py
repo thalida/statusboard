@@ -219,7 +219,20 @@ class ServiceComponent(BaseModel):
     )
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
     is_overall = models.BooleanField(verbose_name="Overall", default=False)
-    archived_at = models.DateTimeField(verbose_name="Archived", null=True, blank=True)
+    # Archiving is the flag. The date is kept because `updated_at` cannot
+    # answer "when did the provider drop this": it moves on every save,
+    # so a later rename would erase it. `save` sets and clears the date
+    # from the flag, and a constraint keeps the two from disagreeing, so
+    # there is one fact here rather than two.
+    # `db_default` as well as `default`: the column is NOT NULL, and a
+    # writer that predates it — an old worker mid-deploy — omits it
+    # and the insert fails. The database supplies it instead.
+    is_archived = models.BooleanField(
+        verbose_name="Archived", default=False, db_default=False
+    )
+    archived_at = models.DateTimeField(
+        verbose_name="Archived on", null=True, blank=True, editable=False
+    )
 
     history = HistoricalRecords()
 
@@ -233,7 +246,28 @@ class ServiceComponent(BaseModel):
                 condition=models.Q(is_overall=True),
                 name="one_overall_component_per_service",
             ),
+            models.CheckConstraint(
+                condition=models.Q(is_archived=True, archived_at__isnull=False)
+                | models.Q(is_archived=False, archived_at__isnull=True),
+                name="archived_flag_and_date_agree",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        """Keep the archive date in step with the flag.
+
+        A bulk update does not come through here, so anything writing
+        the flag that way sets the date itself. The constraint is what
+        makes that a failure rather than a quiet disagreement.
+        """
+        if self.is_archived and self.archived_at is None:
+            self.archived_at = timezone.now()
+        elif not self.is_archived:
+            self.archived_at = None
+        fields = kwargs.get("update_fields")
+        if fields is not None and "is_archived" in fields:
+            kwargs["update_fields"] = [*fields, "archived_at"]
+        super().save(*args, **kwargs)
 
     def clean(self):
         """A component sits under one of its own service's components.

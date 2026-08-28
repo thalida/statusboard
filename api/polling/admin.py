@@ -359,11 +359,29 @@ class PollingScheduleAdmin(PeriodicTaskAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    # `regtask` is a picker that rewrites `task`. Readonly it cannot be
+    # rendered at all — Django drops a readonly field from the form and
+    # then cannot resolve it, which is a 500 on the change page. It is
+    # dropped from the form instead, and nothing is lost: `task` is
+    # right below it and says the same thing.
+    HIDDEN = {"regtask"}
+
+    def get_fieldsets(self, request, obj=None):
+        return [
+            (
+                name,
+                {
+                    **options,
+                    "fields": [f for f in options["fields"] if f not in self.HIDDEN],
+                },
+            )
+            for name, options in self.fieldsets
+        ]
+
     def get_readonly_fields(self, request, obj=None):
-        # Read the names off the fieldsets, not the model. `regtask` is a
-        # field of the form alone, and leaving it open would let a person
-        # point the schedule at a different job.
-        named = [name for _, options in self.fieldsets for name in options["fields"]]
+        # Read the names off the fieldsets, not the model, so a form-only
+        # field is covered too.
+        named = [n for _, o in self.get_fieldsets(request, obj) for n in o["fields"]]
         return [name for name in named if name != "enabled"]
 
 
