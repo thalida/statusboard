@@ -198,10 +198,15 @@ UNFOLD = {
         # moving any of these.
         #
         # The dark steps are set by contrast against the page, not by
-        # lightness. A deep blue holds very little luminance, so a step
-        # that looks like a step is not one: the first attempt put the
-        # card 1.05:1 from the page and a table was unreadable. The card
-        # is 1.42:1 now and the border 1.38:1 above the card.
+        # lightness: a deep blue holds very little luminance, so a step
+        # that looks like a step on a ramp is not one on a screen.
+        #
+        # Two failures got us here. At 1.05:1 the card was invisible and
+        # a table could not be read. At 1.42:1 with 30% saturation it
+        # was a purple slab, because Unfold fills whole blocks with
+        # base-800 — a section header, an active tab — not just card
+        # backgrounds. The card is 1.22:1 at 18% saturation now, which
+        # reads as a lift rather than as a colour.
         "base": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -209,9 +214,9 @@ UNFOLD = {
             "300": "#C6C5E4",
             "400": "#A9A7D6",
             "500": "#8A88B8",
-            "600": "#5A5A92",
-            "700": "#3C3C6F",
-            "800": "#28284B",
+            "600": "#5E5E7D",
+            "700": "#303043",
+            "800": "#1F1F2C",
             "900": "#06061F",
             "950": "#030310",
         },
