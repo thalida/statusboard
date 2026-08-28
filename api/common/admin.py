@@ -2,7 +2,9 @@
 
 from django.conf import settings
 from django.db.models import Count, Min, Q
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
 from status.choices import Severity
 
@@ -183,3 +185,19 @@ SEVERITY_VARIANTS = {
 
 def severity_label(value):
     return Severity(value).label if value is not None else "—"
+
+
+def poll_run_link(obj):
+    """A link to the poll that wrote this row.
+
+    Null on anything seeded by hand, and on rows written before the link
+    existed. A reading with no provenance is exactly what this is for.
+    """
+    run = obj.poll_run
+    if run is None:
+        return "—"
+    return format_html(
+        '<a href="{}" class="text-primary-600 dark:text-primary-500">{}</a>',
+        reverse("admin:polling_pollrun_change", args=[run.pk]),
+        run,
+    )

@@ -62,7 +62,7 @@ def poll_service(service_id):
         events = adapter.fetch_incidents()
         metadata = adapter.fetch_service_metadata()
         source = getattr(adapter, "status_source", StatusSource.PROVIDER)
-        apply_fetch(service, components, events, source)
+        apply_fetch(service, components, events, source, run)
         _refresh_metadata(service, metadata)
     except Exception as error:  # noqa: BLE001 — every failure is recorded, never raised away
         # A failed fetch keeps the last known value.

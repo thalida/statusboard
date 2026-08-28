@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from polling.adapters.rss import RSSAdapter
+from polling.adapters.services.rss import RSSAdapter
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"

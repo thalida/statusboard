@@ -151,3 +151,39 @@ def test_an_event_is_linked_to_the_components_it_names():
     )
     event = ServiceEvent.objects.get(service=service)
     assert [c.external_id for c in event.affected_components.all()] == ["a"]
+
+
+@pytest.mark.django_db
+def test_a_run_stamps_what_it_wrote():
+    # A wrong or stale reading is otherwise untraceable: you can see what
+    # it says and not where it came from.
+    from polling.models import PollRun
+    from tests.factories import PollerFactory, StatusPageFactory
+
+    service = ServiceFactory()
+    page = StatusPageFactory(service=service)
+    run = PollRun.objects.create(
+        poller=PollerFactory(service=service),
+        url=page.url,
+        provider=page.provider,
+        started_at=timezone.now(),
+    )
+    event = NormalisedEvent(
+        external_id="inc-1",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+    )
+    apply_fetch(service, [_component()], [event], StatusSource.PROVIDER, run)
+
+    assert ComponentStatus.objects.get(component__service=service).poll_run == run
+    assert ServiceEvent.objects.get(service=service).poll_run == run
+
+
+@pytest.mark.django_db
+def test_a_hand_seeded_row_has_no_run():
+    # apply_fetch is called without one when nothing polled.
+    service = ServiceFactory()
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    assert ComponentStatus.objects.get(component__service=service).poll_run is None

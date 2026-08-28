@@ -11,14 +11,25 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
-from common.admin import SEVERITY_VARIANTS, PollerWrittenAdmin, severity_label
+from common.admin import (
+    SEVERITY_VARIANTS,
+    PollerWrittenAdmin,
+    poll_run_link,
+    severity_label,
+)
 from status.choices import CLOSED_PHASES, EventKind
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
 @admin.register(ComponentStatus)
 class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
-    list_display = ["component", "display_severity", "source", "started_at", "ended_at"]
+    list_display = [
+        "component",
+        "display_severity",
+        "source",
+        "started_at",
+        "display_poll_run",
+    ]
     date_hierarchy = "started_at"
     search_fields = ["component__name", "component__service__name"]
     list_filter = [
@@ -36,6 +47,10 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     @display(description=_("Severity"), label=SEVERITY_VARIANTS, ordering="severity")
     def display_severity(self, obj):
         return severity_label(obj.severity)
+
+    @display(description=_("Written by"))
+    def display_poll_run(self, obj):
+        return poll_run_link(obj)
 
 
 class EventUpdateInline(TabularInline):
@@ -78,6 +93,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     inlines = [EventUpdateInline]
 
     FORM_FIELDS = [
+        "display_poll_run",
         "service",
         "external_id",
         "kind",
@@ -96,7 +112,11 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
-        return fields + ["display_affected_components"]
+        return fields + ["display_affected_components", "display_poll_run"]
+
+    @display(description=_("Written by"))
+    def display_poll_run(self, obj):
+        return poll_run_link(obj)
 
     @display(description=_("Affected components"))
     def display_affected_components(self, obj):

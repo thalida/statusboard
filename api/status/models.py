@@ -19,6 +19,17 @@ class ComponentStatus(BaseModel):
     source = models.CharField(max_length=32, choices=StatusSource.choices)
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(null=True, blank=True)
+    # Which poll wrote this. A wrong or stale reading is otherwise
+    # untraceable: you can see what it says and not where it came from.
+    # SET_NULL because runs are a log and may be pruned.
+    poll_run = models.ForeignKey(
+        "polling.PollRun",
+        null=True,
+        blank=True,
+        editable=False,
+        on_delete=models.SET_NULL,
+        related_name="%(class)ss",
+    )
 
     def __str__(self):
         return f"{self.component} — {self.get_severity_display()}"
@@ -61,6 +72,17 @@ class ServiceEvent(BaseModel):
     # against the whole service. An FK cannot hold that case.
     affected_components = models.ManyToManyField(
         ServiceComponent, blank=True, related_name="events"
+    )
+    # Which poll wrote this. A wrong or stale reading is otherwise
+    # untraceable: you can see what it says and not where it came from.
+    # SET_NULL because runs are a log and may be pruned.
+    poll_run = models.ForeignKey(
+        "polling.PollRun",
+        null=True,
+        blank=True,
+        editable=False,
+        on_delete=models.SET_NULL,
+        related_name="%(class)ss",
     )
 
     class Meta(BaseModel.Meta):

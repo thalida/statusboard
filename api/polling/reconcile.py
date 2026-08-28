@@ -6,17 +6,20 @@ from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
 @transaction.atomic
-def apply_fetch(service, components, events, source):
+def apply_fetch(service, components, events, source, run=None):
     """Write one adapter fetch to the database.
 
     A poll is a reconciliation, not a status read.
     Components upsert on `external_id`. Vanished ones archive.
     An unchanged severity leaves the open status row alone.
+
+    `run` is the PollRun that produced this data. Stamping it makes a
+    reading traceable back to the fetch that wrote it.
     """
     rows = _upsert_components(service, components)
     _archive_vanished(service, components)
-    _write_statuses(components, rows, source)
-    _upsert_events(service, events, rows)
+    _write_statuses(components, rows, source, run)
+    _upsert_events(service, events, rows, run)
 
 
 def _upsert_components(service, components):
@@ -55,7 +58,7 @@ def _archive_vanished(service, components):
     ).update(archived_at=timezone.now())
 
 
-def _write_statuses(components, rows, source):
+def _write_statuses(components, rows, source, run=None):
     now = timezone.now()
     for incoming in components:
         row = rows[incoming.external_id]
@@ -68,11 +71,15 @@ def _write_statuses(components, rows, source):
             current.ended_at = now
             current.save(update_fields=["ended_at"])
         ComponentStatus.objects.create(
-            component=row, severity=incoming.severity, source=source, started_at=now
+            component=row,
+            severity=incoming.severity,
+            source=source,
+            started_at=now,
+            poll_run=run,
         )
 
 
-def _upsert_events(service, events, rows):
+def _upsert_events(service, events, rows, run=None):
     for incoming in events:
         event, _ = ServiceEvent.objects.update_or_create(
             service=service,
@@ -83,6 +90,7 @@ def _upsert_events(service, events, rows):
                 "phase": incoming.phase,
                 "starts_at": incoming.starts_at,
                 "ends_at": incoming.ends_at,
+                "poll_run": run,
             },
         )
         named = [rows[e] for e in incoming.affected_external_ids if e in rows]

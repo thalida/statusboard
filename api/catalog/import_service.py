@@ -1,9 +1,11 @@
 from urllib.parse import urlparse, urlunparse
 
 from django.db import transaction
+from django.utils import timezone
 
 from catalog.models import Service, StatusPage
 from polling.adapters.registry import detect
+from polling.models import PollRun
 from polling.reconcile import apply_fetch
 from status.choices import StatusSource
 
@@ -47,10 +49,25 @@ def import_from_url(url: str) -> tuple[Service, bool]:
     StatusPage.objects.create(service=service, url=key, provider=adapter_class.provider)
     # The Poller comes from the Service signal; creating one here duplicates it.
 
+    # An import is a fetch, so it is recorded as one. Without this the
+    # first reading of every service has no provenance, and the poll log
+    # is missing the request that actually created the rows.
+    started = timezone.now()
+    components = adapter.fetch_status()
+    events = adapter.fetch_incidents()
+    run = PollRun.objects.create(
+        poller=service.poller,
+        url=key,
+        provider=adapter_class.provider,
+        started_at=started,
+        finished_at=timezone.now(),
+        ok=True,
+    )
     apply_fetch(
         service,
-        adapter.fetch_status(),
-        adapter.fetch_incidents(),
+        components,
+        events,
         getattr(adapter, "status_source", StatusSource.PROVIDER),
+        run,
     )
     return service, True

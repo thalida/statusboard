@@ -1,6 +1,6 @@
 import pytest
 
-from polling.adapters.statuspage import StatuspageAdapter
+from polling.adapters.services.statuspage import StatuspageAdapter
 from status.choices import EventKind, Severity
 from tests.adapters.conftest import StubSession
 

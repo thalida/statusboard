@@ -1,6 +1,6 @@
 import pytest
 
-from polling.adapters.betterstack import BetterStackAdapter
+from polling.adapters.services.betterstack import BetterStackAdapter
 from status.choices import Severity
 from tests.adapters.conftest import StubSession
 
