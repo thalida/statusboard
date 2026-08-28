@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 import feedparser
 import requests
 
-from catalog.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from catalog.choices import StatusPageProvider
+from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
 # A status feed writes its newest update first. Each update is led by a

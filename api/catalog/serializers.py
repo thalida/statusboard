@@ -2,8 +2,9 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from catalog.models import Poller, Service, ServiceComponent, StatusPage
+from catalog.models import Service, ServiceComponent, StatusPage
 from common.mixins import FieldsMixin
+from polling.models import Poller
 from status.choices import CLOSED_PHASES, EventKind
 from status.serializers import EventRefSerializer, StatusSerializer
 

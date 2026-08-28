@@ -105,7 +105,7 @@ POLLER_WRITTEN = [
     "status.ComponentStatus",
     "status.ServiceEvent",
     "status.EventUpdate",
-    "status.PollRun",
+    "polling.PollRun",
 ]
 
 
@@ -124,7 +124,7 @@ def test_poller_written_tables_are_not_editable(staff_client, label):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "label", ["catalog.Service", "catalog.StatusPage", "catalog.Poller"]
+    "label", ["catalog.Service", "catalog.StatusPage", "polling.Poller"]
 )
 def test_the_admin_tunable_tables_stay_editable(staff_client, label):
     # A Poller's interval and pause flag are meant to be changed here.

@@ -1,8 +1,8 @@
-from catalog.adapters.base import Adapter
-from catalog.adapters.betterstack import BetterStackAdapter
-from catalog.adapters.instatus import InstatusAdapter
-from catalog.adapters.rss import RSSAdapter
-from catalog.adapters.statuspage import StatuspageAdapter
+from polling.adapters.base import Adapter
+from polling.adapters.betterstack import BetterStackAdapter
+from polling.adapters.instatus import InstatusAdapter
+from polling.adapters.rss import RSSAdapter
+from polling.adapters.statuspage import StatuspageAdapter
 
 # Order matters: RSS is last because it is the fallback, not a match.
 ADAPTERS: tuple[type[Adapter], ...] = (

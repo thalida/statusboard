@@ -11,25 +11,10 @@ from unfold.contrib.filters.admin import (
 from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 
-from catalog.models import Poller, Service, ServiceComponent, StatusPage
-from common.admin import BaseModelAdmin
+from catalog.models import Service, ServiceComponent, StatusPage
+from common.admin import SEVERITY_VARIANTS, BaseModelAdmin, severity_label
 from common.ordering import CURRENT_SEVERITY
-from status.choices import Severity
 from status.models import ComponentStatus, ServiceEvent
-
-# Lower is worse, so the scale runs danger to success.
-SEVERITY_VARIANTS = {
-    Severity.MAJOR_OUTAGE.label: "danger",
-    Severity.PARTIAL_OUTAGE.label: "danger",
-    Severity.DEGRADED.label: "warning",
-    Severity.UNKNOWN.label: "default",
-    Severity.MAINTENANCE.label: "info",
-    Severity.OPERATIONAL.label: "success",
-}
-
-
-def _severity_label(value):
-    return Severity(value).label if value is not None else "—"
 
 
 class ComponentStatusInline(TabularInline):
@@ -122,7 +107,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             .filter(statuses__ended_at__isnull=True)
             .first()
         )
-        return _severity_label(row)
+        return severity_label(row)
 
     @display(description=_("Provider"))
     def provider(self, obj):
@@ -137,7 +122,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         permissions=["poll_now"],
     )
     def poll_now(self, request, object_id):
-        from status.tasks import poll_service
+        from polling.tasks import poll_service
 
         poll_service.delay(str(object_id))
         self.message_user(request, _("Queued a poll for this service."))
@@ -156,72 +141,6 @@ class StatusPageAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     @display(description=_("Provider"), label=True, ordering="provider")
     def display_provider(self, obj):
         return obj.get_provider_display()
-
-
-@admin.register(Poller)
-class PollerAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
-    """Where a stalled poller is supposed to be obvious.
-
-    A service that stops being polled shows every board a stale green,
-    which is worse than showing nothing.
-    """
-
-    list_display = [
-        "service",
-        "display_health",
-        "consecutive_failure_count",
-        "last_success_at",
-        "next_at",
-    ]
-    search_fields = ["service__name", "service__slug"]
-    list_filter = [
-        "is_paused",
-        ("consecutive_failure_count", RangeNumericFilter),
-        ("last_success_at", RangeDateTimeFilter),
-        ("next_at", RangeDateTimeFilter),
-    ]
-    autocomplete_fields = ["service"]
-    ordering = ["-consecutive_failure_count", "next_at"]
-    actions_row = ["poll_now", "toggle_pause"]
-    actions_detail = ["poll_now", "toggle_pause"]
-
-    @display(
-        description=_("Health"),
-        label={"Paused": "info", "Healthy": "success", "Failing": "danger"},
-    )
-    def display_health(self, obj):
-        if obj.is_paused:
-            return "Paused"
-        return "Failing" if obj.consecutive_failure_count else "Healthy"
-
-    @action(
-        description=_("Poll now"),
-        icon="sync",
-        url_path="poll-now",
-        variant=ActionVariant.PRIMARY,
-        permissions=["manage"],
-    )
-    def poll_now(self, request, object_id):
-        from status.tasks import poll_service
-
-        poller = Poller.objects.get(pk=object_id)
-        poll_service.delay(str(poller.service_id))
-        self.message_user(request, _("Queued a poll."))
-
-    @action(
-        description=_("Pause / resume"),
-        icon="pause",
-        url_path="toggle-pause",
-        permissions=["manage"],
-    )
-    def toggle_pause(self, request, object_id):
-        poller = Poller.objects.get(pk=object_id)
-        poller.is_paused = not poller.is_paused
-        poller.save(update_fields=["is_paused"])
-        self.message_user(request, _("Paused.") if poller.is_paused else _("Resumed."))
-
-    def has_manage_permission(self, request, obj=None):
-        return request.user.has_perm("catalog.change_poller")
 
 
 @admin.register(ServiceComponent)
@@ -256,4 +175,4 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
     @display(description=_("Status"), label=SEVERITY_VARIANTS, ordering="severity_now")
     def display_severity(self, obj):
-        return _severity_label(obj.severity_now)
+        return severity_label(obj.severity_now)

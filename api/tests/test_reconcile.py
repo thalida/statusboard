@@ -1,9 +1,9 @@
 import pytest
 from django.utils import timezone
 
-from catalog.adapters.base import NormalisedComponent, NormalisedEvent
 from catalog.models import ServiceComponent
-from catalog.reconcile import apply_fetch
+from polling.adapters.base import NormalisedComponent, NormalisedEvent
+from polling.reconcile import apply_fetch
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 from status.models import ComponentStatus, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory

@@ -3,9 +3,9 @@ from urllib.parse import urlparse, urlunparse
 from django.db import transaction
 from django.utils.text import slugify
 
-from catalog.adapters.registry import detect
 from catalog.models import Service, StatusPage
-from catalog.reconcile import apply_fetch
+from polling.adapters.registry import detect
+from polling.reconcile import apply_fetch
 from status.choices import StatusSource
 
 

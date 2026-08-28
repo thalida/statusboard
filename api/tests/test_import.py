@@ -2,7 +2,8 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from catalog.models import Poller, Service, StatusPage
+from catalog.models import Service, StatusPage
+from polling.models import Poller
 
 
 class FakeAdapter:
@@ -12,7 +13,7 @@ class FakeAdapter:
         self.url = url
 
     def fetch_status(self):
-        from catalog.adapters.base import NormalisedComponent
+        from polling.adapters.base import NormalisedComponent
 
         return [
             NormalisedComponent("overall", "Twilio", 5, is_overall=True),

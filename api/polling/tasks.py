@@ -5,11 +5,11 @@ from celery import shared_task
 from django.db.models import Q
 from django.utils import timezone
 
-from catalog.adapters.registry import detect
-from catalog.models import Poller, Service
-from catalog.reconcile import apply_fetch
+from catalog.models import Service
+from polling.adapters.registry import detect
+from polling.models import Poller, PollRun
+from polling.reconcile import apply_fetch
 from status.choices import StatusSource
-from status.models import PollRun
 
 JITTER = 0.1
 

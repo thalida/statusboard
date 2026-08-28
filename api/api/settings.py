@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "common",
     "authentication",
     "catalog",
+    "polling",
     "dashboards",
     "status",
 ]
@@ -109,7 +110,7 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # admin without touching this schedule.
 CELERY_BEAT_SCHEDULE = {
     "enqueue-due-polls": {
-        "task": "status.tasks.enqueue_due_polls",
+        "task": "polling.tasks.enqueue_due_polls",
         "schedule": crontab(minute="*"),
     }
 }
@@ -151,7 +152,8 @@ UNFOLD = {
     # #00E54D means "operational" on every status pill, so using it for nav
     # chrome makes an active link read as a status. This is a warm sand
     # pulled from the cream #F5EDD6 instead — same family, no collision
-    # with up-green or down-red. Base runs cream to the near-black #0D0D0D.
+    # with up-green or down-red. Base runs from the cream down through the
+    # brand brown #29140A, so a dark page reads brown rather than black.
     "COLORS": {
         "primary": {
             "50": "#FBF8EF",
@@ -167,17 +169,17 @@ UNFOLD = {
             "950": "#352D18",
         },
         "base": {
-            "50": "#FBF7EC",
+            "50": "#FBF8EF",
             "100": "#F5EDD6",
-            "200": "#E5DCC4",
-            "300": "#C9C0A8",
-            "400": "#9C9484",
-            "500": "#736C60",
-            "600": "#574F45",
-            "700": "#423B33",
-            "800": "#2B2621",
-            "900": "#1A1714",
-            "950": "#0D0D0D",
+            "200": "#E3D6BF",
+            "300": "#C4B097",
+            "400": "#97806A",
+            "500": "#6E5847",
+            "600": "#533F31",
+            "700": "#3D2C21",
+            "800": "#2E2018",
+            "900": "#29140A",
+            "950": "#1A0D06",
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
@@ -213,15 +215,15 @@ UNFOLD = {
             ],
         },
         {
-            "models": ["catalog.poller", "status.pollrun"],
+            "models": ["polling.poller", "polling.pollrun"],
             "items": [
                 {
                     "title": _("Pollers"),
-                    "link": reverse_lazy("admin:catalog_poller_changelist"),
+                    "link": reverse_lazy("admin:polling_poller_changelist"),
                 },
                 {
                     "title": _("Poll runs"),
-                    "link": reverse_lazy("admin:status_pollrun_changelist"),
+                    "link": reverse_lazy("admin:polling_pollrun_changelist"),
                 },
             ],
         },
@@ -266,15 +268,12 @@ UNFOLD = {
                 "title": _("Polling"),
                 "collapsible": True,
                 "items": [
+                    # Poll runs is a tab of Pollers, not a sidebar entry.
+                    # Listing both lights up two rows for one place.
                     {
                         "title": _("Pollers"),
                         "icon": "sync",
-                        "link": reverse_lazy("admin:catalog_poller_changelist"),
-                    },
-                    {
-                        "title": _("Poll runs"),
-                        "icon": "history",
-                        "link": reverse_lazy("admin:status_pollrun_changelist"),
+                        "link": reverse_lazy("admin:polling_poller_changelist"),
                     },
                     {
                         "title": _("Scheduled tasks"),

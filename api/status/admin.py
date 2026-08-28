@@ -1,19 +1,5 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from django_celery_beat.admin import (
-    ClockedScheduleAdmin,
-    CrontabScheduleAdmin,
-    IntervalScheduleAdmin,
-    PeriodicTaskAdmin,
-    SolarScheduleAdmin,
-)
-from django_celery_beat.models import (
-    ClockedSchedule,
-    CrontabSchedule,
-    IntervalSchedule,
-    PeriodicTask,
-    SolarSchedule,
-)
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
@@ -22,46 +8,9 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
-from catalog.admin import SEVERITY_VARIANTS, _severity_label
-from common.admin import PollerWrittenAdmin
+from common.admin import SEVERITY_VARIANTS, PollerWrittenAdmin, severity_label
 from status.choices import CLOSED_PHASES, EventKind
-from status.models import ComponentStatus, EventUpdate, PollRun, ServiceEvent
-
-
-@admin.register(PollRun)
-class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
-    """We are the thing that tells you when services break.
-
-    So we cannot quietly break ourselves. A failing poll is a labelled row
-    here, not a number to go looking for.
-    """
-
-    list_display = ["poller", "display_ok", "provider", "started_at", "display_error"]
-    date_hierarchy = "started_at"
-    search_fields = ["poller__service__name", "url", "error"]
-    list_filter = [
-        "ok",
-        ("provider", ChoicesDropdownFilter),
-        ("poller__service", AutocompleteSelectFilter),
-        ("started_at", RangeDateTimeFilter),
-    ]
-    ordering = ["-started_at"]
-    readonly_fields = ["error"]
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("poller__service")
-
-    @display(
-        description=_("Result"),
-        label={"OK": "success", "Failed": "danger"},
-        ordering="ok",
-    )
-    def display_ok(self, obj):
-        return "OK" if obj.ok else "Failed"
-
-    @display(description=_("Error"))
-    def display_error(self, obj):
-        return (obj.error or "—")[:90]
+from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
 @admin.register(ComponentStatus)
@@ -83,7 +32,7 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
 
     @display(description=_("Severity"), label=SEVERITY_VARIANTS, ordering="severity")
     def display_severity(self, obj):
-        return _severity_label(obj.severity)
+        return severity_label(obj.severity)
 
 
 class EventUpdateInline(TabularInline):
@@ -154,26 +103,3 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     search_fields = ["event__title", "body"]
     list_filter = [("posted_at", RangeDateTimeFilter)]
     autocomplete_fields = ["event"]
-
-
-# Unfold ships no contrib module for django-celery-beat. Its admin classes
-# subclass Django's own ModelAdmin, so its screens render unstyled beside
-# every other one. The documented remedy is to re-register them. PeriodicTask
-# is where the polling schedule is read, so it should not look like a
-# different product.
-#
-# django_celery_beat precedes this app in INSTALLED_APPS, so its admin is
-# already registered by the time this runs.
-RESTYLED_BEAT_ADMIN = [
-    (PeriodicTask, PeriodicTaskAdmin),
-    (IntervalSchedule, IntervalScheduleAdmin),
-    (CrontabSchedule, CrontabScheduleAdmin),
-    (SolarSchedule, SolarScheduleAdmin),
-    (ClockedSchedule, ClockedScheduleAdmin),
-]
-
-for _model, _base in RESTYLED_BEAT_ADMIN:
-    admin.site.unregister(_model)
-    admin.site.register(
-        _model, type(f"Unfold{_base.__name__}", (_base, ModelAdmin), {})
-    )

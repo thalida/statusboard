@@ -45,12 +45,12 @@ Monorepo, matching caracara and codecity:
 statusboard/
 ├─ api/                    Django 5 + DRF
 │  ├─ api/                 settings, celery.py, urls
-│  ├─ common/              BaseModel, pagination, schema, mixins
-│  ├─ docs/                drf-spectacular + Scalar, served inside Unfold admin
+│  ├─ common/              BaseModel, pagination, schema, mixins, Scalar docs
 │  ├─ authentication/      User, magic link
-│  ├─ catalog/             Service, StatusPage, Poller, ServiceComponent, adapters/
-│  ├─ dashboards/          Dashboard, DashboardItem
-│  └─ status/              ComponentStatus, ServiceEvent, EventUpdate, PollRun, tasks.py
+│  ├─ catalog/             Service, StatusPage, ServiceComponent — what exists
+│  ├─ polling/             Poller, PollRun, adapters/, reconcile, tasks — how we look
+│  ├─ status/              ComponentStatus, ServiceEvent, EventUpdate — what we saw
+│  └─ dashboards/          Dashboard, DashboardItem
 ├─ app/                    React + TS + Vite + Tailwind + TanStack Query + vite-plugin-pwa
 ├─ justfile                infisical run --env=dev wrapping everything
 └─ docker-compose.yml      postgres 17, redis 7

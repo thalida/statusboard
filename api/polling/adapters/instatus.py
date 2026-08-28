@@ -3,8 +3,8 @@ from urllib.parse import urljoin
 
 import requests
 
-from catalog.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from catalog.choices import StatusPageProvider
+from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
 
 

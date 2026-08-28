@@ -3,13 +3,13 @@ from urllib.parse import urljoin
 
 import requests
 
-from catalog.adapters.base import (
+from catalog.choices import StatusPageProvider
+from polling.adapters.base import (
     Adapter,
     NormalisedComponent,
     NormalisedEvent,
     NormalisedUpdate,
 )
-from catalog.choices import StatusPageProvider
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
 
 

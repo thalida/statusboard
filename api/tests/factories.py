@@ -1,6 +1,7 @@
 import factory
 
-from catalog.models import Poller, Service, ServiceComponent, StatusPage
+from catalog.models import Service, ServiceComponent, StatusPage
+from polling.models import Poller
 
 
 class ServiceFactory(factory.django.DjangoModelFactory):

@@ -1,8 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from catalog.choices import StatusPageProvider
-from catalog.models import Poller, Service, ServiceComponent
+from catalog.models import Service, ServiceComponent
 from common.models import BaseModel
 from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSource
 
@@ -90,19 +89,3 @@ class EventUpdate(BaseModel):
 
     class Meta(BaseModel.Meta):
         ordering = ["-posted_at"]
-
-
-class PollRun(BaseModel):
-    """One poll attempt against a service's status page.
-
-    `url` and `provider` are snapshots. A service can change its status
-    page later. This row stays readable as it was polled.
-    """
-
-    poller = models.ForeignKey(Poller, on_delete=models.CASCADE, related_name="runs")
-    url = models.URLField()
-    provider = models.CharField(max_length=32, choices=StatusPageProvider.choices)
-    started_at = models.DateTimeField()
-    finished_at = models.DateTimeField(null=True, blank=True)
-    ok = models.BooleanField(default=False)
-    error = models.TextField(blank=True, default="")

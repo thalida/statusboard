@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db.models import Count, Min, Q
 from django.utils import timezone
 
+from status.choices import Severity
+
 
 def environment_callback(request):
     """Colour the banner by database.
@@ -30,8 +32,8 @@ def dashboard_callback(request, context):
     shows every board a stale green, which is worse than showing nothing,
     so the landing page leads with the poller and not with row counts.
     """
-    from catalog.models import Poller, Service
-    from status.models import PollRun
+    from catalog.models import Service
+    from polling.models import Poller, PollRun
 
     now = timezone.now()
     day_ago = now - timezone.timedelta(hours=24)
@@ -132,3 +134,18 @@ class PollerWrittenAdmin(BaseModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# Lower is worse, so the scale runs danger to success.
+SEVERITY_VARIANTS = {
+    Severity.MAJOR_OUTAGE.label: "danger",
+    Severity.PARTIAL_OUTAGE.label: "danger",
+    Severity.DEGRADED.label: "warning",
+    Severity.UNKNOWN.label: "default",
+    Severity.MAINTENANCE.label: "info",
+    Severity.OPERATIONAL.label: "success",
+}
+
+
+def severity_label(value):
+    return Severity(value).label if value is not None else "—"

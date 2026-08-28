@@ -1,7 +1,8 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from catalog.models import Poller, Service
+from catalog.models import Service
+from polling.models import Poller
 
 
 @receiver(post_save, sender=Service)

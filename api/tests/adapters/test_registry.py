@@ -2,9 +2,9 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from catalog.adapters.base import Adapter, NormalisedComponent
-from catalog.adapters.registry import detect
 from catalog.choices import StatusPageProvider
+from polling.adapters.base import Adapter, NormalisedComponent
+from polling.adapters.registry import detect
 
 
 @pytest.mark.parametrize(

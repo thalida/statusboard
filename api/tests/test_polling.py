@@ -3,9 +3,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from catalog.models import Poller
-from status.models import PollRun
-from status.tasks import due_pollers, next_interval_seconds, poll_service
+from polling.models import Poller, PollRun
+from polling.tasks import due_pollers, next_interval_seconds, poll_service
 from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 
@@ -64,7 +63,7 @@ def test_a_failed_poll_records_the_run_and_increments_the_counter(monkeypatch):
         def fetch_status(self):
             raise RuntimeError("upstream is down")
 
-    monkeypatch.setattr("status.tasks.detect", lambda url: Boom)
+    monkeypatch.setattr("polling.tasks.detect", lambda url: Boom)
     poll_service(str(poller.service_id))
 
     poller.refresh_from_db()
@@ -96,7 +95,7 @@ def test_a_failed_poll_never_clobbers_the_last_known_value(monkeypatch):
         def fetch_status(self):
             raise RuntimeError("down")
 
-    monkeypatch.setattr("status.tasks.detect", lambda url: Boom)
+    monkeypatch.setattr("polling.tasks.detect", lambda url: Boom)
     poll_service(str(poller.service_id))
 
     still = ComponentStatus.objects.get(component=component, ended_at__isnull=True)
@@ -122,7 +121,7 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
         def fetch_service_metadata(self):
             return {}
 
-    monkeypatch.setattr("status.tasks.detect", lambda url: Fine)
+    monkeypatch.setattr("polling.tasks.detect", lambda url: Fine)
     poll_service(str(poller.service_id))
 
     poller.refresh_from_db()
@@ -152,7 +151,7 @@ def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
     # row to write. It must not raise: the admin offers "Poll now".
     service = ServiceFactory(watcher_count=1)
     monkeypatch.setattr(
-        "status.tasks.detect", lambda url: pytest.fail("fetched with no page")
+        "polling.tasks.detect", lambda url: pytest.fail("fetched with no page")
     )
     poll_service(str(service.id))
     assert not PollRun.objects.filter(poller__service=service).exists()

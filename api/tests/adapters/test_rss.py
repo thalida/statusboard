@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from catalog.adapters.rss import RSSAdapter
+from polling.adapters.rss import RSSAdapter
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -56,7 +56,7 @@ def test_severity_is_operational_when_nothing_is_open(adapter, monkeypatch):
 def test_severity_is_degraded_while_an_incident_is_open(adapter, monkeypatch):
     from django.utils import timezone
 
-    from catalog.adapters.base import NormalisedEvent
+    from polling.adapters.base import NormalisedEvent
 
     monkeypatch.setattr(
         adapter,

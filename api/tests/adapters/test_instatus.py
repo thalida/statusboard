@@ -1,6 +1,6 @@
 import pytest
 
-from catalog.adapters.instatus import InstatusAdapter
+from polling.adapters.instatus import InstatusAdapter
 from status.choices import Severity
 from tests.adapters.conftest import StubSession
 
