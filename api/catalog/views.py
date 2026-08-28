@@ -23,7 +23,15 @@ from status.serializers import ServiceEventSerializer
 
 
 class ServiceAggregateSet(StatusAggregateSet):
-    def _component_queryset(self):
+    """Counts for a list of services.
+
+    A service has no severity of its own. Its severity is the open status
+    of its overall component, which is the provider's own page-level
+    reading. So counting services by severity means counting those
+    components, not the services.
+    """
+
+    def components(self):
         return ServiceComponent.objects.filter(
             service__in=self.queryset, is_overall=True
         )

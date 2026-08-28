@@ -4,9 +4,13 @@ from status.choices import CLOSED_PHASES, EventKind
 
 
 class AggregateSet:
-    """Values computed over the whole collection, not the page.
+    """Fills the `aggregates` key of a list response.
 
-    An endpoint subclasses this and adds its own.
+    Computed over the whole filtered collection, not the page. That is
+    the point: a screen can show "3 down, 12 operational" from the one
+    request that drew the rows, instead of a request per count.
+
+    A view names its class in `aggregate_set` and the paginator builds it.
     Put every collection-wide value here, never at the top level.
     """
 
@@ -28,13 +32,19 @@ class StatusAggregateSet(AggregateSet):
         data["oldest_refreshed_at"] = self._oldest_refreshed_at()
         return data
 
-    def _component_queryset(self):
-        """Override where the rows are not components themselves."""
+    def components(self):
+        """The components these counts are drawn from.
+
+        Severity and events hang off a component, so every count below
+        starts here. When the rows are already components this is them.
+        A list of something else overrides it to say which components
+        stand for its rows.
+        """
         return self.queryset
 
     def _by_severity(self):
         rows = (
-            self._component_queryset()
+            self.components()
             .filter(statuses__ended_at__isnull=True)
             .values("statuses__severity")
             .annotate(n=Count("id", distinct=True))
@@ -45,7 +55,7 @@ class StatusAggregateSet(AggregateSet):
         counts = {}
         for kind in EventKind:
             counts[str(kind)] = (
-                self._component_queryset()
+                self.components()
                 .filter(events__kind=kind)
                 .exclude(events__phase__in=CLOSED_PHASES)
                 .distinct()
@@ -54,14 +64,12 @@ class StatusAggregateSet(AggregateSet):
         return counts
 
     def _next_refresh_at(self):
-        return self._component_queryset().aggregate(v=Min("service__poller__next_at"))[
-            "v"
-        ]
+        return self.components().aggregate(v=Min("service__poller__next_at"))["v"]
 
     def _oldest_refreshed_at(self):
-        return self._component_queryset().aggregate(
-            v=Min("service__poller__last_success_at")
-        )["v"]
+        return self.components().aggregate(v=Min("service__poller__last_success_at"))[
+            "v"
+        ]
 
 
 class EventAggregateSet(AggregateSet):
