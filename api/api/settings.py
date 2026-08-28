@@ -154,43 +154,46 @@ UNFOLD = {
         {"icon": "api", "title": _("API docs"), "link": "/"},
         {"icon": "schema", "title": _("OpenAPI schema"), "link": "/schema/"},
     ],
-    # The brand palette. The accent is deliberately not the mark's green:
-    # #00E54D means "operational" on every status pill, so using it for nav
-    # chrome makes an active link read as a status. This is a warm sand
-    # pulled from the cream #F5EDD6 instead — same family, no collision
-    # with up-green or down-red. Base runs from the cream down through the
-    # brand brown, so a dark page reads brown rather than black. The last
-    # steps sit below the old near-black: brown reads lighter than a
-    # neutral at the same value, so it has to go further down.
+    # Ultramarine. The interface carries no accent hue of its own: the
+    # mark's #00E54D means "operational" and its #E51F00 means "outage",
+    # so any colour the chrome borrows turns a link into a status. So
+    # every colour on a screen belongs to the severity ramp, and
+    # interaction is carried by weight and contrast instead.
+    #
+    # `primary` is therefore the ground's own hue at the far ends of its
+    # lightness rather than a new colour. A link is near-white on the
+    # dark page and near-black on the light one, which is bone and ink.
+    #
+    # `base` runs from a blue-violet white down to a deep blue-violet
+    # black, so neither theme is a neutral grey. The dark end goes
+    # further than a neutral would: a saturated hue reads lighter than a
+    # grey of the same value.
     "COLORS": {
         "primary": {
-            "50": "#FBF8EF",
-            "100": "#F4ECD7",
-            "200": "#E8D9B0",
-            "300": "#DAC58B",
-            "400": "#CCB166",
-            "500": "#BFA04A",
-            "600": "#A88B3E",
-            "700": "#887235",
-            "800": "#6D5B2C",
-            "900": "#564925",
-            "950": "#352D18",
+            "50": "#F7F7FD",
+            "100": "#EFEFF9",
+            "200": "#DEDEF0",
+            "300": "#C6C5E4",
+            "400": "#B9B8DE",
+            "500": "#8A88B8",
+            "600": "#3B3A66",
+            "700": "#2A2952",
+            "800": "#1A193F",
+            "900": "#12123A",
+            "950": "#06061F",
         },
-        # The dark end is the page itself, so it carries the least light
-        # the hue holds and still reads as brown. The light end is the
-        # light theme and is left alone.
         "base": {
-            "50": "#FBF8EF",
-            "100": "#F5EDD6",
-            "200": "#E3D6BF",
-            "300": "#C4B097",
-            "400": "#97806A",
-            "500": "#6E5847",
-            "600": "#4C392D",
-            "700": "#322218",
-            "800": "#1D120C",
-            "900": "#100905",
-            "950": "#070402",
+            "50": "#F7F7FD",
+            "100": "#F3F3FB",
+            "200": "#E9E9F6",
+            "300": "#DEDEF0",
+            "400": "#B9B8DE",
+            "500": "#8A88B8",
+            "600": "#63628F",
+            "700": "#3B3A66",
+            "800": "#1A193F",
+            "900": "#0D0C2B",
+            "950": "#06061F",
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
