@@ -193,10 +193,15 @@ UNFOLD = {
         # Unfold paints the dark page with base-900, its cards with
         # base-800 and its borders with base-700, and the light page with
         # base-50. So those four steps carry the palette's ground,
-        # surface and edge rather than sitting wherever a even ramp would
-        # put them. Read the step roles off the templates before moving
-        # any of these: an even ramp put the ground on 950 and the page
-        # came out a step light.
+        # surface and edge rather than sitting wherever an even ramp
+        # would put them. Read the step roles off the templates before
+        # moving any of these.
+        #
+        # The dark steps are set by contrast against the page, not by
+        # lightness. A deep blue holds very little luminance, so a step
+        # that looks like a step is not one: the first attempt put the
+        # card 1.05:1 from the page and a table was unreadable. The card
+        # is 1.42:1 now and the border 1.38:1 above the card.
         "base": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -204,9 +209,9 @@ UNFOLD = {
             "300": "#C6C5E4",
             "400": "#A9A7D6",
             "500": "#8A88B8",
-            "600": "#4A4870",
-            "700": "#1A193F",
-            "800": "#0D0C2B",
+            "600": "#5A5A92",
+            "700": "#3C3C6F",
+            "800": "#28284B",
             "900": "#06061F",
             "950": "#030310",
         },
