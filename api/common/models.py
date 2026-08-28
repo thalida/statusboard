@@ -8,10 +8,12 @@ class BaseModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # An audit trail, so nobody fills these in. The admin stamps them.
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
+        editable=False,
         on_delete=models.SET_NULL,
         related_name="+",
     )
@@ -19,6 +21,7 @@ class BaseModel(models.Model):
         settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
+        editable=False,
         on_delete=models.SET_NULL,
         related_name="+",
     )

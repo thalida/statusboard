@@ -101,6 +101,9 @@ def _ago(when, now):
     return f"{minutes // 1440}d ago"
 
 
+AUDIT_FIELDS = ["created_at", "updated_at", "created_by", "updated_by"]
+
+
 class BaseModelAdmin:
     """Options every changelist in this project wants.
 
@@ -113,6 +116,34 @@ class BaseModelAdmin:
     list_fullwidth = True
     warn_unsaved_form = True
     list_per_page = 25
+
+    def get_readonly_fields(self, request, obj=None):
+        """Show the audit trail without offering to edit it."""
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + [f for f in AUDIT_FIELDS if f not in fields]
+
+    def save_model(self, request, obj, form, change):
+        """Stamp who did it.
+
+        The fields are not editable, so they can only be set here. Left
+        alone they stayed null forever, which is an audit trail that
+        records nothing.
+        """
+        if not change and getattr(obj, "created_by_id", None) is None:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def save_formset(self, request, form, formset, change):
+        """The same stamp for anything edited through an inline."""
+        for instance in formset.save(commit=False):
+            if instance.pk is None and getattr(instance, "created_by_id", None) is None:
+                instance.created_by = request.user
+            instance.updated_by = request.user
+            instance.save()
+        formset.save_m2m()
+        for obj in formset.deleted_objects:
+            obj.delete()
 
 
 class PollerWrittenAdmin(BaseModelAdmin):

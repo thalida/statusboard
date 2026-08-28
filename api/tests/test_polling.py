@@ -155,3 +155,29 @@ def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
     )
     poll_service(str(service.id))
     assert not PollRun.objects.filter(poller__service=service).exists()
+
+
+@pytest.mark.django_db
+def test_api_url_overrides_the_page_url_when_set(monkeypatch):
+    # The escape hatch for a page whose API lives somewhere the adapter
+    # would not reach by joining a path onto the page URL.
+    poller = PollerFactory(service=ServiceFactory(watcher_count=1))
+    StatusPageFactory(service=poller.service, api_url="https://api.elsewhere/")
+    seen = {}
+
+    class Recorder:
+        def __init__(self, url, session=None):
+            seen["url"] = url
+
+        def fetch_status(self):
+            return []
+
+        def fetch_incidents(self):
+            return []
+
+        def fetch_service_metadata(self):
+            return {}
+
+    monkeypatch.setattr("polling.tasks.detect", lambda url: Recorder)
+    poll_service(str(poller.service_id))
+    assert seen["url"] == "https://api.elsewhere/"

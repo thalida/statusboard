@@ -1,4 +1,3 @@
-from django.db.models import F
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -7,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.models import Service, ServiceComponent
+from catalog.models import ServiceComponent
 from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
 from common.filters import FieldsBackend
@@ -67,9 +66,7 @@ class BoardComponentListView(generics.ListCreateAPIView):
             dashboard=board, component=component
         )
         if created:
-            Service.objects.filter(id=component.service_id).update(
-                watcher_count=F("watcher_count") + 1
-            )
+            component.service.refresh_watcher_count()
         return Response(
             ComponentSerializer(component, context={"request": request}).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -90,9 +87,7 @@ class BoardComponentDetailView(APIView):
         item = get_object_or_404(
             DashboardItem, dashboard=board, component_id=component_id
         )
-        service_id = item.component.service_id
+        service = item.component.service
         item.delete()
-        Service.objects.filter(id=service_id, watcher_count__gt=0).update(
-            watcher_count=F("watcher_count") - 1
-        )
+        service.refresh_watcher_count()
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -204,3 +204,47 @@ def test_a_board_belonging_to_someone_else_is_not_readable(client):
     other = Dashboard.objects.get(owner=User.objects.create(email="c@d.com"))
     url = reverse("board-components", kwargs={"uuid": other.id})
     assert client.get(url).status_code == 404
+
+
+@pytest.mark.django_db
+def test_watcher_count_is_distinct_users_not_tracked_items(client, board):
+    # Someone tracking five Twilio components is one watcher. Counting
+    # items would let one person outrank a crowd in the suggestion order.
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    for external_id in ("a", "b", "c"):
+        component = ComponentFactory(service=service, external_id=external_id)
+        client.post(url, {"component_id": str(component.id)}, format="json")
+    service.refresh_from_db()
+    assert service.watcher_count == 1
+
+
+@pytest.mark.django_db
+def test_two_people_tracking_one_service_count_twice(client, board):
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    component = ComponentFactory(service=service)
+    DashboardItem.objects.create(dashboard=board, component=component)
+
+    other = Dashboard.objects.get(owner=User.objects.create(email="second@b.com"))
+    DashboardItem.objects.create(dashboard=other, component=component)
+
+    service.refresh_watcher_count()
+    service.refresh_from_db()
+    assert service.watcher_count == 2
+
+
+@pytest.mark.django_db
+def test_untracking_the_last_component_drops_the_watcher(client, board):
+    component = _track(board)
+    service = component.service
+    service.refresh_watcher_count()
+    client.delete(
+        reverse(
+            "board-component-detail",
+            kwargs={"uuid": board.id, "component_id": component.id},
+        )
+    )
+    service.refresh_from_db()
+    assert service.watcher_count == 0

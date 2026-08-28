@@ -59,3 +59,36 @@ def test_a_component_can_be_archived_rather_than_deleted():
     component.save()
     component.refresh_from_db()
     assert component.archived_at is not None
+
+
+@pytest.mark.django_db
+def test_a_service_slugs_itself_from_its_name():
+    # Nobody should have to type the URL of a service they are adding.
+    assert Service.objects.create(name="Twilio SendGrid").slug == "twilio-sendgrid"
+
+
+@pytest.mark.django_db
+def test_a_second_service_with_the_same_name_gets_a_counter():
+    # Two providers really can share a name, so this cannot just fail.
+    Service.objects.create(name="Status")
+    assert Service.objects.create(name="Status").slug == "status-2"
+    assert Service.objects.create(name="Status").slug == "status-3"
+
+
+@pytest.mark.django_db
+def test_a_slug_given_by_hand_is_kept():
+    assert Service.objects.create(name="Twilio", slug="twil").slug == "twil"
+
+
+@pytest.mark.django_db
+def test_renaming_a_service_does_not_move_its_slug():
+    # The slug is the service's public URL. A rename must not break it.
+    service = Service.objects.create(name="Twilio")
+    service.name = "Twilio Messaging"
+    service.save()
+    assert service.slug == "twilio"
+
+
+@pytest.mark.django_db
+def test_a_name_with_no_slug_characters_still_gets_one():
+    assert Service.objects.create(name="!!!").slug == "service"

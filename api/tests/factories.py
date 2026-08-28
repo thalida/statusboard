@@ -8,7 +8,6 @@ class ServiceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Service
 
-    slug = factory.Sequence(lambda n: f"service-{n}")
     name = factory.Sequence(lambda n: f"Service {n}")
 
 

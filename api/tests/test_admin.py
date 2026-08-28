@@ -132,3 +132,41 @@ def test_the_admin_tunable_tables_stay_editable(staff_client, label):
     site_admin = admin.site._registry[model]
     request = staff_client.request().wsgi_request
     assert site_admin.has_change_permission(request)
+
+
+@pytest.mark.django_db
+def test_the_admin_stamps_who_created_a_row(staff_client):
+    # The fields are not editable, so nothing else can set them. Left
+    # alone they stayed null forever: an audit trail recording nothing.
+    from catalog.models import Service
+
+    staff_client.post(
+        reverse("admin:catalog_service_add"),
+        {
+            "name": "Stamped",
+            "slug": "",
+            "description": "",
+            "logo": "",
+            "homepage_url": "",
+            "events-TOTAL_FORMS": "0",
+            "events-INITIAL_FORMS": "0",
+            "events-MIN_NUM_FORMS": "0",
+            "events-MAX_NUM_FORMS": "0",
+            "status_page-TOTAL_FORMS": "0",
+            "status_page-INITIAL_FORMS": "0",
+            "status_page-MIN_NUM_FORMS": "0",
+            "status_page-MAX_NUM_FORMS": "0",
+        },
+    )
+    service = Service.objects.get(name="Stamped")
+    assert service.created_by.email == "admin@example.com"
+    assert service.updated_by.email == "admin@example.com"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("field", ["created_by", "updated_by", "watcher_count"])
+def test_derived_fields_are_not_on_the_form(staff_client, field):
+    # watcher_count decides what gets polled, so a hand edit would
+    # silently start or stop polling a service.
+    body = staff_client.get(reverse("admin:catalog_service_add")).content.decode()
+    assert f'name="{field}"' not in body

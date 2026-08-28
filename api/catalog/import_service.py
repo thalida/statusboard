@@ -1,7 +1,6 @@
 from urllib.parse import urlparse, urlunparse
 
 from django.db import transaction
-from django.utils.text import slugify
 
 from catalog.models import Service, StatusPage
 from polling.adapters.registry import detect
@@ -31,7 +30,6 @@ def import_from_url(url: str) -> tuple[Service, bool]:
     name = metadata.get("name") or urlparse(key).netloc
 
     service = Service.objects.create(
-        slug=_unique_slug(name),
         name=name,
         description=metadata.get("description", ""),
         homepage_url=metadata.get("homepage_url", ""),
@@ -46,12 +44,3 @@ def import_from_url(url: str) -> tuple[Service, bool]:
         getattr(adapter, "status_source", StatusSource.PROVIDER),
     )
     return service, True
-
-
-def _unique_slug(name):
-    base = slugify(name) or "service"
-    slug, n = base, 1
-    while Service.objects.filter(slug=slug).exists():
-        n += 1
-        slug = f"{base}-{n}"
-    return slug
