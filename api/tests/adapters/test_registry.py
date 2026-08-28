@@ -47,3 +47,54 @@ def test_normalised_component_is_immutable():
     )
     with pytest.raises(FrozenInstanceError):
         component.name = "changed"
+
+
+def test_a_poll_uses_the_provider_recorded_at_import():
+    # The decision was made once, against the live page. A URL cannot see
+    # what identify saw, so re-deciding every poll would throw it away.
+    from polling.adapters.registry import for_provider
+    from polling.adapters.services.incidentio import IncidentIoAdapter
+    from polling.adapters.services.rss import RSSAdapter
+
+    assert for_provider("incident_io") is IncidentIoAdapter
+    assert for_provider("rss") is RSSAdapter
+    assert for_provider("something_new") is RSSAdapter
+
+
+def test_feed_links_are_found_wherever_the_page_points():
+    """Status pages often host their feed on another domain.
+
+    status.notion.so points at notion-status.com, status.slack.com at
+    slack-status.com. Guessing paths on the original host finds neither.
+    """
+    from polling.adapters.registry import advertised_feeds
+
+    class StubPage:
+        def get(self, url, **kwargs):
+            markup = (
+                '<link rel="alternate" type="application/rss+xml" '
+                'href="https://elsewhere.example/feed.rss">'
+                '<link rel="alternate" type="application/atom+xml" href="/local.atom">'
+                '<link rel="stylesheet" href="/ignored.css">'
+            )
+            return type("R", (), {"text": markup})()
+
+    assert advertised_feeds("https://status.example.com/", session=StubPage()) == [
+        "https://elsewhere.example/feed.rss",
+        "https://status.example.com/local.atom",
+    ]
+
+
+def test_a_page_nothing_can_read_is_refused():
+    # Better than inventing a reading. A service that shows green because
+    # nothing could read it is the failure worth avoiding.
+    import pytest
+
+    from polling.adapters.registry import identify
+
+    class Broken:
+        def get(self, url, **kwargs):
+            raise OSError("down")
+
+    with pytest.raises(ValueError, match="No adapter could read"):
+        identify("https://nope.example.com/", session=Broken())

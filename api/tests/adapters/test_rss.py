@@ -130,3 +130,20 @@ def test_service_metadata_comes_from_the_channel(adapter):
         "name": "GitHub Status - Incident History",
         "homepage_url": "https://www.githubstatus.com",
     }
+
+
+def test_a_page_that_is_not_a_feed_is_refused():
+    """The fallback must not invent a reading it did not make.
+
+    Anything unrecognised reaches this adapter, HTML pages included.
+    feedparser returns an empty feed for those, which became one
+    component reading OPERATIONAL — a service showing green forever
+    because nothing could read it.
+    """
+    import pytest
+
+    html = StubTextSession("<!doctype html><html><body>Not a feed</body></html>")
+    with pytest.raises(ValueError, match="not a feed"):
+        RSSAdapter(
+            "https://health.aws.amazon.com/health/status", session=html
+        ).fetch_status()

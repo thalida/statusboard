@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from catalog.models import Service
-from polling.adapters.registry import detect
+from polling.adapters.registry import for_provider
 from polling.models import Poller, PollRun
 from polling.reconcile import apply_fetch
 from status.choices import StatusSource
@@ -57,7 +57,7 @@ def poll_service(service_id):
         poller=poller, url=page.url, provider=page.provider, started_at=timezone.now()
     )
     try:
-        adapter = detect(page.url)(page.api_url_override or page.url)
+        adapter = for_provider(page.provider)(page.api_url_override or page.url)
         components = adapter.fetch_status()
         events = adapter.fetch_incidents()
         metadata = adapter.fetch_service_metadata()

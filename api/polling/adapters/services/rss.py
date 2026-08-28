@@ -41,8 +41,19 @@ class RSSAdapter(Adapter):
         return True
 
     def _feed(self):
+        """Parse the feed, or refuse.
+
+        This is the fallback adapter, so anything unrecognised lands
+        here — including pages that are not feeds at all. feedparser is
+        lenient and returns an empty feed for HTML, which used to become
+        one synthetic component reading OPERATIONAL. A page we cannot
+        read must fail the poll, not invent green for it.
+        """
         session = self.session or requests
-        return feedparser.parse(session.get(self.url, timeout=10).text)
+        feed = feedparser.parse(session.get(self.url, timeout=10).text)
+        if not feed.version:
+            raise ValueError(f"{self.url} is not a feed this adapter can read")
+        return feed
 
     def fetch_status(self):
         open_events = [e for e in self.fetch_incidents() if e.ends_at is None]

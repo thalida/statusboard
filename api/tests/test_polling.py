@@ -63,7 +63,7 @@ def test_a_failed_poll_records_the_run_and_increments_the_counter(monkeypatch):
         def fetch_status(self):
             raise RuntimeError("upstream is down")
 
-    monkeypatch.setattr("polling.tasks.detect", lambda url: Boom)
+    monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Boom)
     poll_service(str(poller.service_id))
 
     poller.refresh_from_db()
@@ -95,7 +95,7 @@ def test_a_failed_poll_never_clobbers_the_last_known_value(monkeypatch):
         def fetch_status(self):
             raise RuntimeError("down")
 
-    monkeypatch.setattr("polling.tasks.detect", lambda url: Boom)
+    monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Boom)
     poll_service(str(poller.service_id))
 
     still = ComponentStatus.objects.get(component=component, ended_at__isnull=True)
@@ -124,7 +124,7 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
         def fetch_logo(self):
             return "https://cdn.example/logo.png"
 
-    monkeypatch.setattr("polling.tasks.detect", lambda url: Fine)
+    monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Fine)
     poll_service(str(poller.service_id))
 
     poller.refresh_from_db()
@@ -154,7 +154,8 @@ def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
     # row to write. It must not raise: the admin offers "Poll now".
     service = ServiceFactory(watcher_count=1)
     monkeypatch.setattr(
-        "polling.tasks.detect", lambda url: pytest.fail("fetched with no page")
+        "polling.tasks.for_provider",
+        lambda provider: pytest.fail("fetched with no page"),
     )
     poll_service(str(service.id))
     assert not PollRun.objects.filter(poller__service=service).exists()
@@ -181,6 +182,6 @@ def test_an_api_url_override_replaces_the_page_url(monkeypatch):
         def fetch_service_metadata(self):
             return {}
 
-    monkeypatch.setattr("polling.tasks.detect", lambda url: Recorder)
+    monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Recorder)
     poll_service(str(poller.service_id))
     assert seen["url"] == "https://api.elsewhere/"

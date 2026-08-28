@@ -22,7 +22,7 @@ class ServiceManager(models.Manager):
         The polling imports are local to the method. `polling` imports
         this module, so a top-level import would close the loop.
         """
-        from polling.adapters.registry import detect
+        from polling.adapters.registry import identify
         from polling.models import PollRun
         from polling.reconcile import apply_fetch
         from status.choices import StatusSource
@@ -32,8 +32,8 @@ class ServiceManager(models.Manager):
         if existing is not None:
             return existing.service, False
 
-        adapter_class = detect(key)
-        adapter = adapter_class(key)
+        adapter_class, fetch_url = identify(key)
+        adapter = adapter_class(fetch_url)
         metadata = adapter.fetch_service_metadata()
 
         service = self.create(
@@ -43,7 +43,12 @@ class ServiceManager(models.Manager):
             logo=adapter.fetch_logo(),
         )
         StatusPage.objects.create(
-            service=service, url=key, provider=adapter_class.provider
+            service=service,
+            url=key,
+            provider=adapter_class.provider,
+            # Set when the page's own address is not what we read: a
+            # page whose feed lives at a path of its own, for one.
+            api_url_override="" if fetch_url == key else fetch_url,
         )
         # The Poller comes from the Service signal; one here would duplicate it.
 

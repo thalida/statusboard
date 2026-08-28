@@ -32,7 +32,10 @@ class FakeAdapter:
 
 @pytest.fixture(autouse=True)
 def fake_detect(monkeypatch):
-    monkeypatch.setattr("polling.adapters.registry.detect", lambda url: FakeAdapter)
+    monkeypatch.setattr(
+        "polling.adapters.registry.identify",
+        lambda url, session=None: (FakeAdapter, url),
+    )
 
 
 @pytest.mark.django_db
