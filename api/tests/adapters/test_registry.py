@@ -98,3 +98,28 @@ def test_a_page_nothing_can_read_is_refused():
 
     with pytest.raises(ValueError, match="No adapter could read"):
         identify("https://nope.example.com/", session=Broken())
+
+
+def test_no_adapter_answers_for_a_page_that_is_not_its_own():
+    """Probing punishes an adapter that ignores its URL.
+
+    One that answered regardless would claim every page nothing else
+    could read, and report its own provider's events under another
+    service's name.
+    """
+    from polling.adapters.registry import ADAPTERS
+
+    class Nothing:
+        def get(self, url, **kwargs):
+            raise OSError("not reachable")
+
+    for adapter_class in ADAPTERS:
+        adapter = adapter_class(
+            "https://status.someone-else.example/", session=Nothing()
+        )
+        answered = None
+        try:
+            answered = adapter.fetch_status()
+        except Exception as refusal:  # noqa: BLE001 — refusing is correct
+            assert refusal is not None
+        assert answered is None, f"{adapter_class.__name__} answered anyway"

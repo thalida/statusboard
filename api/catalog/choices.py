@@ -7,4 +7,6 @@ class StatusPageProvider(models.TextChoices):
     BETTERSTACK = "betterstack", "Better Stack"
     INCIDENT_IO = "incident_io", "incident.io"
     STATUS_IO = "status_io", "status.io"
+    GOOGLE_CLOUD = "google_cloud", "Google Cloud"
+    AWS = "aws", "Amazon Web Services"
     RSS = "rss", "RSS feed"

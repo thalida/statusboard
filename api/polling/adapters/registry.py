@@ -6,7 +6,9 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import requests
 
 from polling.adapters.base import Adapter
+from polling.adapters.services.aws import AwsAdapter
 from polling.adapters.services.betterstack import BetterStackAdapter
+from polling.adapters.services.googlecloud import GoogleCloudAdapter
 from polling.adapters.services.incidentio import IncidentIoAdapter
 from polling.adapters.services.instatus import InstatusAdapter
 from polling.adapters.services.rss import RSSAdapter
@@ -15,6 +17,8 @@ from polling.adapters.services.statuspage import StatuspageAdapter
 
 # Order matters: RSS is last because it is the fallback, not a match.
 ADAPTERS: tuple[type[Adapter], ...] = (
+    AwsAdapter,
+    GoogleCloudAdapter,
     IncidentIoAdapter,
     StatuspageAdapter,
     InstatusAdapter,
