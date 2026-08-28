@@ -7,6 +7,8 @@ a trigger. So the rules live on the models, the pickers in the admin
 offer only what is allowed, and these hold both in place.
 """
 
+from datetime import timedelta
+
 import pytest
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -193,3 +195,120 @@ def test_a_poll_invents_no_component(two_services):
     assert (
         ServiceEvent.objects.get(external_id="inc-1").affected_components.count() == 0
     )
+
+
+@pytest.mark.django_db
+def test_a_reading_cannot_end_before_it_starts(two_services):
+    mine, _ = two_services
+    reading = ComponentStatus(
+        component=ComponentFactory(service=mine),
+        severity=Severity.OPERATIONAL,
+        source=StatusSource.PROVIDER,
+        started_at=timezone.now(),
+        ended_at=timezone.now() - timedelta(days=1),
+    )
+
+    with pytest.raises(ValidationError):
+        reading.full_clean()
+
+
+@pytest.mark.django_db
+def test_the_database_refuses_a_backwards_reading_too(two_services):
+    # Both ends are written by the poller, so this one is a constraint
+    # and not only a rule a form obeys.
+    from django.db import IntegrityError, transaction
+
+    mine, _ = two_services
+    with pytest.raises(IntegrityError), transaction.atomic():
+        ComponentStatus.objects.create(
+            component=ComponentFactory(service=mine),
+            severity=Severity.OPERATIONAL,
+            source=StatusSource.PROVIDER,
+            started_at=timezone.now(),
+            ended_at=timezone.now() - timedelta(days=1),
+        )
+
+
+@pytest.mark.django_db
+def test_an_event_may_end_before_it_starts(two_services):
+    """A provider back-dates a resolution below the recorded start.
+
+    GitHub and OpenAI both publish incidents like this. A rule here
+    would fail the poll rather than record what the page says.
+    """
+    mine, _ = two_services
+    event = ServiceEvent(
+        service=mine,
+        external_id="inc-1",
+        kind=EventKind.INCIDENT,
+        title="Back-dated",
+        phase=IncidentPhase.RESOLVED,
+        starts_at=timezone.now(),
+        ends_at=timezone.now() - timedelta(days=3),
+    )
+
+    event.full_clean()
+
+
+@pytest.mark.django_db
+def test_a_poll_cannot_finish_before_it_starts(two_services):
+    mine, _ = two_services
+    run = PollRun(
+        poller=mine.poller,
+        url="https://status.example.com/",
+        provider="statuspage",
+        started_at=timezone.now(),
+        finished_at=timezone.now() - timedelta(hours=1),
+    )
+
+    with pytest.raises(ValidationError):
+        run.full_clean()
+
+
+@pytest.mark.django_db
+def test_an_update_phase_belongs_to_its_events_kind(two_services):
+    from status.choices import MaintenancePhase
+    from status.models import EventUpdate
+
+    mine, _ = two_services
+    event = ServiceEvent.objects.create(
+        service=mine,
+        external_id="inc-1",
+        kind=EventKind.INCIDENT,
+        title="Something",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+    )
+    update = EventUpdate(
+        event=event,
+        phase=MaintenancePhase.SCHEDULED,
+        body="b",
+        posted_at=timezone.now(),
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        update.full_clean()
+    assert "phase" in raised.value.message_dict
+
+
+@pytest.mark.django_db
+def test_a_poller_cannot_poll_every_no_seconds(two_services):
+    mine, _ = two_services
+    mine.poller.interval_seconds = 0
+
+    with pytest.raises(ValidationError) as raised:
+        mine.poller.full_clean()
+    assert "interval_seconds" in raised.value.message_dict
+
+
+@pytest.mark.django_db
+def test_the_longest_interval_cannot_be_shorter_than_the_interval(two_services):
+    # Backoff is min(interval * 2 ** failures, ceiling), so a ceiling
+    # under the interval applies with no failures and speeds it up.
+    mine, _ = two_services
+    mine.poller.interval_seconds = 600
+    mine.poller.max_interval_seconds = 60
+
+    with pytest.raises(ValidationError) as raised:
+        mine.poller.full_clean()
+    assert "max_interval_seconds" in raised.value.message_dict

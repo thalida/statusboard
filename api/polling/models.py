@@ -7,6 +7,8 @@ them rather than split across two other apps.
 """
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from simple_history.models import HistoricalRecords
 
@@ -21,14 +23,25 @@ class Poller(BaseModel):
     )
 
     # Admin-tunable. Null inherits the deployment default.
+    # At least a second. Zero is not an interval, and it would ask the
+    # provider for the page again the moment the last answer arrived.
     interval_seconds = models.PositiveIntegerField(
-        verbose_name="Interval", null=True, blank=True
+        verbose_name="Interval",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
     )
     cooldown_seconds = models.PositiveIntegerField(
-        verbose_name="Cooldown", null=True, blank=True
+        verbose_name="Cooldown",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
     )
     max_interval_seconds = models.PositiveIntegerField(
-        verbose_name="Longest interval", null=True, blank=True
+        verbose_name="Longest interval",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
     )
     is_paused = models.BooleanField(verbose_name="Paused", default=False)
     note = models.TextField(blank=True, default="", help_text="Why this was tuned.")
@@ -45,6 +58,22 @@ class Poller(BaseModel):
     )
 
     history = HistoricalRecords()
+
+    def clean(self):
+        """The ceiling is a ceiling, so it cannot sit below the interval.
+
+        Backoff is `min(interval * 2 ** failures, ceiling)`. A ceiling
+        under the interval takes effect with no failures at all, so the
+        longest interval would quietly make the poller faster than the
+        interval it was given.
+        """
+        super().clean()
+        interval = self.interval_seconds
+        ceiling = self.max_interval_seconds
+        if interval and ceiling and ceiling < interval:
+            raise ValidationError(
+                {"max_interval_seconds": "This cannot be shorter than the interval."}
+            )
 
     def __str__(self):
         return str(self.service)
@@ -74,6 +103,15 @@ class PollRun(BaseModel):
     provider = models.CharField(max_length=32, choices=StatusPageProvider.choices)
     started_at = models.DateTimeField(verbose_name="Started")
     finished_at = models.DateTimeField(verbose_name="Finished", null=True, blank=True)
+
+    def clean(self):
+        """A poll finishes after it starts. Both ends are written here."""
+        super().clean()
+        if self.finished_at is not None and self.finished_at < self.started_at:
+            raise ValidationError(
+                {"finished_at": "A poll cannot finish before it starts."}
+            )
+
     ok = models.BooleanField(default=False)
     error = models.TextField(blank=True, default="")
 

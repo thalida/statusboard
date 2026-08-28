@@ -40,13 +40,17 @@ class ComponentStatus(BaseModel):
     )
 
     def clean(self):
-        """The poll that wrote this read this component's own service.
+        """A reading ends after it starts, and cites its own service.
 
         A run names a poller and a poller names one service. Citing
         another service's run says a page was read that never mentions
         this component.
         """
         super().clean()
+        if self.ended_at is not None and self.ended_at < self.started_at:
+            raise ValidationError(
+                {"ended_at": "A reading cannot end before it starts."}
+            )
         if self.poll_run_id is None or self.component_id is None:
             return
         if self.poll_run.poller.service_id != self.component.service_id:
@@ -63,7 +67,14 @@ class ComponentStatus(BaseModel):
                 fields=["component"],
                 condition=models.Q(ended_at__isnull=True),
                 name="one_open_status_per_component",
-            )
+            ),
+            # Both ends are written here, unlike an event's, so the
+            # database can hold this one.
+            models.CheckConstraint(
+                condition=models.Q(ended_at__isnull=True)
+                | models.Q(ended_at__gte=models.F("started_at")),
+                name="status_ends_after_it_starts",
+            ),
         ]
         indexes = [
             models.Index(
@@ -87,6 +98,10 @@ class ServiceEvent(BaseModel):
     kind = models.CharField(max_length=32, choices=EventKind.choices)
     title = models.CharField(max_length=500)
     phase = models.CharField(max_length=32)
+    # No rule that the end follows the start. Providers back-date a
+    # resolution below the recorded start, so GitHub and OpenAI both
+    # publish incidents that read as ending before they began. This
+    # mirrors the page; a rule here would fail the poll instead.
     starts_at = models.DateTimeField(verbose_name="Starts")
     ends_at = models.DateTimeField(verbose_name="Ends", null=True, blank=True)
     # No component is a valid case. A provider can publish an event
@@ -147,6 +162,21 @@ class EventUpdate(BaseModel):
     phase = models.CharField(max_length=32)
     body = models.TextField()
     posted_at = models.DateTimeField(verbose_name="Posted")
+
+    def clean(self):
+        """A phase belongs to one kind, the same rule the event follows.
+
+        An update saying `scheduled` on an incident describes something
+        no provider publishes.
+        """
+        super().clean()
+        if self.event_id is None:
+            return
+        valid = EVENT_PHASES_BY_KIND.get(self.event.kind)
+        if valid is not None and self.phase not in valid.values:
+            raise ValidationError(
+                {"phase": f"{self.phase!r} is not a phase of a {self.event.kind}."}
+            )
 
     def __str__(self):
         return f"{self.event} — {self.phase}"
