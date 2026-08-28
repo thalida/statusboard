@@ -224,3 +224,60 @@ def test_an_event_carries_no_component_ids():
         "ends_at",
         "updates",
     }
+
+
+@pytest.mark.django_db
+def test_suggestions_put_what_is_broken_ahead_of_what_is_popular():
+    """Severity sits ahead of popularity on purpose.
+
+    A mid-popularity service that is broken right now is worth surfacing
+    over a more popular one that is fine, which is the whole premise of
+    the public view.
+    """
+    popular = ServiceFactory(name="Popular", watcher_count=500)
+    StatusPageFactory(service=popular)
+    _with_status(popular, Severity.OPERATIONAL, is_overall=True)
+
+    broken = ServiceFactory(name="Broken", watcher_count=1)
+    StatusPageFactory(service=broken)
+    _with_status(broken, Severity.MAJOR_OUTAGE, is_overall=True)
+
+    names = [
+        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+    ]
+    assert names.index("Broken") < names.index("Popular")
+
+
+@pytest.mark.django_db
+def test_a_featured_service_still_leads():
+    # Featured is the cold-start seed: on day one nothing has watchers
+    # and nothing has been polled, so it is the whole list.
+    plain = ServiceFactory(name="Plain")
+    StatusPageFactory(service=plain)
+    _with_status(plain, Severity.MAJOR_OUTAGE, is_overall=True)
+
+    featured = ServiceFactory(name="Featured", is_featured=True)
+    StatusPageFactory(service=featured)
+    _with_status(featured, Severity.OPERATIONAL, is_overall=True)
+
+    names = [
+        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+    ]
+    assert names.index("Featured") < names.index("Plain")
+
+
+@pytest.mark.django_db
+def test_a_service_with_no_reading_sorts_last_not_first():
+    # Never seen is not the same as healthy, and it must not pose as
+    # broken either.
+    unread = ServiceFactory(name="Unread")
+    StatusPageFactory(service=unread)
+
+    healthy = ServiceFactory(name="Healthy")
+    StatusPageFactory(service=healthy)
+    _with_status(healthy, Severity.OPERATIONAL, is_overall=True)
+
+    names = [
+        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+    ]
+    assert names.index("Healthy") < names.index("Unread")

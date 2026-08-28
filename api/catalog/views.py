@@ -118,11 +118,18 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     search_fields = ["name", "slug"]
     ordering_fields = ["name", "updated_at"]
     # `suggested` is not a field. Severity sits behind a related path.
+    #
+    # Severity ahead of popularity is deliberate: a mid-popularity service
+    # that is broken right now is worth surfacing over a more popular one
+    # that is fine. Lower severity is worse, so ascending puts the broken
+    # first, and a service with no reading yet sorts last rather than
+    # posing as healthy.
+    SUGGESTED = ["-is_featured", "severity_now", "-watcher_count", "name"]
     ordering_map = {
-        "suggested": ["-is_featured", "-watcher_count"],
+        "suggested": SUGGESTED,
         "overall_component__status__severity": ["severity_now"],
     }
-    ordering = ["-is_featured", "-watcher_count"]
+    ordering = SUGGESTED
     # Schema generation calls get_queryset with no URL kwargs. This names
     # the model without running it.
     queryset = Service.objects.none()
