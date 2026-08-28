@@ -111,15 +111,31 @@ POLLER_WRITTEN = [
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("label", POLLER_WRITTEN)
-def test_poller_written_tables_are_not_editable(staff_client, label):
+def test_poller_written_tables_are_not_editable(staff_client, settings, label):
     # A hand-written row invents history the API serves, or trips the
     # one-open-status constraint, and the next poll overwrites it anyway.
+    # Pinned, not read from the environment: a developer seeding a local
+    # database must not turn this assertion off.
+    settings.ADMIN_EDITABLE_POLLER_DATA = False
     model = next(m for m in admin.site._registry if m._meta.label == label)
     site_admin = admin.site._registry[model]
     request = staff_client.request().wsgi_request
     assert not site_admin.has_add_permission(request)
     assert not site_admin.has_change_permission(request)
     assert not site_admin.has_delete_permission(request)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("label", POLLER_WRITTEN)
+def test_the_seeding_flag_lifts_the_lock(staff_client, settings, label):
+    # For filling a local database by hand. Off unless .env.local sets it,
+    # so it cannot reach a deployment.
+    settings.ADMIN_EDITABLE_POLLER_DATA = True
+    model = next(m for m in admin.site._registry if m._meta.label == label)
+    site_admin = admin.site._registry[model]
+    request = staff_client.request().wsgi_request
+    assert site_admin.has_add_permission(request)
+    assert site_admin.has_change_permission(request)
 
 
 @pytest.mark.django_db

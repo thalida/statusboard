@@ -7,12 +7,12 @@ from common.models import BaseModel
 
 
 class Service(BaseModel):
+    name = models.CharField(max_length=200)
     slug = models.SlugField(
         unique=True,
         blank=True,
         help_text="Derived from the name when left blank.",
     )
-    name = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
@@ -73,7 +73,7 @@ class StatusPage(BaseModel):
     # nothing is stored for the normal case. Set this only when that join
     # lands somewhere wrong, such as a page served on one domain whose API
     # lives on another.
-    api_url = models.URLField(
+    api_url_override = models.URLField(
         null=True,
         blank=True,
         help_text="Leave blank. Set only when the adapter cannot reach the "
@@ -87,8 +87,8 @@ class ServiceComponent(BaseModel):
     service = models.ForeignKey(
         Service, on_delete=models.CASCADE, related_name="components"
     )
-    external_id = models.CharField(max_length=200)
     name = models.CharField(max_length=200)
+    external_id = models.CharField(max_length=200)
     parent = models.ForeignKey(
         "self",
         null=True,

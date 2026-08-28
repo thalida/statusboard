@@ -137,7 +137,7 @@ erDiagram
         uuid service_id FK "one-to-one"
         url url UK "normalised, dedupe key"
         enum provider "TextChoices"
-        url api_url "null unless the derivation fails"
+        url api_url_override "blank unless the adapter cannot reach it"
     }
     Poller {
         uuid id PK
@@ -262,7 +262,7 @@ is a different concept from a permission role.
   "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
   `is_featured`.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
-  `provider`, `api_url` (nullable override). What and where — nothing about polling.
+  `provider`, `api_url_override` (blank unless needed). What and where — nothing about polling.
 - `Poller` — `OneToOneField` to **`Service`**, created with it. The thing that reads a service:
   how often, when next, and how it is going.
 

@@ -158,11 +158,11 @@ def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_api_url_overrides_the_page_url_when_set(monkeypatch):
+def test_an_api_url_override_replaces_the_page_url(monkeypatch):
     # The escape hatch for a page whose API lives somewhere the adapter
     # would not reach by joining a path onto the page URL.
     poller = PollerFactory(service=ServiceFactory(watcher_count=1))
-    StatusPageFactory(service=poller.service, api_url="https://api.elsewhere/")
+    StatusPageFactory(service=poller.service, api_url_override="https://api.elsewhere/")
     seen = {}
 
     class Recorder:

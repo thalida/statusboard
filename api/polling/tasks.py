@@ -57,7 +57,7 @@ def poll_service(service_id):
         poller=poller, url=page.url, provider=page.provider, started_at=timezone.now()
     )
     try:
-        adapter = detect(page.url)(page.api_url or page.url)
+        adapter = detect(page.url)(page.api_url_override or page.url)
         components = adapter.fetch_status()
         events = adapter.fetch_incidents()
         metadata = adapter.fetch_service_metadata()

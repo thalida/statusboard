@@ -323,6 +323,11 @@ SPECTACULAR_SETTINGS = {
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Deployment defaults. A single service overrides these on its Poller row.
+# Lets the admin edit the tables the poller owns. For seeding a local
+# database by hand. Off by default, and set only in .env.local, so it
+# cannot reach a deployment.
+ADMIN_EDITABLE_POLLER_DATA = os.environ.get("ADMIN_EDITABLE_POLLER_DATA") == "1"
+
 POLL_INTERVAL_SECONDS = 300
 POLL_COOLDOWN_SECONDS = 60
 POLL_MAX_INTERVAL_SECONDS = 3600
