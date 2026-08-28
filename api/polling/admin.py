@@ -28,6 +28,7 @@ from unfold.enums import ActionVariant
 
 from common.admin import (
     BaseModelAdmin,
+    InheritedDefaultsMixin,
     PollerWrittenAdmin,
     change_link,
     filtered_list,
@@ -36,7 +37,9 @@ from polling.models import Poller, PollRun
 
 
 @admin.register(Poller)
-class PollerAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
+class PollerAdmin(
+    InheritedDefaultsMixin, BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin
+):
     """Where a stalled poller is supposed to be obvious.
 
     A service that stops being polled shows every board a stale green,

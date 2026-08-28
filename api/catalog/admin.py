@@ -21,6 +21,7 @@ from catalog.models import Service, ServiceComponent, StatusPage
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
+    InheritedDefaultsMixin,
     change_link,
     filtered_list,
     phase_label,
@@ -87,7 +88,7 @@ class StatusPageInline(StackedInline):
     can_delete = False
 
 
-class PollerInline(StackedInline):
+class PollerInline(InheritedDefaultsMixin, StackedInline):
     """How often this service is polled, and how that is going.
 
     Editable, unlike the records a poll writes. The interval, the

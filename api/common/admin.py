@@ -5,6 +5,7 @@ from django.db.models import Count, Min, Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 
 from status.choices import EVENT_PHASES_BY_KIND, Severity
 
@@ -234,3 +235,29 @@ def phase_label(event):
     except ValueError:
         # A provider can invent a phase we have not seen.
         return event.phase
+
+
+class InheritedDefaultsMixin:
+    """Say what a blank tuning field will actually do.
+
+    The three Poller intervals fall back to a deployment setting, and the
+    form showed three empty boxes with nothing to say so. The text is
+    built here rather than as model help_text: a settings change would
+    otherwise want a migration to restate a number the database never
+    stores.
+    """
+
+    INHERITED_DEFAULTS = {
+        "interval_seconds": "POLL_INTERVAL_SECONDS",
+        "cooldown_seconds": "POLL_COOLDOWN_SECONDS",
+        "max_interval_seconds": "POLL_MAX_INTERVAL_SECONDS",
+    }
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        setting = self.INHERITED_DEFAULTS.get(db_field.name)
+        if field is not None and setting is not None:
+            field.help_text = _(
+                "Leave blank to use the deployment default of %(seconds)s seconds."
+            ) % {"seconds": getattr(settings, setting)}
+        return field

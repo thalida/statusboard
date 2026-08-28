@@ -338,3 +338,20 @@ def test_a_service_shows_its_logo_and_falls_back_to_an_initial(staff_client):
     ).content.decode()
     assert "https://cdn.example/mark.png" in body
     assert "NO" in body  # the initial standing in for the missing one
+
+
+@pytest.mark.django_db
+def test_a_blank_interval_says_what_it_will_do(staff_client, settings):
+    """Three empty boxes said nothing about inheriting a default.
+
+    The number comes from settings at render time, so changing it does
+    not want a migration to restate something the database never stores.
+    """
+    settings.POLL_INTERVAL_SECONDS = 900
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory()
+    body = staff_client.get(
+        reverse("admin:polling_poller_change", args=[service.poller.pk])
+    ).content.decode()
+    assert "deployment default of 900 seconds" in body
