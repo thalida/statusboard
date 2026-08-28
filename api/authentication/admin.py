@@ -176,7 +176,7 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     readonly_fields = ["token"]
     fieldsets = [
         (None, {"fields": ["user", "token"]}),
-        (_("Life"), {"fields": ["expires_at", "used_at"]}),
+        (_("Expiry"), {"fields": ["expires_at", "used_at"]}),
         audit_section(),
     ]
 

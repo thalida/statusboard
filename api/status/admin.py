@@ -244,7 +244,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         )
         return [
             (None, {"fields": ["service", "external_id", "title"]}),
-            (_("What kind"), {"fields": ["kind", "phase"]}),
+            (_("Classification"), {"fields": ["kind", "phase"]}),
             (_("When"), {"fields": ["starts_at", "ends_at"]}),
             (_("Affected"), {"fields": [components]}),
             (_("Written by"), {"fields": ["display_poll_run"]}),
@@ -349,7 +349,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     fieldsets = [
         (None, {"fields": ["event", "phase", "posted_at"]}),
-        (_("What was posted"), {"fields": ["body"]}),
+        (_("Body"), {"fields": ["body"]}),
         audit_section(),
     ]
 

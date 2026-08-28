@@ -136,7 +136,7 @@ class PollerAdmin(
             },
         ),
         (
-            _("Where it stands"),
+            _("Health"),
             {"fields": ["next_at", "last_success_at", "consecutive_failure_count"]},
         ),
         audit_section(),

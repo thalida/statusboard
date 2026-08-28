@@ -497,10 +497,10 @@ class ServiceComponentAdmin(
     fieldsets = [
         (None, {"fields": ["service", "name", "external_id"]}),
         (
-            _("Place on the page"),
+            _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
         ),
-        (_("Life"), {"fields": ["archived_at"]}),
+        (_("Lifecycle"), {"fields": ["archived_at"]}),
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
