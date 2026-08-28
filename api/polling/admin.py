@@ -94,6 +94,7 @@ class PollerAdmin(
         "display_poller",
         "display_service",
         "display_health",
+        "is_paused",
         "consecutive_failure_count",
         "last_success_at",
         "next_at",
@@ -101,10 +102,13 @@ class PollerAdmin(
     ]
     search_fields = ["service__name", "service__slug"]
     list_filter = [
+        ("service", AutocompleteSelectFilter),
         "is_paused",
         ("consecutive_failure_count", RangeNumericFilter),
+        ("interval_seconds", RangeNumericFilter),
         ("last_success_at", RangeDateTimeFilter),
         ("next_at", RangeDateTimeFilter),
+        ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["service"]
     ordering = ["-consecutive_failure_count", "next_at"]
@@ -224,10 +228,12 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     date_hierarchy = "started_at"
     search_fields = ["poller__service__name", "url", "error"]
     list_filter = [
+        ("poller__service", AutocompleteSelectFilter),
+        ("poller", AutocompleteSelectFilter),
         "ok",
         ("provider", ChoicesDropdownFilter),
-        ("poller__service", AutocompleteSelectFilter),
         ("started_at", RangeDateTimeFilter),
+        ("finished_at", RangeDateTimeFilter),
     ]
     ordering = ["-started_at"]
     readonly_fields = ["error"]

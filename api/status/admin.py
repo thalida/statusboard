@@ -63,16 +63,15 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     date_hierarchy = "started_at"
     search_fields = ["component__name", "component__service__name"]
+    # Also what makes ?component__service__id__exact and
+    # ?poll_run__id__exact permitted lookups, which is how the services
+    # table and a poll run reach the readings they own.
     list_filter = [
-        ("severity", ChoicesDropdownFilter),
-        ("source", ChoicesDropdownFilter),
-        # Also what makes ?component__service__id__exact a permitted
-        # lookup, which the links on the services table rely on.
         ("component__service", AutocompleteSelectFilter),
         ("component", AutocompleteSelectFilter),
-        # Also what makes ?poll_run__id__exact a permitted lookup, which
-        # is how a run reaches the readings it wrote.
         ("poll_run", AutocompleteSelectFilter),
+        ("severity", ChoicesDropdownFilter),
+        ("source", ChoicesDropdownFilter),
         ("started_at", RangeDateTimeFilter),
         ("ended_at", RangeDateTimeFilter),
     ]
@@ -142,14 +141,14 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     date_hierarchy = "starts_at"
     search_fields = ["title", "service__name", "external_id"]
+    # Also what makes ?poll_run__id__exact a permitted lookup, which is
+    # how a run reaches the events it wrote.
     list_filter = [
-        ("kind", ChoicesDropdownFilter),
-        PhaseFilter,
         ("service", AutocompleteSelectFilter),
         ("affected_components", AutocompleteSelectFilter),
-        # Also what makes ?poll_run__id__exact a permitted lookup, which
-        # is how a run reaches the events it wrote.
         ("poll_run", AutocompleteSelectFilter),
+        ("kind", ChoicesDropdownFilter),
+        PhaseFilter,
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),
     ]
@@ -285,8 +284,10 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     search_fields = ["event__title", "body"]
     autocomplete_fields = ["event"]
     list_filter = [
+        ("event__service", AutocompleteSelectFilter),
         ("event", AutocompleteSelectFilter),
         ("posted_at", RangeDateTimeFilter),
+        ("created_at", RangeDateTimeFilter),
     ]
 
     @display(description=_("Event"), ordering="event__title")

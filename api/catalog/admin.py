@@ -251,6 +251,27 @@ class ServiceSeverityFilter(DropdownFilter):
         )
 
 
+class ComponentSeverityFilter(DropdownFilter):
+    """Filter components by the status they are showing now.
+
+    A component has no severity column either. It is the open row of its
+    status history, so this filters through that.
+    """
+
+    title = _("Status")
+    parameter_name = "severity"
+
+    def lookups(self, request, model_admin):
+        return Severity.choices
+
+    def queryset(self, request, queryset):
+        if not self.value():
+            return queryset
+        return queryset.filter(
+            statuses__ended_at__isnull=True, statuses__severity=self.value()
+        )
+
+
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
@@ -262,12 +283,15 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
     search_fields = ["name", "slug", "homepage_url"]
     # Status first: it is what anyone scanning a catalog wants.
+    # What it belongs to, then what state it is in, then how much, then
+    # when. A service belongs to nothing, so its state leads.
     list_filter = [
         ServiceSeverityFilter,
         "is_featured",
         ("status_page__provider", ChoicesDropdownFilter),
         ("watcher_count", RangeNumericFilter),
         ("created_at", RangeDateTimeFilter),
+        ("updated_at", RangeDateTimeFilter),
     ]
     ordering = ["-watcher_count", "name"]
     actions_row = ["poll_now"]
@@ -434,8 +458,12 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     # of every service.
     list_filter = [
         ("service", AutocompleteSelectFilter),
+        ("parent", AutocompleteSelectFilter),
+        ComponentSeverityFilter,
         "is_overall",
+        ("status_page_order", RangeNumericFilter),
         ("archived_at", RangeDateTimeFilter),
+        ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]

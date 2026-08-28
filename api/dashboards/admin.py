@@ -21,8 +21,8 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
     list_display = ["display_board", "display_owner", "is_default", "item_count"]
     search_fields = ["name", "owner__email"]
     list_filter = [
-        "is_default",
         ("owner", AutocompleteSelectFilter),
+        "is_default",
         ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["owner"]
@@ -78,7 +78,13 @@ class DashboardItemAdmin(BaseModelAdmin, ModelAdmin):
     list_display = ["display_item", "display_dashboard", "display_component"]
     display_item = record_column(_("Tracked"))
     search_fields = ["dashboard__name", "component__name"]
-    list_filter = [("dashboard", AutocompleteSelectFilter)]
+    list_filter = [
+        ("dashboard__owner", AutocompleteSelectFilter),
+        ("dashboard", AutocompleteSelectFilter),
+        ("component__service", AutocompleteSelectFilter),
+        ("component", AutocompleteSelectFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
     autocomplete_fields = ["dashboard", "component"]
 
     @display(description=_("Board"), ordering="dashboard__name")

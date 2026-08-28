@@ -1,7 +1,10 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin
-from unfold.contrib.filters.admin import RangeDateTimeFilter
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectFilter,
+    RangeDateTimeFilter,
+)
 from unfold.decorators import display
 
 from authentication.models import MagicLinkToken, User
@@ -23,6 +26,7 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
         "is_staff",
         "is_superuser",
         ("last_login", RangeDateTimeFilter),
+        ("last_active_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
     ordering = ["-created_at"]
@@ -44,6 +48,8 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     display_link = record_column(_("Link"))
     search_fields = ["user__email"]
     list_filter = [
+        ("user", AutocompleteSelectFilter),
+        ("created_at", RangeDateTimeFilter),
         ("expires_at", RangeDateTimeFilter),
         ("used_at", RangeDateTimeFilter),
     ]

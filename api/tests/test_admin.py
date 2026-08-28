@@ -453,3 +453,56 @@ def test_a_reading_says_which_poll_wrote_it(staff_client):
     url = reverse("admin:status_componentstatus_change", args=[reading.pk])
 
     assert "Written by" in staff_client.get(url).content.decode()
+
+
+PROJECT_APPS = {"authentication", "catalog", "dashboards", "polling", "status"}
+
+PROJECT_ADMINS = [
+    model for model in admin.site._registry if model._meta.app_label in PROJECT_APPS
+]
+
+
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_filter_names_a_real_path(model):
+    """A filter naming a path that does not exist fails only when used.
+
+    Django answers an unrecognised lookup with a redirect, so a broken
+    one reads as an empty page rather than as an error. A typo in a path
+    is invisible until somebody picks that filter and gets nothing.
+    """
+    for entry in admin.site._registry[model].list_filter or []:
+        path = entry[0] if isinstance(entry, tuple) else entry
+        if not isinstance(path, str):
+            continue  # A filter class brings its own queryset.
+        target = model
+        for part in path.split("__"):
+            field = target._meta.get_field(part)
+            if field.is_relation:
+                target = field.related_model
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_filter_choice_opens(staff_client, model):
+    """Every option a filter offers is one somebody can click.
+
+    The paths are checked above. This is the other half: the option the
+    page renders has to be one the changelist will accept back.
+    """
+    from django.test import RequestFactory
+
+    opts = model._meta
+    url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+    request = RequestFactory().get(url)
+    request.user = User.objects.get(email="admin@example.com")
+    model_admin = admin.site._registry[model]
+    changelist = model_admin.get_changelist_instance(request)
+
+    for spec in changelist.get_filters(request)[0]:
+        for choice in spec.choices(changelist):
+            query = choice.get("query_string")
+            if not query:
+                continue
+            assert staff_client.get(url + query).status_code == 200, (
+                f"{opts.label}: {query}"
+            )
