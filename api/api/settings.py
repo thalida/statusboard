@@ -176,6 +176,9 @@ UNFOLD = {
             "900": "#564925",
             "950": "#352D18",
         },
+        # The dark end is the page itself, so it carries the least light
+        # the hue holds and still reads as brown. The light end is the
+        # light theme and is left alone.
         "base": {
             "50": "#FBF8EF",
             "100": "#F5EDD6",
@@ -183,11 +186,11 @@ UNFOLD = {
             "300": "#C4B097",
             "400": "#97806A",
             "500": "#6E5847",
-            "600": "#533F31",
-            "700": "#3A281C",
-            "800": "#241610",
-            "900": "#150C06",
-            "950": "#0A0503",
+            "600": "#46342A",
+            "700": "#2A1D14",
+            "800": "#170E09",
+            "900": "#0C0704",
+            "950": "#050302",
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
