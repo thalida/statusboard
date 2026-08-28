@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -18,4 +19,10 @@ def create_poller(sender, instance, created, **kwargs):
     is no sensible default for one.
     """
     if created:
-        Poller.objects.get_or_create(service=instance)
+        # Nobody adds this one, so it is signed by the system account. A
+        # blank author would read as one that was lost.
+        author = get_user_model().objects.system()
+        Poller.objects.get_or_create(
+            service=instance,
+            defaults={"created_by": author, "updated_by": author},
+        )

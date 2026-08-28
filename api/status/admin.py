@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.urls import reverse
+from django.utils.formats import date_format
 from django.utils.html import format_html_join
 from django.utils.safestring import mark_safe
+from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
@@ -115,6 +117,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     list_display = [
         "title",
         "display_service",
+        "display_when",
         "display_kind",
         "display_phase",
         "display_related",
@@ -133,6 +136,22 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     filter_horizontal = ["affected_components"]
     ordering = ["-starts_at"]
     inlines = [EventUpdateInline]
+
+    @display(description=_("When"), ordering="starts_at")
+    def display_when(self, obj):
+        """The span the event covers.
+
+        An event is a range, not a moment. The end is open while it still
+        runs, and a span inside one day would print that day twice, so
+        neither is written out.
+        """
+        start = localtime(obj.starts_at)
+        opens = date_format(start, "j M Y, H:i")
+        if obj.ends_at is None:
+            return f"{opens} →"
+        end = localtime(obj.ends_at)
+        closes = "H:i" if start.date() == end.date() else "j M Y, H:i"
+        return f"{opens} → {date_format(end, closes)}"
 
     FORM_FIELDS = [
         "display_poll_run",

@@ -20,7 +20,26 @@ def _unusable_password():
     return make_password(None)
 
 
+# The domain is reserved by RFC 2606, so no mail can leave for it and no
+# person can ever hold the address.
+SYSTEM_EMAIL = "system@statusboard.invalid"
+
+
 class UserManager(BaseUserManager):
+    def system(self):
+        """The account the system writes as.
+
+        Rows the importer and the signals create have an author too, and
+        a blank one reads the same as one that was lost. This gives them
+        a name and a time. The account cannot sign in: it is not active,
+        the password is unusable, and no link can reach the address.
+
+        A row written by a poll carries its run instead. The run says
+        which request read the page, which is more than a name.
+        """
+        user, _ = self.get_or_create(email=SYSTEM_EMAIL, defaults={"is_active": False})
+        return user
+
     def create_user(self, email, **extra):
         user = self.model(email=self.normalize_email(email), **extra)
         user.set_unusable_password()
@@ -60,10 +79,15 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         """
         creating = self._state.adding
         super().save(*args, **kwargs)
-        if creating:
+        # The system account is nobody, so it reads no board.
+        if creating and self.email != SYSTEM_EMAIL:
             from dashboards.models import Dashboard
 
-            Dashboard.objects.get_or_create(owner=self, is_default=True)
+            Dashboard.objects.get_or_create(
+                owner=self,
+                is_default=True,
+                defaults={"created_by": self, "updated_by": self},
+            )
 
     objects = UserManager()
     USERNAME_FIELD = "email"

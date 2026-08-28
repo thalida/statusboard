@@ -185,3 +185,16 @@ def test_an_api_url_override_replaces_the_page_url(monkeypatch):
     monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Recorder)
     poll_service(str(poller.service_id))
     assert seen["url"] == "https://api.elsewhere/"
+
+
+@pytest.mark.django_db
+def test_a_poller_nobody_added_is_signed_by_the_system():
+    """The signal adds it, so the author says the system, not nobody.
+
+    A blank author reads the same as one that was lost.
+    """
+    from django.contrib.auth import get_user_model
+
+    service = ServiceFactory()
+
+    assert service.poller.created_by == get_user_model().objects.system()

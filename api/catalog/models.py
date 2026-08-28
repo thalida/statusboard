@@ -22,6 +22,8 @@ class ServiceManager(models.Manager):
         The polling imports are local to the method. `polling` imports
         this module, so a top-level import would close the loop.
         """
+        from django.contrib.auth import get_user_model
+
         from polling.adapters.registry import identify
         from polling.models import PollRun
         from polling.reconcile import apply_fetch
@@ -36,14 +38,21 @@ class ServiceManager(models.Manager):
         adapter = adapter_class(fetch_url)
         metadata = adapter.fetch_service_metadata()
 
+        # Nobody typed these in, so they are signed by the system account
+        # rather than left blank.
+        author = get_user_model().objects.system()
         service = self.create(
             name=metadata.get("name") or urlparse(key).netloc,
             description=metadata.get("description", ""),
             homepage_url=metadata.get("homepage_url", ""),
             logo=adapter.fetch_logo(),
+            created_by=author,
+            updated_by=author,
         )
         StatusPage.objects.create(
             service=service,
+            created_by=author,
+            updated_by=author,
             url=key,
             provider=adapter_class.provider,
             # Set when the page's own address is not what we read: a

@@ -64,7 +64,9 @@ class BoardComponentListView(generics.ListCreateAPIView):
         )
         # DashboardItem.save keeps the service's watcher count true.
         _, created = DashboardItem.objects.get_or_create(
-            dashboard=board, component=component
+            dashboard=board,
+            component=component,
+            defaults={"created_by": request.user, "updated_by": request.user},
         )
         return Response(
             ComponentSerializer(component, context={"request": request}).data,
