@@ -1,4 +1,7 @@
+from django import forms
 from django.contrib import admin
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
 from unfold.admin import ModelAdmin, StackedInline, TabularInline
@@ -8,13 +11,26 @@ from unfold.contrib.filters.admin import (
     RangeDateTimeFilter,
     RangeNumericFilter,
 )
+from unfold.dataclasses import ActionDialog
 from unfold.decorators import action, display
 from unfold.enums import ActionVariant
+from unfold.forms import BaseDialogForm
 
+from catalog.import_service import import_from_url
 from catalog.models import Service, ServiceComponent, StatusPage
 from common.admin import SEVERITY_VARIANTS, BaseModelAdmin, severity_label
 from common.ordering import CURRENT_SEVERITY
+from status.choices import EventKind
 from status.models import ComponentStatus, ServiceEvent
+
+
+class ImportServiceForm(BaseDialogForm):
+    """One field, because everything else is read from the page."""
+
+    status_page_url = forms.URLField(
+        label=_("Status page URL"),
+        help_text=_("The provider is detected from it. Components and events follow."),
+    )
 
 
 class ComponentStatusInline(TabularInline):
@@ -31,10 +47,16 @@ class ComponentStatusInline(TabularInline):
     extra = 0
     max_num = 0
     can_delete = False
+    # Read only, but still worth opening: the row is a summary.
+    show_change_link = True
     per_page = 10
-    fields = ["severity", "source", "started_at", "ended_at"]
+    fields = ["display_severity", "source", "started_at", "ended_at"]
     readonly_fields = fields
     ordering = ["-started_at"]
+
+    @display(description=_("Severity"), label=SEVERITY_VARIANTS)
+    def display_severity(self, obj):
+        return severity_label(obj.severity)
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -67,10 +89,26 @@ class ServiceEventInline(TabularInline):
     extra = 0
     max_num = 0
     can_delete = False
+    # Read only, but still worth opening: the row is a summary.
+    show_change_link = True
     per_page = 10
-    fields = ["kind", "title", "phase", "starts_at", "ends_at"]
+    fields = ["display_kind", "title", "display_phase", "starts_at", "ends_at"]
     readonly_fields = fields
     ordering = ["-starts_at"]
+
+    @display(
+        description=_("Kind"),
+        label={
+            EventKind.INCIDENT.label: "danger",
+            EventKind.MAINTENANCE.label: "info",
+        },
+    )
+    def display_kind(self, obj):
+        return EventKind(obj.kind).label
+
+    @display(description=_("Phase"), label=True)
+    def display_phase(self, obj):
+        return obj.phase.replace("_", " ").title()
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -89,6 +127,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ordering = ["-watcher_count", "name"]
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
+    actions_list = ["import_from_status_page"]
     inlines = [StatusPageInline, ServiceEventInline]
 
     def get_queryset(self, request):
@@ -113,6 +152,46 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     def provider(self, obj):
         page = getattr(obj, "status_page", None)
         return page.get_provider_display() if page else "—"
+
+    @action(
+        description=_("Import from URL"),
+        icon="cloud_download",
+        url_path="import-from-url",
+        variant=ActionVariant.PRIMARY,
+        permissions=["poll_now"],
+        dialog=ActionDialog(
+            title=_("Import a service"),
+            description=_(
+                "Paste a status page. The name, components and event history "
+                "are read from it, and polling starts on the next tick."
+            ),
+            form_class=ImportServiceForm,
+            form_submit_text=_("Import"),
+        ),
+    )
+    def import_from_status_page(self, request, form):
+        if not form.is_valid():
+            self.message_user(request, _("Enter a valid URL."), level="error")
+            return redirect(reverse("admin:catalog_service_changelist"))
+
+        url = form.cleaned_data["status_page_url"]
+        try:
+            service, created = import_from_url(url)
+        except Exception as error:  # noqa: BLE001 — the page is a stranger's
+            # Anything can come back from a URL a person pasted. Say what
+            # happened rather than showing a 500.
+            self.message_user(
+                request, f"{url} could not be read: {error}", level="error"
+            )
+            return redirect(reverse("admin:catalog_service_changelist"))
+
+        self.message_user(
+            request,
+            _("Imported %(name)s.") % {"name": service.name}
+            if created
+            else _("%(name)s was already in the catalog.") % {"name": service.name},
+        )
+        return redirect(reverse("admin:catalog_service_change", args=[service.pk]))
 
     @action(
         description=_("Poll now"),

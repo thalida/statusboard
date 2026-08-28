@@ -34,6 +34,9 @@ class Poller(BaseModel):
 
     history = HistoricalRecords()
 
+    def __str__(self):
+        return str(self.service)
+
     @property
     def effective_interval_seconds(self):
         return self.interval_seconds or settings.POLL_INTERVAL_SECONDS
@@ -61,3 +64,6 @@ class PollRun(BaseModel):
     finished_at = models.DateTimeField(null=True, blank=True)
     ok = models.BooleanField(default=False)
     error = models.TextField(blank=True, default="")
+
+    def __str__(self):
+        return f"{self.poller.service} — {self.started_at:%Y-%m-%d %H:%M}"

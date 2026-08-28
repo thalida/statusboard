@@ -47,6 +47,8 @@ class EventUpdateInline(TabularInline):
     extra = 0
     max_num = 0
     can_delete = False
+    # Read only, but still worth opening: the row is a summary.
+    show_change_link = True
     per_page = 10
     fields = ["phase", "body", "posted_at"]
     readonly_fields = fields

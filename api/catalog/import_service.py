@@ -9,10 +9,20 @@ from status.choices import StatusSource
 
 
 def normalise(url: str) -> str:
-    """The dedupe key. One status page gives one service and one poll."""
+    """The dedupe key, and the URL every poll is built from.
+
+    It is both, which is why `www.` is kept. Stripping it made a tidier
+    key and an unfetchable address: githubstatus.com redirects to the www
+    root page, so joining "api/v2/summary.json" onto the stripped host
+    returned the HTML homepage instead of the summary.
+
+    The cost is that www.example.com and example.com import as two
+    services. That is a duplicate row. Dropping the prefix was a service
+    that could never be polled at all.
+    """
     parts = urlparse(url.strip())
     scheme = parts.scheme or "https"
-    netloc = parts.netloc.lower().removeprefix("www.")
+    netloc = parts.netloc.lower()
     path = parts.path.rstrip("/")
     return urlunparse((scheme, netloc, path, "", "", ""))
 

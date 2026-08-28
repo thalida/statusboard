@@ -20,6 +20,9 @@ class ComponentStatus(BaseModel):
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self):
+        return f"{self.component} — {self.get_severity_display()}"
+
     class Meta(BaseModel.Meta):
         verbose_name = "component status"
         verbose_name_plural = "component statuses"
@@ -67,6 +70,9 @@ class ServiceEvent(BaseModel):
             )
         ]
 
+    def __str__(self):
+        return self.title
+
     def clean(self):
         # A phase belongs to one kind. Block a combination no provider
         # would publish, such as a maintenance phase on an incident.
@@ -86,6 +92,9 @@ class EventUpdate(BaseModel):
     phase = models.CharField(max_length=32)
     body = models.TextField()
     posted_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.event} — {self.phase}"
 
     class Meta(BaseModel.Meta):
         ordering = ["-posted_at"]

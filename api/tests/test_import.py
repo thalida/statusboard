@@ -108,3 +108,20 @@ def test_a_missing_status_page_url_is_a_400():
         APIClient().post(reverse("catalog-import"), {}, format="json").status_code
         == 400
     )
+
+
+def test_normalising_keeps_the_www_prefix():
+    # It is the address a poll fetches, not only a key. githubstatus.com
+    # redirects to the www root page, so a stripped host turns
+    # "api/v2/summary.json" into the HTML homepage.
+    from catalog.import_service import normalise
+
+    assert normalise("https://www.githubstatus.com/") == "https://www.githubstatus.com"
+
+
+def test_normalising_still_ignores_case_query_and_trailing_slash():
+    from catalog.import_service import normalise
+
+    assert (
+        normalise("HTTPS://Status.Twilio.com/?utm=x#top") == "https://status.twilio.com"
+    )
