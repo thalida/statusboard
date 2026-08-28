@@ -1,4 +1,5 @@
 import pytest
+from django.urls import reverse
 from rest_framework import serializers
 
 from common.mixins import FieldsMixin
@@ -63,3 +64,23 @@ def test_a_non_unique_ordering_gets_the_tiebreak_appended():
     paginator = EnvelopePagination()
     ordering = paginator.get_ordering(None, None, view)
     assert ordering[-1] == "-created_at"
+
+
+def test_a_view_that_declares_no_permissions_requires_authentication():
+    """The miss has to fail closed.
+
+    DRF's own default is AllowAny, so a view that forgets the line
+    publishes whatever it reads. Boards are somebody's data.
+    """
+    from rest_framework.permissions import IsAuthenticated
+    from rest_framework.views import APIView
+
+    assert [type(p) for p in APIView().get_permissions()] == [IsAuthenticated]
+
+
+@pytest.mark.django_db
+def test_the_catalog_stays_public_on_purpose(client):
+    # Browsing without an account is in the spec, so these say AllowAny
+    # rather than inheriting it.
+    assert client.get(reverse("service-list")).status_code == 200
+    assert client.get(reverse("meta")).status_code == 200

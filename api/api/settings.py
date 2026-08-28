@@ -89,6 +89,11 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication"
     ],
+    # Private unless a view says otherwise. DRF's own default is AllowAny,
+    # which means a view that forgets the line publishes whatever it reads.
+    # Boards are somebody's data, so the miss has to fail closed. The
+    # catalog is public by design and says so on each view.
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.OrderingFilter",
