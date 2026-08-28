@@ -2,11 +2,12 @@ from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework import generics
 from rest_framework import status as http
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from catalog.models import Service, ServiceComponent
 from catalog.serializers import (
@@ -18,6 +19,7 @@ from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.filters import FieldsBackend
 from common.ordering import CURRENT_SEVERITY, MappedOrderingFilter
 from status.models import ComponentStatus, ServiceEvent
+from status.serializers import ServiceEventSerializer
 
 
 class ServiceAggregateSet(StatusAggregateSet):
@@ -75,8 +77,32 @@ class ComponentFilter(filters.FilterSet):
         fields = {"is_overall": ["exact"]}
 
 
-class ServiceListView(generics.ListAPIView):
+class ServiceEventFilter(filters.FilterSet):
+    class Meta:
+        model = ServiceEvent
+        fields = {
+            "kind": ["exact"],
+            "phase": ["exact", "in"],
+            "ends_at": ["isnull", "gte"],
+            "starts_at": ["gte", "lte"],
+            "affected_components": ["exact"],
+        }
+
+
+class ServiceViewSet(ReadOnlyModelViewSet):
+    """Every read of a service, in one place.
+
+    The list and the detail are the same resource, and a component list
+    and an event list belong to a service rather than standing alone, so
+    they are detail actions rather than separate views.
+
+    Each action overrides the serializer, filters and ordering it needs.
+    Those names all exist on the class because DRF refuses an initkwarg
+    that is not already an attribute.
+    """
+
     permission_classes = [AllowAny]
+    lookup_field = "slug"
     serializer_class = ServiceSerializer
     aggregate_set = ServiceAggregateSet
     filterset_class = ServiceFilter
@@ -89,6 +115,9 @@ class ServiceListView(generics.ListAPIView):
         "overall_component__status__severity": ["severity_now"],
     }
     ordering = ["-is_featured", "-watcher_count"]
+    # Schema generation calls get_queryset with no URL kwargs. This names
+    # the model without running it.
+    queryset = Service.objects.none()
 
     def get_queryset(self):
         queryset = Service.objects.select_related("status_page", "poller").annotate(
@@ -103,66 +132,46 @@ class ServiceListView(generics.ListAPIView):
         q = self.request.query_params.get("q")
         return queryset.filter(name__icontains=q) if q else queryset
 
+    def _page(self, queryset):
+        """The same envelope the list actions return."""
+        page = self.paginate_queryset(self.filter_queryset(queryset))
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
 
-@extend_schema(
-    responses={
-        200: ServiceSerializer,
-        404: OpenApiResponse(description="No service with that slug."),
-    }
-)
-class ServiceDetailView(generics.RetrieveAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = ServiceSerializer
-    lookup_field = "slug"
-    queryset = Service.objects.select_related("status_page", "poller")
-
-
-class ServiceComponentListView(generics.ListAPIView):
-    # get_queryset reads self.kwargs, which schema generation has
-    # not set. This names the model without running it.
-    queryset = ServiceComponent.objects.none()
-    permission_classes = [AllowAny]
-    serializer_class = ComponentSerializer
-    aggregate_set = StatusAggregateSet
-    filterset_class = ComponentFilter
-    filter_backends = [DjangoFilterBackend, MappedOrderingFilter, FieldsBackend]
-    ordering_fields = ["name", "status_page_order", "updated_at"]
-    ordering_map = {"status__severity": ["severity_now"]}
-    ordering = ["status_page_order"]
-
-    def get_queryset(self):
-        return (
-            ServiceComponent.objects.filter(service__slug=self.kwargs["slug"])
+    @extend_schema(responses={200: ComponentSerializer})
+    @action(
+        detail=True,
+        url_path="components",
+        url_name="components",
+        serializer_class=ComponentSerializer,
+        aggregate_set=StatusAggregateSet,
+        filterset_class=ComponentFilter,
+        ordering_fields=["name", "status_page_order", "updated_at"],
+        ordering_map={"status__severity": ["severity_now"]},
+        ordering=["status_page_order"],
+    )
+    def components(self, request, slug=None):
+        return self._page(
+            ServiceComponent.objects.filter(service__slug=slug)
             .select_related("service", "parent")
             .annotate(severity_now=CURRENT_SEVERITY)
         )
 
-
-class ServiceEventListView(generics.ListAPIView):
-    # get_queryset reads self.kwargs, which schema generation has
-    # not set. This names the model without running it.
-    queryset = ServiceEvent.objects.none()
-    permission_classes = [AllowAny]
-    aggregate_set = EventAggregateSet
-    filterset_fields = {
-        "kind": ["exact"],
-        "phase": ["exact", "in"],
-        "ends_at": ["isnull", "gte"],
-        "starts_at": ["gte", "lte"],
-        "affected_components": ["exact"],
-    }
-    ordering_fields = ["starts_at", "ends_at"]
-    ordering = ["-starts_at"]
-
-    def get_queryset(self):
-        return ServiceEvent.objects.filter(
-            service__slug=self.kwargs["slug"]
-        ).prefetch_related("updates")
-
-    def get_serializer_class(self):
-        from status.serializers import ServiceEventSerializer
-
-        return ServiceEventSerializer
+    @extend_schema(responses={200: ServiceEventSerializer})
+    @action(
+        detail=True,
+        url_path="events",
+        url_name="events",
+        serializer_class=ServiceEventSerializer,
+        aggregate_set=EventAggregateSet,
+        filterset_class=ServiceEventFilter,
+        ordering_fields=["starts_at", "ends_at"],
+        ordering_map={},
+        ordering=["-starts_at"],
+    )
+    def events(self, request, slug=None):
+        return self._page(
+            ServiceEvent.objects.filter(service__slug=slug).prefetch_related("updates")
+        )
 
 
 class CatalogImportView(APIView):
