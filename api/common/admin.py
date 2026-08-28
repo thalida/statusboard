@@ -25,7 +25,9 @@ def environment_callback(request):
     making loud.
     """
     return {
-        "local": ["Local", "info"],
+        # `default` is the neutral label. Local is not a warning, and a
+        # blue badge would read as the maintenance colour.
+        "local": ["Local", "default"],
         "staging": ["Staging", "warning"],
         "production": ["Production", "danger"],
     }.get(settings.ENVIRONMENT, [settings.ENVIRONMENT.title(), "warning"])

@@ -140,7 +140,9 @@ UNFOLD = {
             "href": lambda request: static("statusboard/favicon.svg"),
         }
     ],
-    "LOGIN": {"image": lambda request: static("statusboard/icon-cream.svg")},
+    # The mark on the ground it now stands on. The cream one is kept for
+    # anywhere the light theme needs it.
+    "LOGIN": {"image": lambda request: static("statusboard/icon-ultramarine.svg")},
     "SITE_URL": None,
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
@@ -150,6 +152,8 @@ UNFOLD = {
     "ENVIRONMENT": "common.admin.environment_callback",
     "ENVIRONMENT_TITLE_PREFIX": "common.admin.environment_prefix_callback",
     "DASHBOARD_CALLBACK": "common.admin.dashboard_callback",
+    # Unfold's primary button has no dark variant. See the file.
+    "STYLES": [lambda request: static("statusboard/admin.css")],
     "SITE_DROPDOWN": [
         {"icon": "api", "title": _("API docs"), "link": "/"},
         {"icon": "schema", "title": _("OpenAPI schema"), "link": "/schema/"},
@@ -169,31 +173,42 @@ UNFOLD = {
     # further than a neutral would: a saturated hue reads lighter than a
     # grey of the same value.
     "COLORS": {
+        # There is no accent hue, so `primary` is bone at the steps the
+        # dark theme reads and ink at the steps the light theme reads.
+        # Unfold takes its dark link from primary-500 and its light link
+        # and button from primary-600, so those two carry the accent.
         "primary": {
-            "50": "#F7F7FD",
-            "100": "#EFEFF9",
+            "50": "#F3F3FB",
+            "100": "#E9E9F6",
             "200": "#DEDEF0",
             "300": "#C6C5E4",
-            "400": "#B9B8DE",
-            "500": "#8A88B8",
-            "600": "#3B3A66",
-            "700": "#2A2952",
-            "800": "#1A193F",
-            "900": "#12123A",
-            "950": "#06061F",
+            "400": "#F5F2EA",
+            "500": "#EDE9E0",
+            "600": "#12123A",
+            "700": "#1A193F",
+            "800": "#0D0C2B",
+            "900": "#06061F",
+            "950": "#030310",
         },
+        # Unfold paints the dark page with base-900, its cards with
+        # base-800 and its borders with base-700, and the light page with
+        # base-50. So those four steps carry the palette's ground,
+        # surface and edge rather than sitting wherever a even ramp would
+        # put them. Read the step roles off the templates before moving
+        # any of these: an even ramp put the ground on 950 and the page
+        # came out a step light.
         "base": {
-            "50": "#F7F7FD",
-            "100": "#F3F3FB",
-            "200": "#E9E9F6",
-            "300": "#DEDEF0",
-            "400": "#B9B8DE",
+            "50": "#F3F3FB",
+            "100": "#E9E9F6",
+            "200": "#DEDEF0",
+            "300": "#C6C5E4",
+            "400": "#A9A7D6",
             "500": "#8A88B8",
-            "600": "#63628F",
-            "700": "#3B3A66",
-            "800": "#1A193F",
-            "900": "#0D0C2B",
-            "950": "#06061F",
+            "600": "#4A4870",
+            "700": "#1A193F",
+            "800": "#0D0C2B",
+            "900": "#06061F",
+            "950": "#030310",
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
