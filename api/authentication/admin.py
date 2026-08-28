@@ -57,7 +57,7 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     # and away from the other two flags it belongs with.
     fieldsets = [
         (None, {"fields": ["email", "password"]}),
-        (_("Board"), {"fields": ["default_dashboard"]}),
+        (_("Default board"), {"fields": ["default_dashboard"]}),
         (
             _("Access"),
             {"fields": ["is_active", "is_bot", "is_staff", "is_superuser"]},
@@ -176,7 +176,7 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     readonly_fields = ["token"]
     fieldsets = [
         (None, {"fields": ["user", "token"]}),
-        (_("Expiry"), {"fields": ["expires_at", "used_at"]}),
+        (_("Validity"), {"fields": ["expires_at", "used_at"]}),
         audit_section(),
     ]
 

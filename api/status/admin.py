@@ -84,9 +84,8 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     autocomplete_fields = ["component"]
     ordering = ["-started_at"]
     fieldsets = [
-        (None, {"fields": ["component", "severity", "source"]}),
+        (None, {"fields": ["component", "severity", "source", "display_poll_run"]}),
         (_("Span"), {"fields": ["started_at", "ended_at"]}),
-        (_("Written by"), {"fields": ["display_poll_run"]}),
         audit_section(),
     ]
     display_reading = record_column(_("Reading"))
@@ -243,11 +242,20 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
             else "display_affected_components"
         )
         return [
-            (None, {"fields": ["service", "external_id", "title"]}),
+            (
+                None,
+                {
+                    "fields": [
+                        "service",
+                        "external_id",
+                        "title",
+                        components,
+                        "display_poll_run",
+                    ]
+                },
+            ),
             (_("Classification"), {"fields": ["kind", "phase"]}),
-            (_("When"), {"fields": ["starts_at", "ends_at"]}),
-            (_("Affected"), {"fields": [components]}),
-            (_("Written by"), {"fields": ["display_poll_run"]}),
+            (_("Span"), {"fields": ["starts_at", "ends_at"]}),
             audit_section(),
         ]
 
@@ -348,8 +356,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     fieldsets = [
-        (None, {"fields": ["event", "phase", "posted_at"]}),
-        (_("Body"), {"fields": ["body"]}),
+        (None, {"fields": ["event", "phase", "posted_at", "body"]}),
         audit_section(),
     ]
 

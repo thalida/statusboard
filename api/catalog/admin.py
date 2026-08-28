@@ -305,9 +305,8 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
     ordering = ["-watcher_count", "name"]
     fieldsets = [
-        (None, {"fields": ["name", "slug", "description"]}),
+        (None, {"fields": ["name", "slug", "description", "is_featured"]}),
         (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
-        (_("Catalog"), {"fields": ["is_featured"]}),
         audit_section(),
     ]
     actions_row = ["poll_now"]
@@ -495,12 +494,11 @@ class ServiceComponentAdmin(
     # A parent is one of the same service's components.
     autocomplete_scope = ("service",)
     fieldsets = [
-        (None, {"fields": ["service", "name", "external_id"]}),
+        (None, {"fields": ["service", "name", "external_id", "archived_at"]}),
         (
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
         ),
-        (_("Lifecycle"), {"fields": ["archived_at"]}),
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
