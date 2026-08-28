@@ -14,9 +14,20 @@ def create_system_account(sender, **kwargs):
     a new worktree gets the account with its schema and no data
     migration has to carry it.
     """
-    from authentication.models import User
+    from authentication.models import SYSTEM_EMAIL, User
 
-    User.objects.system()
+    # Updated rather than fetched, so an account made before a column
+    # existed is brought up to date instead of left half set up.
+    account, _ = User.objects.update_or_create(
+        email=SYSTEM_EMAIL,
+        defaults={"is_active": False, "is_bot": True},
+    )
+    # It made itself, which is circular but true, and it leaves the one
+    # row the system wrote that nothing had signed.
+    if account.created_by_id is None:
+        account.created_by = account
+        account.updated_by = account
+        account.save(update_fields=["created_by", "updated_by"])
 
 
 class AuthenticationConfig(AppConfig):

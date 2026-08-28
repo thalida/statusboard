@@ -32,9 +32,9 @@ up:
     @{{wt}} ; docker compose up -d --wait ; \
       echo "postgres localhost:$POSTGRES_HOST_PORT  redis localhost:$REDIS_HOST_PORT"
 
-# Stop them, keeping the data. Pass -v yourself to drop this worktree's database.
-down:
-    @{{wt}} ; docker compose down
+# Stop them, keeping the data. `just down -v` drops this worktree's database.
+down *args:
+    @{{wt}} ; docker compose down {{args}}
 
 # Install Python dependencies.
 sync:

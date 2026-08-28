@@ -2,7 +2,11 @@ import pytest
 from django.utils import timezone
 
 from catalog.models import ServiceComponent
-from polling.adapters.base import NormalisedComponent, NormalisedEvent
+from polling.adapters.base import (
+    NormalisedComponent,
+    NormalisedEvent,
+    NormalisedUpdate,
+)
 from polling.reconcile import apply_fetch
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 from status.models import ComponentStatus, ServiceEvent
@@ -187,3 +191,55 @@ def test_a_hand_seeded_row_has_no_run():
     service = ServiceFactory()
     apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
     assert ComponentStatus.objects.get(component__service=service).poll_run is None
+
+
+@pytest.mark.django_db
+def test_a_poll_signs_everything_it_writes():
+    """Nobody types any of this, so nothing is left without an author.
+
+    A blank author reads the same as one that was lost. A component
+    carries no poll run either, so without this its origin was recorded
+    nowhere at all.
+    """
+    from django.contrib.auth import get_user_model
+
+    from status.models import EventUpdate
+
+    service = ServiceFactory()
+    event = NormalisedEvent(
+        external_id="inc-1",
+        kind=EventKind.INCIDENT,
+        title="First",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+        updates=[
+            NormalisedUpdate(
+                phase=IncidentPhase.INVESTIGATING,
+                body="Looking into it.",
+                posted_at=timezone.now(),
+            )
+        ],
+    )
+    apply_fetch(service, [_component()], [event], StatusSource.PROVIDER)
+
+    system = get_user_model().objects.system()
+    for model in (ServiceComponent, ComponentStatus, ServiceEvent, EventUpdate):
+        rows = model.objects.all()
+        assert rows.exists(), model.__name__
+        assert not rows.filter(created_by__isnull=True).exists(), model.__name__
+        assert rows.exclude(created_by=system).count() == 0, model.__name__
+
+
+@pytest.mark.django_db
+def test_a_second_poll_does_not_rewrite_who_made_the_row():
+    # A row records who made it once. Re-signing it on every poll would
+    # make `created_at` and `created_by` disagree.
+    service = ServiceFactory()
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    first = ServiceComponent.objects.get()
+
+    apply_fetch(service, [_component(name="Renamed")], [], StatusSource.PROVIDER)
+
+    again = ServiceComponent.objects.get()
+    assert again.created_by_id == first.created_by_id
+    assert again.created_at == first.created_at

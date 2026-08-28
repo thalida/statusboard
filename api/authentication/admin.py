@@ -16,6 +16,7 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     list_display = [
         "display_user",
         "display_active",
+        "display_bot",
         "display_staff",
         "display_superuser",
         "last_login",
@@ -24,6 +25,7 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     search_fields = ["email"]
     list_filter = [
         "is_active",
+        "is_bot",
         "is_staff",
         "is_superuser",
         ("last_login", RangeDateTimeFilter),
@@ -45,6 +47,10 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
 
     # Django's own labels read "active", "staff status" and "superuser
     # status". The three sit side by side, so they read as a set here.
+    @display(description=_("Bot"), boolean=True, ordering="is_bot")
+    def display_bot(self, obj):
+        return obj.is_bot
+
     @display(description=_("Active"), boolean=True, ordering="is_active")
     def display_active(self, obj):
         return obj.is_active

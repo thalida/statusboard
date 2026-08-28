@@ -2,7 +2,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from authentication.models import SYSTEM_EMAIL, User
+from authentication.models import User
 
 
 @pytest.fixture
@@ -34,12 +34,12 @@ def test_running_it_twice_does_not_create_a_second_admin(credentials):
 
 
 def made_anybody():
-    """Whether the command created a user.
+    """Whether the command created a person.
 
-    The system account is put in every database as migrate finishes, so
-    an empty table is no longer what "created nobody" looks like.
+    A bot account is put in every database as migrate finishes, so an
+    empty table is no longer what "created nobody" looks like.
     """
-    return User.objects.exclude(email=SYSTEM_EMAIL).exists()
+    return User.objects.filter(is_bot=False).exists()
 
 
 @pytest.mark.django_db

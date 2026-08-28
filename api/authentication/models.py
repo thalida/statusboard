@@ -37,7 +37,10 @@ class UserManager(BaseUserManager):
         A row written by a poll carries its run instead. The run says
         which request read the page, which is more than a name.
         """
-        user, _ = self.get_or_create(email=SYSTEM_EMAIL, defaults={"is_active": False})
+        user, _ = self.get_or_create(
+            email=SYSTEM_EMAIL,
+            defaults={"is_active": False, "is_bot": True},
+        )
         return user
 
     def create_user(self, email, **extra):
@@ -68,6 +71,11 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=128, default=_unusable_password)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    is_bot = models.BooleanField(
+        verbose_name="Bot",
+        default=False,
+        help_text="A machine account. It signs rows, it never signs in.",
+    )
     last_active_at = models.DateTimeField(
         verbose_name="Last active", null=True, blank=True
     )
@@ -81,8 +89,8 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         """
         creating = self._state.adding
         super().save(*args, **kwargs)
-        # The system account is nobody, so it reads no board.
-        if creating and self.email != SYSTEM_EMAIL:
+        # A bot is nobody, so it reads no board.
+        if creating and not self.is_bot:
             from dashboards.models import Dashboard
 
             Dashboard.objects.get_or_create(

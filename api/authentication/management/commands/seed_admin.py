@@ -43,5 +43,10 @@ class Command(BaseCommand):
             )
             return
 
-        user_model.objects.create_superuser(email, password=password)
+        # A command made this one, so it is signed by the system rather
+        # than left blank. Somebody who signs themselves up is not.
+        system = user_model.objects.system()
+        user_model.objects.create_superuser(
+            email, password=password, created_by=system, updated_by=system
+        )
         self.stdout.write(self.style.SUCCESS(f"created admin {email}"))

@@ -74,6 +74,8 @@ class ServiceManager(models.Manager):
             started_at=started,
             finished_at=timezone.now(),
             ok=True,
+            created_by=author,
+            updated_by=author,
         )
         apply_fetch(
             service,

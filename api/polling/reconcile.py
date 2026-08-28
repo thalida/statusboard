@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
@@ -15,25 +16,43 @@ def apply_fetch(service, components, events, source, run=None):
 
     `run` is the PollRun that produced this data. Stamping it makes a
     reading traceable back to the fetch that wrote it.
+
+    Nobody types any of this, so every row is signed by the system
+    account. A blank author reads the same as one that was lost, and a
+    component carries no run to say where it came from instead.
     """
-    rows = _upsert_components(service, components)
-    _archive_vanished(service, components)
-    _write_statuses(components, rows, source, run)
-    _upsert_events(service, events, rows, run)
+    author = get_user_model().objects.system()
+    rows = _upsert_components(service, components, author)
+    _archive_vanished(service, components, author)
+    _write_statuses(components, rows, source, author, run)
+    _upsert_events(service, events, rows, author, run)
 
 
-def _upsert_components(service, components):
+def _signed(author, **fields):
+    """The same fields, for an update and for a create.
+
+    `update_or_create` cannot tell the two apart on its own, and a row
+    records who made it once, not again on every poll.
+    """
+    return {
+        "defaults": {**fields, "updated_by": author},
+        "create_defaults": {**fields, "created_by": author, "updated_by": author},
+    }
+
+
+def _upsert_components(service, components, author):
     rows = {}
     for incoming in components:
         row, _ = ServiceComponent.objects.update_or_create(
             service=service,
             external_id=incoming.external_id,
-            defaults={
-                "name": incoming.name,
-                "status_page_order": incoming.order,
-                "is_overall": incoming.is_overall,
-                "archived_at": None,
-            },
+            **_signed(
+                author,
+                name=incoming.name,
+                status_page_order=incoming.order,
+                is_overall=incoming.is_overall,
+                archived_at=None,
+            ),
         )
         rows[incoming.external_id] = row
 
@@ -47,18 +66,19 @@ def _upsert_components(service, components):
         row = rows[incoming.external_id]
         if row.parent_id != (parent.id if parent else None):
             row.parent = parent
-            row.save(update_fields=["parent"])
+            row.updated_by = author
+            row.save(update_fields=["parent", "updated_by"])
     return rows
 
 
-def _archive_vanished(service, components):
+def _archive_vanished(service, components, author):
     seen = {c.external_id for c in components}
     ServiceComponent.objects.filter(service=service, archived_at__isnull=True).exclude(
         external_id__in=seen
-    ).update(archived_at=timezone.now())
+    ).update(archived_at=timezone.now(), updated_by=author)
 
 
-def _write_statuses(components, rows, source, run=None):
+def _write_statuses(components, rows, source, author, run=None):
     now = timezone.now()
     for incoming in components:
         row = rows[incoming.external_id]
@@ -69,29 +89,33 @@ def _write_statuses(components, rows, source, run=None):
             continue
         if current is not None:
             current.ended_at = now
-            current.save(update_fields=["ended_at"])
+            current.updated_by = author
+            current.save(update_fields=["ended_at", "updated_by"])
         ComponentStatus.objects.create(
             component=row,
             severity=incoming.severity,
             source=source,
             started_at=now,
             poll_run=run,
+            created_by=author,
+            updated_by=author,
         )
 
 
-def _upsert_events(service, events, rows, run=None):
+def _upsert_events(service, events, rows, author, run=None):
     for incoming in events:
         event, _ = ServiceEvent.objects.update_or_create(
             service=service,
             external_id=incoming.external_id,
-            defaults={
-                "kind": incoming.kind,
-                "title": incoming.title,
-                "phase": incoming.phase,
-                "starts_at": incoming.starts_at,
-                "ends_at": incoming.ends_at,
-                "poll_run": run,
-            },
+            **_signed(
+                author,
+                kind=incoming.kind,
+                title=incoming.title,
+                phase=incoming.phase,
+                starts_at=incoming.starts_at,
+                ends_at=incoming.ends_at,
+                poll_run=run,
+            ),
         )
         named = [rows[e] for e in incoming.affected_external_ids if e in rows]
         event.affected_components.set(named)
@@ -99,5 +123,10 @@ def _upsert_events(service, events, rows, run=None):
             EventUpdate.objects.get_or_create(
                 event=event,
                 posted_at=update.posted_at,
-                defaults={"phase": update.phase, "body": update.body},
+                defaults={
+                    "phase": update.phase,
+                    "body": update.body,
+                    "created_by": author,
+                    "updated_by": author,
+                },
             )

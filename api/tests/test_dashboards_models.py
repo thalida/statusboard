@@ -65,8 +65,18 @@ def test_an_item_carries_no_position():
 def test_the_system_account_cannot_sign_in():
     system = User.objects.system()
 
+    assert system.is_bot
     assert not system.is_active
     assert not system.has_usable_password()
+
+
+@pytest.mark.django_db
+def test_a_bot_reads_no_board():
+    # The rule is the flag, not the one address, so a machine account
+    # added later gets no board either.
+    bot = User.objects.create(email="importer@statusboard.invalid", is_bot=True)
+
+    assert not Dashboard.objects.filter(owner=bot).exists()
 
 
 @pytest.mark.django_db

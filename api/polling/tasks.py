@@ -2,6 +2,7 @@ import random
 from datetime import timedelta
 
 from celery import shared_task
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
@@ -53,8 +54,16 @@ def poll_service(service_id):
         # Nothing to read and nowhere to record it. A PollRun needs the
         # page's url and provider, so there is not even a row to write.
         return
+    # A run is the top of the trail, so it is the one row with nothing
+    # above it to say where it came from. It signs itself.
+    author = get_user_model().objects.system()
     run = PollRun.objects.create(
-        poller=poller, url=page.url, provider=page.provider, started_at=timezone.now()
+        poller=poller,
+        url=page.url,
+        provider=page.provider,
+        started_at=timezone.now(),
+        created_by=author,
+        updated_by=author,
     )
     try:
         adapter = for_provider(page.provider)(page.api_url_override or page.url)
