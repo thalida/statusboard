@@ -21,10 +21,23 @@ class StatusPageFactory(factory.django.DjangoModelFactory):
 
 
 class PollerFactory(factory.django.DjangoModelFactory):
+    """Tunes the Poller the Service signal already made.
+
+    Creating a second one would trip the one-per-service constraint.
+    """
+
     class Meta:
         model = Poller
 
     service = factory.SubFactory(ServiceFactory)
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        poller, _ = model_class.objects.get_or_create(service=kwargs.pop("service"))
+        for field, value in kwargs.items():
+            setattr(poller, field, value)
+        poller.save()
+        return poller
 
 
 class ComponentFactory(factory.django.DjangoModelFactory):

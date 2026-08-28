@@ -77,6 +77,10 @@ def test_a_service_can_be_added_from_a_related_popup(staff_client):
             "events-INITIAL_FORMS": "0",
             "events-MIN_NUM_FORMS": "0",
             "events-MAX_NUM_FORMS": "0",
+            "status_page-TOTAL_FORMS": "0",
+            "status_page-INITIAL_FORMS": "0",
+            "status_page-MIN_NUM_FORMS": "0",
+            "status_page-MAX_NUM_FORMS": "0",
         },
     )
     assert Service.objects.filter(slug="from-popup").exists()

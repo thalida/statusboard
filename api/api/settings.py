@@ -147,23 +147,24 @@ UNFOLD = {
         {"icon": "api", "title": _("API docs"), "link": "/"},
         {"icon": "schema", "title": _("OpenAPI schema"), "link": "/schema/"},
     ],
-    # The brand palette. Primary is the operational green #00E54D with 500
-    # sitting exactly on it. Base is a warm neutral running from the cream
-    # #F5EDD6 down to the near-black #0D0D0D, so the admin reads as the
-    # same product as the mark.
+    # The brand palette. The accent is deliberately not the mark's green:
+    # #00E54D means "operational" on every status pill, so using it for nav
+    # chrome makes an active link read as a status. This is a warm sand
+    # pulled from the cream #F5EDD6 instead — same family, no collision
+    # with up-green or down-red. Base runs cream to the near-black #0D0D0D.
     "COLORS": {
         "primary": {
-            "50": "#EBFFF1",
-            "100": "#CDFEDD",
-            "200": "#9DFBBC",
-            "300": "#60FB94",
-            "400": "#1FFF69",
-            "500": "#00E54D",
-            "600": "#00C241",
-            "700": "#009933",
-            "800": "#03772A",
-            "900": "#056124",
-            "950": "#013713",
+            "50": "#FBF8EF",
+            "100": "#F4ECD7",
+            "200": "#E8D9B0",
+            "300": "#DAC58B",
+            "400": "#CCB166",
+            "500": "#BFA04A",
+            "600": "#A88B3E",
+            "700": "#887235",
+            "800": "#6D5B2C",
+            "900": "#564925",
+            "950": "#352D18",
         },
         "base": {
             "50": "#FBF7EC",

@@ -27,7 +27,11 @@ def due_pollers():
     """Only services someone tracks, not paused, and past next_at."""
     now = timezone.now()
     return (
-        Poller.objects.filter(service__watcher_count__gt=0, is_paused=False)
+        Poller.objects.filter(
+            service__watcher_count__gt=0,
+            service__status_page__isnull=False,
+            is_paused=False,
+        )
         .filter(Q(next_at__isnull=True) | Q(next_at__lte=now))
         .select_related("service")
         .order_by("next_at")
@@ -43,8 +47,12 @@ def enqueue_due_polls():
 @shared_task
 def poll_service(service_id):
     service = Service.objects.select_related("status_page", "poller").get(id=service_id)
-    poller = service.poller
-    page = service.status_page
+    poller = getattr(service, "poller", None)
+    page = getattr(service, "status_page", None)
+    if poller is None or page is None:
+        # Nothing to read and nowhere to record it. A PollRun needs the
+        # page's url and provider, so there is not even a row to write.
+        return
     run = PollRun.objects.create(
         poller=poller, url=page.url, provider=page.provider, started_at=timezone.now()
     )

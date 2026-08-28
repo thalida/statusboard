@@ -13,22 +13,26 @@ from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 def test_only_watched_services_are_due():
     # Poll only what someone tracks. Other polls have no reader.
     watched = PollerFactory(service=ServiceFactory(watcher_count=1))
-    PollerFactory(service=ServiceFactory(watcher_count=0))
+    StatusPageFactory(service=watched.service)
+    unwatched = PollerFactory(service=ServiceFactory(watcher_count=0))
+    StatusPageFactory(service=unwatched.service)
     assert list(due_pollers()) == [watched]
 
 
 @pytest.mark.django_db
 def test_a_paused_poller_is_never_due():
-    PollerFactory(service=ServiceFactory(watcher_count=1), is_paused=True)
+    paused = PollerFactory(service=ServiceFactory(watcher_count=1), is_paused=True)
+    StatusPageFactory(service=paused.service)
     assert list(due_pollers()) == []
 
 
 @pytest.mark.django_db
 def test_a_poller_inside_its_cooldown_is_not_due():
-    PollerFactory(
+    cooling = PollerFactory(
         service=ServiceFactory(watcher_count=1),
         next_at=timezone.now() + timedelta(minutes=5),
     )
+    StatusPageFactory(service=cooling.service)
     assert list(due_pollers()) == []
 
 
@@ -36,6 +40,7 @@ def test_a_poller_inside_its_cooldown_is_not_due():
 def test_two_boards_tracking_one_service_produce_one_poller():
     # The cooldown is on the service, not on a user or a board.
     service = ServiceFactory(watcher_count=200)
+    StatusPageFactory(service=service)
     PollerFactory(service=service)
     assert Poller.objects.filter(service=service).count() == 1
     assert len(list(due_pollers())) == 1
@@ -124,3 +129,30 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
     assert poller.consecutive_failure_count == 0
     assert poller.last_success_at is not None
     assert poller.next_at > timezone.now()
+
+
+@pytest.mark.django_db
+def test_every_service_gets_a_poller():
+    # A service added anywhere but the import endpoint used to have none,
+    # so it was never polled and never appeared as due.
+    service = ServiceFactory()
+    assert Poller.objects.filter(service=service).exists()
+
+
+@pytest.mark.django_db
+def test_a_service_with_no_status_page_is_not_due():
+    # There is nothing to read. Enqueuing it would only fail.
+    ServiceFactory(watcher_count=1)
+    assert list(due_pollers()) == []
+
+
+@pytest.mark.django_db
+def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
+    # A PollRun needs the page's url and provider, so there is not even a
+    # row to write. It must not raise: the admin offers "Poll now".
+    service = ServiceFactory(watcher_count=1)
+    monkeypatch.setattr(
+        "status.tasks.detect", lambda url: pytest.fail("fetched with no page")
+    )
+    poll_service(str(service.id))
+    assert not PollRun.objects.filter(poller__service=service).exists()

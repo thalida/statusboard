@@ -1,8 +1,8 @@
 import pytest
 from django.db.utils import IntegrityError
 
-from catalog.models import Poller, Service, ServiceComponent, StatusPage
-from tests.factories import ComponentFactory, ServiceFactory
+from catalog.models import Service, ServiceComponent, StatusPage
+from tests.factories import ComponentFactory, PollerFactory, ServiceFactory
 
 
 @pytest.mark.django_db
@@ -37,14 +37,15 @@ def test_status_page_url_is_the_dedupe_key():
 
 @pytest.mark.django_db
 def test_poller_intervals_are_null_to_inherit_the_deployment_default():
-    poller = Poller.objects.create(service=ServiceFactory())
+    # The Service signal makes it, so there is one to read already.
+    poller = ServiceFactory().poller
     assert poller.interval_seconds is None
     assert poller.effective_interval_seconds == 300
 
 
 @pytest.mark.django_db
 def test_a_service_can_override_the_interval():
-    poller = Poller.objects.create(service=ServiceFactory(), interval_seconds=60)
+    poller = PollerFactory(service=ServiceFactory(), interval_seconds=60)
     assert poller.effective_interval_seconds == 60
 
 

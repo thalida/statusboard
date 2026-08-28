@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from catalog.adapters.registry import detect
-from catalog.models import Poller, Service, StatusPage
+from catalog.models import Service, StatusPage
 from catalog.reconcile import apply_fetch
 from status.choices import StatusSource
 
@@ -37,7 +37,7 @@ def import_from_url(url: str) -> tuple[Service, bool]:
         homepage_url=metadata.get("homepage_url", ""),
     )
     StatusPage.objects.create(service=service, url=key, provider=adapter_class.provider)
-    Poller.objects.create(service=service)
+    # The Poller comes from the Service signal; creating one here duplicates it.
 
     apply_fetch(
         service,

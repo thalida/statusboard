@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
-from unfold.admin import ModelAdmin, TabularInline
+from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
     ChoicesDropdownFilter,
@@ -55,6 +55,21 @@ class ComponentStatusInline(TabularInline):
         return False
 
 
+class StatusPageInline(StackedInline):
+    """The one thing a service cannot be given automatically.
+
+    A Poller is created by a signal because every field has a default. A
+    status page needs a URL, so it is asked for here instead of leaving a
+    service that can never be polled.
+    """
+
+    model = StatusPage
+    tab = True
+    extra = 1
+    max_num = 1
+    can_delete = False
+
+
 class ServiceEventInline(TabularInline):
     """The service's incidents and maintenance, read only.
 
@@ -89,7 +104,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ordering = ["-watcher_count", "name"]
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
-    inlines = [ServiceEventInline]
+    inlines = [StatusPageInline, ServiceEventInline]
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("status_page", "poller")
