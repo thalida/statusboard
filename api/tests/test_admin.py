@@ -13,6 +13,34 @@ def staff_client(client):
     return client
 
 
+def service_form_data(**fields):
+    """The service add form, including a management form per inline.
+
+    Derived from ServiceAdmin rather than hardcoded: a browser posts these
+    and a test has to as well, and adding a fourth inline should not fail
+    two unrelated tests with a confusing form error.
+    """
+    from django.forms.models import _get_foreign_key
+
+    from catalog.admin import ServiceAdmin
+    from catalog.models import Service
+
+    data = {
+        "name": "",
+        "slug": "",
+        "description": "",
+        "logo": "",
+        "homepage_url": "",
+        **fields,
+    }
+    for inline in ServiceAdmin.inlines:
+        fk = _get_foreign_key(Service, inline.model)
+        prefix = fk.remote_field.get_accessor_name(model=inline.model).replace("+", "")
+        for key in ("TOTAL_FORMS", "INITIAL_FORMS", "MIN_NUM_FORMS", "MAX_NUM_FORMS"):
+            data[f"{prefix}-{key}"] = "0"
+    return data
+
+
 @pytest.mark.django_db
 def test_the_dashboard_leads_with_poller_health(staff_client):
     # The landing page answers "is polling healthy?". A stalled poller
@@ -62,27 +90,7 @@ def test_a_service_can_be_added_from_a_related_popup(staff_client):
 
     url = reverse("admin:catalog_service_add") + "?_to_field=id&_popup=1"
     assert staff_client.get(url).status_code == 200
-    staff_client.post(
-        url,
-        {
-            "slug": "from-popup",
-            "name": "From popup",
-            "description": "",
-            "logo": "",
-            "homepage_url": "",
-            "watcher_count": 0,
-            "_popup": "1",
-            # The events inline. A browser posts this; the test must too.
-            "events-TOTAL_FORMS": "0",
-            "events-INITIAL_FORMS": "0",
-            "events-MIN_NUM_FORMS": "0",
-            "events-MAX_NUM_FORMS": "0",
-            "status_page-TOTAL_FORMS": "0",
-            "status_page-INITIAL_FORMS": "0",
-            "status_page-MIN_NUM_FORMS": "0",
-            "status_page-MAX_NUM_FORMS": "0",
-        },
-    )
+    staff_client.post(url, service_form_data(slug="from-popup", name="From popup"))
     assert Service.objects.filter(slug="from-popup").exists()
 
 
@@ -157,22 +165,7 @@ def test_the_admin_stamps_who_created_a_row(staff_client):
     from catalog.models import Service
 
     staff_client.post(
-        reverse("admin:catalog_service_add"),
-        {
-            "name": "Stamped",
-            "slug": "",
-            "description": "",
-            "logo": "",
-            "homepage_url": "",
-            "events-TOTAL_FORMS": "0",
-            "events-INITIAL_FORMS": "0",
-            "events-MIN_NUM_FORMS": "0",
-            "events-MAX_NUM_FORMS": "0",
-            "status_page-TOTAL_FORMS": "0",
-            "status_page-INITIAL_FORMS": "0",
-            "status_page-MIN_NUM_FORMS": "0",
-            "status_page-MAX_NUM_FORMS": "0",
-        },
+        reverse("admin:catalog_service_add"), service_form_data(name="Stamped")
     )
     service = Service.objects.get(name="Stamped")
     assert service.created_by.email == "admin@example.com"

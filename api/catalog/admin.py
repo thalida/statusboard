@@ -77,6 +77,35 @@ class StatusPageInline(StackedInline):
     can_delete = False
 
 
+class ServiceComponentInline(TabularInline):
+    """The service's components, read only.
+
+    A poll upserts these from the provider, keyed on external_id. This is
+    a summary; the change link opens the full record.
+    """
+
+    model = ServiceComponent
+    tab = True
+    extra = 0
+    max_num = 0
+    can_delete = False
+    show_change_link = True
+    per_page = 20
+    fields = ["name", "external_id", "display_severity", "is_overall", "archived_at"]
+    readonly_fields = fields
+    ordering = ["status_page_order", "name"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(severity_now=CURRENT_SEVERITY)
+
+    @display(description=_("Status"), label=SEVERITY_VARIANTS)
+    def display_severity(self, obj):
+        return severity_label(obj.severity_now)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class ServiceEventInline(TabularInline):
     """The service's incidents and maintenance, read only.
 
@@ -128,7 +157,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
     actions_list = ["import_from_status_page"]
-    inlines = [StatusPageInline, ServiceEventInline]
+    inlines = [StatusPageInline, ServiceComponentInline, ServiceEventInline]
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("status_page", "poller")
