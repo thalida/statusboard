@@ -8,7 +8,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.import_service import import_from_url
 from catalog.models import Service, ServiceComponent
 from catalog.serializers import (
     ComponentSerializer,
@@ -188,7 +187,9 @@ class CatalogImportView(APIView):
         body = ImportRequestSerializer(data=request.data)
         if not body.is_valid():
             return Response(body.errors, status=400)
-        service, created = import_from_url(body.validated_data["status_page_url"])
+        service, created = Service.objects.import_from_url(
+            body.validated_data["status_page_url"]
+        )
         return Response(
             ServiceSerializer(service, context={"request": request}).data,
             status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,

@@ -51,6 +51,20 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     last_active_at = models.DateTimeField(null=True, blank=True)
 
+    def save(self, *args, **kwargs):
+        """Give a new user their default board.
+
+        Imported here rather than at module scope: authentication is the
+        lower layer, and a top-level import would tie it to dashboards for
+        every reader of this file.
+        """
+        creating = self._state.adding
+        super().save(*args, **kwargs)
+        if creating:
+            from dashboards.models import Dashboard
+
+            Dashboard.objects.get_or_create(owner=self, is_default=True)
+
     objects = UserManager()
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

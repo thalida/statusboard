@@ -16,7 +16,6 @@ from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
-from catalog.import_service import import_from_url
 from catalog.models import Service, ServiceComponent, StatusPage
 from common.admin import SEVERITY_VARIANTS, BaseModelAdmin, severity_label
 from common.ordering import CURRENT_SEVERITY
@@ -205,7 +204,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
         url = form.cleaned_data["status_page_url"]
         try:
-            service, created = import_from_url(url)
+            service, created = Service.objects.import_from_url(url)
         except Exception as error:  # noqa: BLE001 — the page is a stranger's
             # Anything can come back from a URL a person pasted. Say what
             # happened rather than showing a 500.

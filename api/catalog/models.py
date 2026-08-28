@@ -1,9 +1,72 @@
-from django.db import models
+from urllib.parse import urlparse, urlunparse
+
+from django.db import models, transaction
+from django.utils import timezone
 from django.utils.text import slugify
 from simple_history.models import HistoricalRecords
 
 from catalog.choices import StatusPageProvider
 from common.models import BaseModel
+
+
+class ServiceManager(models.Manager):
+    @transaction.atomic
+    def import_from_url(self, url: str) -> tuple["Service", bool]:
+        """Build a whole service from a status page URL.
+
+        The provider, the name, the components and the event history all
+        come from the page. Returns (service, created); importing a page
+        that is already in the catalog returns the existing service.
+
+        The polling imports are local to the method. `polling` imports
+        this module, so a top-level import would close the loop.
+        """
+        from polling.adapters.registry import detect
+        from polling.models import PollRun
+        from polling.reconcile import apply_fetch
+        from status.choices import StatusSource
+
+        key = StatusPage.normalise_url(url)
+        existing = StatusPage.objects.filter(url=key).select_related("service").first()
+        if existing is not None:
+            return existing.service, False
+
+        adapter_class = detect(key)
+        adapter = adapter_class(key)
+        metadata = adapter.fetch_service_metadata()
+
+        service = self.create(
+            name=metadata.get("name") or urlparse(key).netloc,
+            description=metadata.get("description", ""),
+            homepage_url=metadata.get("homepage_url", ""),
+        )
+        StatusPage.objects.create(
+            service=service, url=key, provider=adapter_class.provider
+        )
+        # The Poller comes from the Service signal; one here would duplicate it.
+
+        # An import is a fetch, so it is recorded as one. Without this the
+        # first reading of every service has no provenance, and the poll
+        # log is missing the request that created the rows.
+        started = timezone.now()
+        components = adapter.fetch_status()
+        events = adapter.fetch_incidents()
+        run = PollRun.objects.create(
+            poller=service.poller,
+            url=key,
+            provider=adapter_class.provider,
+            started_at=started,
+            finished_at=timezone.now(),
+            ok=True,
+        )
+        apply_fetch(
+            service,
+            components,
+            events,
+            getattr(adapter, "status_source", StatusSource.PROVIDER),
+            run,
+        )
+        return service, True
 
 
 class Service(BaseModel):
@@ -19,6 +82,8 @@ class Service(BaseModel):
     is_featured = models.BooleanField(default=False)
     # Derived. Never set by hand: it decides what gets polled.
     watcher_count = models.PositiveIntegerField(default=0, editable=False)
+
+    objects = ServiceManager()
 
     history = HistoricalRecords()
 
@@ -81,6 +146,31 @@ class StatusPage(BaseModel):
     )
 
     history = HistoricalRecords()
+
+    @staticmethod
+    def normalise_url(url: str) -> str:
+        """The dedupe key, and the URL every poll is built from.
+
+        It is both, which is why `www.` is kept. Stripping it made a
+        tidier key and an unfetchable address: githubstatus.com redirects
+        to the www root page, so joining "api/v2/summary.json" onto the
+        stripped host returned the HTML homepage instead of the summary.
+
+        The cost is that www.example.com and example.com import as two
+        services. That is a duplicate row. Dropping the prefix was a
+        service that could never be polled at all.
+        """
+        parts = urlparse(url.strip())
+        return urlunparse(
+            (
+                parts.scheme or "https",
+                parts.netloc.lower(),
+                parts.path.rstrip("/"),
+                "",
+                "",
+                "",
+            )
+        )
 
 
 class ServiceComponent(BaseModel):

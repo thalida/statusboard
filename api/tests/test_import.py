@@ -29,7 +29,7 @@ class FakeAdapter:
 
 @pytest.fixture(autouse=True)
 def fake_detect(monkeypatch):
-    monkeypatch.setattr("catalog.import_service.detect", lambda url: FakeAdapter)
+    monkeypatch.setattr("polling.adapters.registry.detect", lambda url: FakeAdapter)
 
 
 @pytest.mark.django_db
@@ -114,14 +114,18 @@ def test_normalising_keeps_the_www_prefix():
     # It is the address a poll fetches, not only a key. githubstatus.com
     # redirects to the www root page, so a stripped host turns
     # "api/v2/summary.json" into the HTML homepage.
-    from catalog.import_service import normalise
+    from catalog.models import StatusPage
 
-    assert normalise("https://www.githubstatus.com/") == "https://www.githubstatus.com"
+    assert (
+        StatusPage.normalise_url("https://www.githubstatus.com/")
+        == "https://www.githubstatus.com"
+    )
 
 
 def test_normalising_still_ignores_case_query_and_trailing_slash():
-    from catalog.import_service import normalise
+    from catalog.models import StatusPage
 
     assert (
-        normalise("HTTPS://Status.Twilio.com/?utm=x#top") == "https://status.twilio.com"
+        StatusPage.normalise_url("HTTPS://Status.Twilio.com/?utm=x#top")
+        == "https://status.twilio.com"
     )
