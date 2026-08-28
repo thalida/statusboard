@@ -220,3 +220,42 @@ def test_an_unreadable_page_is_reported_not_a_500(staff_client, monkeypatch):
     )
     assert response.status_code == 200
     assert "could not be read" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_events_can_be_filtered_by_phase(staff_client):
+    """Phase carries no choices on the field, so its options are built.
+
+    An incident and a maintenance window move through different phases,
+    which is why a plain ChoicesDropdownFilter cannot do this.
+    """
+    from django.utils import timezone
+
+    from status.choices import EventKind, IncidentPhase, MaintenancePhase
+    from status.models import ServiceEvent
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory()
+    for external_id, kind, phase in [
+        ("1", EventKind.INCIDENT, IncidentPhase.RESOLVED),
+        ("2", EventKind.INCIDENT, IncidentPhase.INVESTIGATING),
+        ("3", EventKind.MAINTENANCE, MaintenancePhase.SCHEDULED),
+    ]:
+        ServiceEvent.objects.create(
+            service=service,
+            external_id=external_id,
+            kind=kind,
+            title=external_id,
+            phase=phase,
+            starts_at=timezone.now(),
+        )
+
+    url = reverse("admin:status_serviceevent_changelist")
+    body = staff_client.get(url).content.decode()
+    assert "Incident: Resolved" in body
+    assert "Maintenance: Scheduled" in body
+
+    response = staff_client.get(url, {"phase": IncidentPhase.RESOLVED})
+    assert list(response.context["cl"].queryset) == [
+        ServiceEvent.objects.get(external_id="1")
+    ]

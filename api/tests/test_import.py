@@ -26,6 +26,9 @@ class FakeAdapter:
     def fetch_service_metadata(self):
         return {"name": "Twilio", "homepage_url": "https://twilio.com"}
 
+    def fetch_logo(self):
+        return "https://cdn.example/logo.png"
+
 
 @pytest.fixture(autouse=True)
 def fake_detect(monkeypatch):

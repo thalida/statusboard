@@ -194,26 +194,31 @@ UNFOLD = {
     # Tabs carry the relationship instead: a status history belongs to the
     # component it describes, not to a separate area of the admin. A sidebar
     # entry also stays active while you are on one of its tabs.
+    # The sidebar is two levels deep and cannot nest an item under an
+    # item. Tabs carry the relationship instead: a component belongs to a
+    # service, and a status history to a component, so all four are one
+    # page rather than four sidebar entries. A sidebar entry stays active
+    # while you are on any of its tabs.
     "TABS": [
         {
-            "models": ["catalog.service", "status.serviceevent"],
+            "models": [
+                "catalog.service",
+                "catalog.servicecomponent",
+                "status.serviceevent",
+                "status.componentstatus",
+            ],
             "items": [
                 {
                     "title": _("Services"),
                     "link": reverse_lazy("admin:catalog_service_changelist"),
                 },
                 {
-                    "title": _("Events"),
-                    "link": reverse_lazy("admin:status_serviceevent_changelist"),
-                },
-            ],
-        },
-        {
-            "models": ["catalog.servicecomponent", "status.componentstatus"],
-            "items": [
-                {
                     "title": _("Components"),
                     "link": reverse_lazy("admin:catalog_servicecomponent_changelist"),
+                },
+                {
+                    "title": _("Events"),
+                    "link": reverse_lazy("admin:status_serviceevent_changelist"),
                 },
                 {
                     "title": _("Status history"),
@@ -256,13 +261,6 @@ UNFOLD = {
                         "title": _("Services"),
                         "icon": "lan",
                         "link": reverse_lazy("admin:catalog_service_changelist"),
-                    },
-                    {
-                        "title": _("Components"),
-                        "icon": "account_tree",
-                        "link": reverse_lazy(
-                            "admin:catalog_servicecomponent_changelist"
-                        ),
                     },
                     {
                         "title": _("Status pages"),

@@ -121,6 +121,9 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
         def fetch_service_metadata(self):
             return {}
 
+        def fetch_logo(self):
+            return "https://cdn.example/logo.png"
+
     monkeypatch.setattr("polling.tasks.detect", lambda url: Fine)
     poll_service(str(poller.service_id))
 

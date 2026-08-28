@@ -63,7 +63,7 @@ def poll_service(service_id):
         metadata = adapter.fetch_service_metadata()
         source = getattr(adapter, "status_source", StatusSource.PROVIDER)
         apply_fetch(service, components, events, source, run)
-        _refresh_metadata(service, metadata)
+        _refresh_metadata(service, metadata, adapter)
     except Exception as error:  # noqa: BLE001 — every failure is recorded, never raised away
         # A failed fetch keeps the last known value.
         # `apply_fetch` does not run, so the open rows stand.
@@ -89,9 +89,19 @@ def poll_service(service_id):
         )
 
 
-def _refresh_metadata(service, metadata):
-    """A rename upstream must not leave a stale name on someone's board."""
+def _refresh_metadata(service, metadata, adapter=None):
+    """A rename upstream must not leave a stale name on someone's board.
+
+    The logo is fetched only when missing. It is a second request against
+    the provider, and doing it every poll would double the traffic to
+    read something that almost never changes.
+    """
     changed = []
+    if adapter is not None and not service.logo:
+        logo = adapter.fetch_logo()
+        if logo:
+            service.logo = logo
+            changed.append("logo")
     for field in ("name", "description", "homepage_url"):
         value = metadata.get(field)
         if value and getattr(service, field) != value:

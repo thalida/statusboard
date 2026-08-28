@@ -63,3 +63,13 @@ class Adapter(ABC):
 
     @abstractmethod
     def fetch_service_metadata(self) -> dict: ...
+
+    def fetch_logo(self) -> str:
+        """The product's own mark, scraped from the status page.
+
+        No provider publishes one in its JSON, so this is the same for
+        all of them. A provider that does can override it.
+        """
+        from polling.logo import find_logo
+
+        return find_logo(self.url, self.session)

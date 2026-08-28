@@ -7,6 +7,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
     ChoicesDropdownFilter,
+    DropdownFilter,
     RangeDateTimeFilter,
 )
 from unfold.decorators import display
@@ -17,8 +18,29 @@ from common.admin import (
     poll_run_link,
     severity_label,
 )
-from status.choices import CLOSED_PHASES, EventKind
+from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
+
+
+class PhaseFilter(DropdownFilter):
+    """Phase is a plain column, so its options are assembled here.
+
+    An incident and a maintenance window move through different phases,
+    which is why the field carries no choices of its own.
+    """
+
+    title = _("Phase")
+    parameter_name = "phase"
+
+    def lookups(self, request, model_admin):
+        return [
+            (phase.value, f"{kind.label}: {phase.label}")
+            for kind, phases in EVENT_PHASES_BY_KIND.items()
+            for phase in phases
+        ]
+
+    def queryset(self, request, queryset):
+        return queryset.filter(phase=self.value()) if self.value() else queryset
 
 
 @admin.register(ComponentStatus)
@@ -83,6 +105,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     search_fields = ["title", "service__name", "external_id"]
     list_filter = [
         ("kind", ChoicesDropdownFilter),
+        PhaseFilter,
         ("service", AutocompleteSelectFilter),
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),

@@ -39,6 +39,7 @@ class ServiceManager(models.Manager):
             name=metadata.get("name") or urlparse(key).netloc,
             description=metadata.get("description", ""),
             homepage_url=metadata.get("homepage_url", ""),
+            logo=adapter.fetch_logo(),
         )
         StatusPage.objects.create(
             service=service, url=key, provider=adapter_class.provider
