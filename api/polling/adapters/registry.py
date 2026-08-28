@@ -7,6 +7,7 @@ import requests
 
 from polling.adapters.base import Adapter
 from polling.adapters.services.apple import AppleAdapter
+from polling.adapters.services.auth0 import Auth0Adapter
 from polling.adapters.services.aws import AwsAdapter
 from polling.adapters.services.azure import AzureAdapter
 from polling.adapters.services.betterstack import BetterStackAdapter
@@ -17,17 +18,20 @@ from polling.adapters.services.incidentio import IncidentIoAdapter
 from polling.adapters.services.instatus import InstatusAdapter
 from polling.adapters.services.oracle import OracleAdapter
 from polling.adapters.services.rss import RSSAdapter
+from polling.adapters.services.salesforce import SalesforceAdapter
 from polling.adapters.services.statusio import StatusIoAdapter
 from polling.adapters.services.statuspage import StatuspageAdapter
 
 # Order matters: RSS is last because it is the fallback, not a match.
 ADAPTERS: tuple[type[Adapter], ...] = (
     AppleAdapter,
+    Auth0Adapter,
     AwsAdapter,
     AzureAdapter,
     GoogleCloudAdapter,
     GoogleFeedAdapter,
     OracleAdapter,
+    SalesforceAdapter,
     IncidentIoAdapter,
     StatuspageAdapter,
     InstatusAdapter,
@@ -112,12 +116,18 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
     ]
     candidates = [guess, *general]
 
+    # An adapter written for this exact host knows why it cannot read the
+    # page, and that reason is worth more than "nothing worked" — Auth0's
+    # is that only the person adding it knows their tenant.
+    explanation = ""
     for adapter_class in candidates:
         try:
             if adapter_class(url, session=session).fetch_status():
                 return adapter_class, url
         except Exception as error:  # noqa: BLE001 — the next one may work
             logger.debug("%s could not read %s: %s", adapter_class.__name__, url, error)
+            if adapter_class.host_specific and adapter_class.matches(url):
+                explanation = str(error)
 
     # No API. Ask the page where its feed is, which is how a page that
     # publishes nothing machine-readable still tells you.
@@ -152,7 +162,7 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
             except Exception as error:  # noqa: BLE001 — try the next one
                 logger.debug("%s could not read %s: %s", adapter_class, origin, error)
 
-    raise ValueError(f"No adapter could read {url}")
+    raise ValueError(explanation or f"No adapter could read {url}")
 
 
 def _other_origins(url: str, feeds: list[str]) -> list[str]:

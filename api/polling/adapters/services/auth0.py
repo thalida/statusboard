@@ -1,0 +1,33 @@
+from catalog.choices import StatusPageProvider
+from polling.adapters.services.rss import RSSAdapter
+
+HELP = (
+    "Auth0 publishes a feed per tenant, not one for everyone. Use "
+    "https://status.auth0.com/rss?domain=YOUR_TENANT.REGION.auth0.com "
+    "as the status page URL."
+)
+
+
+class Auth0Adapter(RSSAdapter):
+    """Auth0, whose status is per tenant.
+
+    There is no feed for Auth0 as a whole. Every feed is scoped to one
+    tenant, so nothing can be discovered from status.auth0.com alone and
+    the URL has to carry the tenant.
+
+    This exists to say that. Without it the page fails like any
+    unreadable one, and the reason — that only the person adding it knows
+    their tenant — never reaches them.
+    """
+
+    provider = StatusPageProvider.AUTH0
+    host_specific = True
+
+    @classmethod
+    def matches(cls, url: str) -> bool:
+        return "status.auth0.com" in url
+
+    def _feed(self):
+        if "domain=" not in self.url:
+            raise ValueError(HELP)
+        return super()._feed()

@@ -46,8 +46,8 @@
   },
   {
     "name": "Auth0",
-    "url": "https://status.auth0.com/",
-    "adapter": null
+    "url": "https://status.auth0.com/rss?domain=example.us.auth0.com",
+    "adapter": "Auth0Adapter"
   },
   {
     "name": "Azure",
@@ -192,7 +192,7 @@
   {
     "name": "Heroku2",
     "url": "https://status.salesforce.com/products/heroku",
-    "adapter": null
+    "adapter": "SalesforceAdapter"
   },
   {
     "name": "HubSpot",
@@ -382,7 +382,7 @@
   {
     "name": "Salesforce",
     "url": "https://status.salesforce.com/",
-    "adapter": null
+    "adapter": "SalesforceAdapter"
   },
   {
     "name": "Sanity",
