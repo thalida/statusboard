@@ -1,6 +1,7 @@
 from datetime import timedelta
 from urllib.parse import urlparse, urlunparse
 
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -233,6 +234,23 @@ class ServiceComponent(BaseModel):
                 name="one_overall_component_per_service",
             ),
         ]
+
+    def clean(self):
+        """A component sits under one of its own service's components.
+
+        Nothing in the column says whose component the parent is, so
+        without this a service's tree can reach into another service's
+        and a page would show one product's components under another.
+        """
+        super().clean()
+        if self.parent_id is None:
+            return
+        if self.parent_id == self.pk:
+            raise ValidationError({"parent": "A component cannot be its own parent."})
+        if self.parent.service_id != self.service_id:
+            raise ValidationError(
+                {"parent": "That component belongs to another service."}
+            )
 
     @property
     def ancestors(self):

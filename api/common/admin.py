@@ -1,6 +1,10 @@
 """Admin-wide callbacks: the environment badge and the dashboard."""
 
+from urllib.parse import urlencode
+from uuid import UUID
+
 from django.conf import settings
+from django.contrib.admin.widgets import AutocompleteSelect
 from django.db.models import Count, IntegerField, Min, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.urls import reverse
@@ -190,6 +194,51 @@ SEVERITY_VARIANTS = {
 
 def severity_label(value):
     return Severity(value).label if value is not None else "—"
+
+
+class ScopedAutocompleteSelect(AutocompleteSelect):
+    """The admin's autocomplete, narrowed to the row that asked.
+
+    The endpoint is shared by every autocomplete and is told which field
+    is asking, never which record. On its own it offers every row of the
+    target model, so a component would be offered every service's
+    components. The scope goes on the URL and the target admin reads it
+    back with `ScopedAutocompleteMixin`.
+    """
+
+    def __init__(self, *args, scope=None, **kwargs):
+        self.scope = {k: v for k, v in (scope or {}).items() if v}
+        super().__init__(*args, **kwargs)
+
+    def get_url(self):
+        url = super().get_url()
+        return f"{url}?{urlencode(self.scope)}" if self.scope else url
+
+
+class ScopedAutocompleteMixin:
+    """Read back the scope a widget put on the autocomplete URL.
+
+    Each name is both the parameter and the field it filters on. Without
+    a scope the results are unchanged, so the same admin still serves
+    every other autocomplete that points at it.
+    """
+
+    autocomplete_scope: tuple[str, ...] = ()
+
+    def get_search_results(self, request, queryset, search_term):
+        queryset, may_have_duplicates = super().get_search_results(
+            request, queryset, search_term
+        )
+        for name in self.autocomplete_scope:
+            value = request.GET.get(name)
+            if not value:
+                continue
+            try:
+                queryset = queryset.filter(**{name: UUID(value)})
+            except ValueError:
+                # A scope nobody can satisfy is safer than none at all.
+                queryset = queryset.none()
+        return queryset, may_have_duplicates
 
 
 def audit_section():

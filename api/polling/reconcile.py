@@ -21,6 +21,14 @@ def apply_fetch(service, components, events, source, run=None):
     account. A blank author reads the same as one that was lost, and a
     component carries no run to say where it came from instead.
     """
+    # A poll writes to the service it read. Nothing in the arguments
+    # ties them together, so a run from another poller would file one
+    # service's readings under another.
+    if run is not None and run.poller.service_id != service.pk:
+        raise ValueError(
+            f"{run} polled {run.poller.service}, not {service}. "
+            "A poll writes to the service it read."
+        )
     author = get_user_model().objects.system()
     rows = _upsert_components(service, components, author)
     _archive_vanished(service, components, author)
@@ -102,6 +110,28 @@ def _write_statuses(components, rows, source, author, run=None):
         )
 
 
+def _affected(service, rows, external_ids):
+    """The components an event names, as rows of this service.
+
+    Read from `rows` alone, an event lost its link to any component the
+    provider stopped listing, because `rows` holds only what this fetch
+    described. So anything missing is looked up among the service's own
+    components, archived ones included.
+
+    Nothing is created. A component the provider never described would
+    be one we invented, and it would show on the catalog and on boards
+    as though the provider published it. An id that matches nothing is
+    dropped: the event is still recorded, against the service.
+    """
+    named = [rows[e] for e in external_ids if e in rows]
+    unknown = [e for e in external_ids if e not in rows]
+    if unknown:
+        named += list(
+            ServiceComponent.objects.filter(service=service, external_id__in=unknown)
+        )
+    return named
+
+
 def _upsert_events(service, events, rows, author, run=None):
     for incoming in events:
         event, _ = ServiceEvent.objects.update_or_create(
@@ -117,8 +147,9 @@ def _upsert_events(service, events, rows, author, run=None):
                 poll_run=run,
             ),
         )
-        named = [rows[e] for e in incoming.affected_external_ids if e in rows]
-        event.affected_components.set(named)
+        event.affected_components.set(
+            _affected(service, rows, incoming.affected_external_ids)
+        )
         for update in incoming.updates:
             EventUpdate.objects.get_or_create(
                 event=event,

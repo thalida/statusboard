@@ -39,6 +39,19 @@ class ComponentStatus(BaseModel):
         related_name="%(class)ss",
     )
 
+    def clean(self):
+        """The poll that wrote this read this component's own service.
+
+        A run names a poller and a poller names one service. Citing
+        another service's run says a page was read that never mentions
+        this component.
+        """
+        super().clean()
+        if self.poll_run_id is None or self.component_id is None:
+            return
+        if self.poll_run.poller.service_id != self.component.service_id:
+            raise ValidationError({"poll_run": "That poll read another service."})
+
     def __str__(self):
         return f"{self.component} — {self.get_severity_display()}"
 
@@ -111,6 +124,18 @@ class ServiceEvent(BaseModel):
             raise ValidationError(
                 {"phase": f"{self.phase!r} is not a phase of a {self.kind}."}
             )
+        # The poll that wrote it read this event's own service.
+        if self.poll_run_id and self.poll_run.poller.service_id != self.service_id:
+            raise ValidationError({"poll_run": "That poll read another service."})
+
+    def components_of_another_service(self):
+        """Any affected component that is not this event's own.
+
+        The relation is many to many, so it is not set until after the
+        row is saved and `clean` cannot see it. The callers that can
+        check it use this.
+        """
+        return self.affected_components.exclude(service_id=self.service_id)
 
 
 class EventUpdate(BaseModel):

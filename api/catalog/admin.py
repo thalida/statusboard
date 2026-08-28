@@ -23,6 +23,8 @@ from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
     InheritedDefaultsMixin,
+    ScopedAutocompleteMixin,
+    ScopedAutocompleteSelect,
     audit_section,
     change_link,
     filtered_list,
@@ -459,7 +461,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
 
 @admin.register(ServiceComponent)
-class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
+class ServiceComponentAdmin(
+    ScopedAutocompleteMixin, BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin
+):
     list_display = [
         "display_component",
         "display_service",
@@ -488,6 +492,8 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
+    # A parent is one of the same service's components.
+    autocomplete_scope = ("service",)
     fieldsets = [
         (None, {"fields": ["service", "name", "external_id"]}),
         (
@@ -498,6 +504,27 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
+
+    def get_form(self, request, obj=None, **kwargs):
+        # The parent picker needs to know which service is asking.
+        request._editing = obj
+        return super().get_form(request, obj, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "parent":
+            editing = getattr(request, "_editing", None)
+            kwargs["widget"] = ScopedAutocompleteSelect(
+                db_field,
+                self.admin_site,
+                scope={"service": editing.service_id if editing else None},
+            )
+            if editing is not None:
+                # The server's half: the picker narrows what is offered,
+                # this refuses anything else that is posted.
+                kwargs["queryset"] = ServiceComponent.objects.filter(
+                    service_id=editing.service_id
+                ).exclude(pk=editing.pk)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_queryset(self, request):
         return (

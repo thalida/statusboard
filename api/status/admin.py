@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.safestring import mark_safe
@@ -179,6 +179,41 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["service"]
     filter_horizontal = ["affected_components"]
+
+    def get_form(self, request, obj=None, **kwargs):
+        # The component picker needs to know whose event this is.
+        request._editing = obj
+        return super().get_form(request, obj, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "affected_components":
+            editing = getattr(request, "_editing", None)
+            if editing is not None:
+                # An event names its own service's components. Offering
+                # the rest lets one product's incident claim another
+                # product's parts.
+                kwargs["queryset"] = ServiceComponent.objects.filter(
+                    service_id=editing.service_id
+                )
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def save_related(self, request, form, formsets, change):
+        """Refuse a component of another service.
+
+        The relation is set after the row is saved, so the model's own
+        `clean` never sees it. This is the last point that can.
+        """
+        super().save_related(request, form, formsets, change)
+        strays = form.instance.components_of_another_service()
+        if strays.exists():
+            names = ", ".join(str(c) for c in strays)
+            form.instance.affected_components.remove(*strays)
+            self.message_user(
+                request,
+                _("Removed %s. An event names its own service's components.") % names,
+                messages.WARNING,
+            )
+
     ordering = ["-starts_at"]
     inlines = [EventUpdateInline]
 

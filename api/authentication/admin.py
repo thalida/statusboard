@@ -1,6 +1,5 @@
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.widgets import AutocompleteSelect
 from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin
@@ -13,29 +12,12 @@ from unfold.decorators import display
 from authentication.models import SYSTEM_EMAIL, MagicLinkToken, User
 from common.admin import (
     BaseModelAdmin,
+    ScopedAutocompleteSelect,
     audit_section,
     change_link,
     record_column,
 )
 from dashboards.models import Dashboard
-
-
-class OwnersBoardSelect(AutocompleteSelect):
-    """The admin's autocomplete, narrowed to one person's boards.
-
-    The shared endpoint is told which field is asking but never which
-    row, so on its own it offers every board in the system, including
-    other people's. The owner goes on the URL and the board admin reads
-    it back.
-    """
-
-    def __init__(self, *args, owner_id=None, **kwargs):
-        self.owner_id = owner_id
-        super().__init__(*args, **kwargs)
-
-    def get_url(self):
-        url = super().get_url()
-        return f"{url}?owner={self.owner_id}" if self.owner_id else url
 
 
 class UserForm(forms.ModelForm):
@@ -97,10 +79,10 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "default_dashboard":
             owner = getattr(request, "_editing", None)
-            kwargs["widget"] = OwnersBoardSelect(
+            kwargs["widget"] = ScopedAutocompleteSelect(
                 db_field,
                 self.admin_site,
-                owner_id=owner.pk if owner else None,
+                scope={"owner": owner.pk if owner else None},
             )
             if owner is not None:
                 # Also the server's half of it. The URL narrows what is

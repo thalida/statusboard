@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import BooleanField, ExpressionWrapper, F, Q
@@ -10,6 +8,7 @@ from unfold.decorators import display
 
 from common.admin import (
     BaseModelAdmin,
+    ScopedAutocompleteMixin,
     audit_section,
     change_link,
     record_column,
@@ -52,7 +51,9 @@ class DefaultBoardFilter(admin.SimpleListFilter):
 
 
 @admin.register(Dashboard)
-class DashboardAdmin(BaseModelAdmin, ModelAdmin):
+class DashboardAdmin(ScopedAutocompleteMixin, BaseModelAdmin, ModelAdmin):
+    # A person picking their default board is offered their own.
+    autocomplete_scope = ("owner",)
     list_display = ["display_board", "display_owner", "display_default", "item_count"]
     search_fields = ["name", "owner__email"]
     list_filter = [
@@ -78,23 +79,6 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
                 default_for_owner=IS_DEFAULT,
             )
         )
-
-    def get_search_results(self, request, queryset, search_term):
-        """Narrow the autocomplete to the owner that asked.
-
-        The endpoint is shared by every autocomplete, so without this a
-        person picking their default board is offered everybody's.
-        """
-        queryset, may_have_duplicates = super().get_search_results(
-            request, queryset, search_term
-        )
-        owner = request.GET.get("owner")
-        if owner:
-            try:
-                queryset = queryset.filter(owner_id=UUID(owner))
-            except ValueError:
-                queryset = queryset.none()
-        return queryset, may_have_duplicates
 
     def has_delete_permission(self, request, obj=None):
         """An owner keeps their last board, so it is not offered.
