@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from unfold.decorators import display
 
 from status.choices import EVENT_PHASES_BY_KIND, Severity
 
@@ -186,6 +187,22 @@ SEVERITY_VARIANTS = {
 
 def severity_label(value):
     return Severity(value).label if value is not None else "—"
+
+
+def record_column(description):
+    """The record's own name, for the first column of a changelist.
+
+    Django wraps the first column in the link to the record. A foreign
+    key sitting there reads as the related thing but opens this one, so
+    the related thing is left with no link at all. Naming the record
+    instead frees the key to go where it says it goes.
+    """
+
+    @display(description=description)
+    def column(self, obj):
+        return str(obj)
+
+    return column
 
 
 def change_link(obj, label=None):

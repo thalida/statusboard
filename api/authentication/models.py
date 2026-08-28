@@ -112,6 +112,11 @@ class MagicLinkToken(BaseModel):
             self.expires_at = timezone.now() + MAGIC_LINK_TTL
         super().save(*args, **kwargs)
 
+    def __str__(self):
+        # Never the token itself. It is a credential, and a changelist is
+        # read over shoulders and pasted into tickets.
+        return f"{self.user} — {self.created_at:%Y-%m-%d %H:%M}"
+
     @property
     def is_usable(self):
         return self.used_at is None and self.expires_at > timezone.now()

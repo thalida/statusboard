@@ -4,7 +4,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import AutocompleteSelectFilter, RangeDateTimeFilter
 from unfold.decorators import display
 
-from common.admin import BaseModelAdmin
+from common.admin import BaseModelAdmin, change_link, record_column
 from dashboards.models import Dashboard, DashboardItem
 
 
@@ -41,7 +41,16 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
 
 @admin.register(DashboardItem)
 class DashboardItemAdmin(BaseModelAdmin, ModelAdmin):
-    list_display = ["dashboard", "component"]
+    list_display = ["display_item", "display_dashboard", "display_component"]
+    display_item = record_column(_("Tracked"))
     search_fields = ["dashboard__name", "component__name"]
     list_filter = [("dashboard", AutocompleteSelectFilter)]
     autocomplete_fields = ["dashboard", "component"]
+
+    @display(description=_("Board"), ordering="dashboard__name")
+    def display_dashboard(self, obj):
+        return change_link(obj.dashboard)
+
+    @display(description=_("Component"), ordering="component__name")
+    def display_component(self, obj):
+        return change_link(obj.component)

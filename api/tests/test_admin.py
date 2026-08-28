@@ -1,6 +1,7 @@
 import pytest
 from django.contrib import admin
 from django.urls import reverse
+from django.utils import timezone
 
 from authentication.models import User
 
@@ -406,3 +407,49 @@ def test_a_polling_schedule_cannot_be_added_or_deleted_by_hand():
 
     assert not schedule_admin.has_add_permission(None)
     assert not schedule_admin.has_delete_permission(None)
+
+
+@pytest.mark.django_db
+def test_a_poll_run_reaches_what_it_wrote(staff_client):
+    """The links off a run are a filter, and a filter must be permitted.
+
+    Django refuses a lookup no filter declares, so a link like this stops
+    working the moment the filter is dropped. It fails as a 400 on a page
+    nothing else tests.
+    """
+    from polling.models import PollRun
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory()
+    run = PollRun.objects.create(
+        poller=service.poller,
+        url="https://status.example.com/",
+        provider="statuspage",
+        started_at=timezone.now(),
+        finished_at=timezone.now(),
+        ok=True,
+    )
+
+    for view in ["status_componentstatus", "status_serviceevent"]:
+        url = reverse(f"admin:{view}_changelist")
+        response = staff_client.get(url, {"poll_run__id__exact": str(run.pk)})
+        assert response.status_code == 200, view
+
+
+@pytest.mark.django_db
+def test_a_reading_says_which_poll_wrote_it(staff_client):
+    # It is not an editable column, so the record is the only place left
+    # to say it. Without this you could read it on the table alone.
+    from status.choices import Severity, StatusSource
+    from status.models import ComponentStatus
+    from tests.factories import ComponentFactory
+
+    reading = ComponentStatus.objects.create(
+        component=ComponentFactory(),
+        severity=Severity.OPERATIONAL,
+        source=StatusSource.PROVIDER,
+        started_at=timezone.now(),
+    )
+    url = reverse("admin:status_componentstatus_change", args=[reading.pk])
+
+    assert "Written by" in staff_client.get(url).content.decode()

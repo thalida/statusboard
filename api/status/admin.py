@@ -21,6 +21,7 @@ from common.admin import (
     filtered_list,
     phase_label,
     poll_run_link,
+    record_column,
     severity_label,
 )
 from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
@@ -50,9 +51,9 @@ class PhaseFilter(DropdownFilter):
 
 @admin.register(ComponentStatus)
 class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
-    # First column is plain: Django turns it into the link to this row.
     list_display = [
-        "component",
+        "display_reading",
+        "display_component",
         "display_service",
         "display_severity",
         "started_at",
@@ -67,14 +68,29 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         # lookup, which the links on the services table rely on.
         ("component__service", AutocompleteSelectFilter),
         ("component", AutocompleteSelectFilter),
+        # Also what makes ?poll_run__id__exact a permitted lookup, which
+        # is how a run reaches the readings it wrote.
+        ("poll_run", AutocompleteSelectFilter),
         ("started_at", RangeDateTimeFilter),
         ("ended_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["component"]
     ordering = ["-started_at"]
+    display_reading = record_column(_("Reading"))
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("component__service")
+
+    @display(description=_("Component"), ordering="component__name")
+    def display_component(self, obj):
+        return change_link(obj.component)
+
+    def get_readonly_fields(self, request, obj=None):
+        # The run is not an editable column, so it reaches the record
+        # only this way. Without it you could see where a reading came
+        # from on the table and not on the reading itself.
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + ["display_poll_run"]
 
     @display(description=_("Severity"), label=SEVERITY_VARIANTS, ordering="severity")
     def display_severity(self, obj):
@@ -129,6 +145,9 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         PhaseFilter,
         ("service", AutocompleteSelectFilter),
         ("affected_components", AutocompleteSelectFilter),
+        # Also what makes ?poll_run__id__exact a permitted lookup, which
+        # is how a run reaches the events it wrote.
+        ("poll_run", AutocompleteSelectFilter),
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),
     ]
@@ -246,8 +265,8 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
 
 @admin.register(EventUpdate)
 class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
-    # First column is plain, so it opens the update itself.
-    list_display = ["event", "display_event", "phase", "posted_at"]
+    list_display = ["display_update", "display_event", "phase", "posted_at"]
+    display_update = record_column(_("Update"))
     date_hierarchy = "posted_at"
     search_fields = ["event__title", "body"]
     autocomplete_fields = ["event"]
@@ -256,6 +275,6 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         ("posted_at", RangeDateTimeFilter),
     ]
 
-    @display(description=_("Open event"), ordering="event__title")
+    @display(description=_("Event"), ordering="event__title")
     def display_event(self, obj):
         return change_link(obj.event, obj.event.title)

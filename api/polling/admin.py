@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Count
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_celery_beat.admin import (
@@ -16,7 +17,7 @@ from django_celery_beat.models import (
     SolarSchedule,
 )
 from simple_history.admin import SimpleHistoryAdmin
-from unfold.admin import ModelAdmin
+from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
     ChoicesDropdownFilter,
@@ -32,8 +33,49 @@ from common.admin import (
     PollerWrittenAdmin,
     change_link,
     filtered_list,
+    record_column,
 )
 from polling.models import Poller, PollRun
+
+
+class PollRunColumns:
+    """How a run reads. The same on its own table and under a poller."""
+
+    @display(
+        description=_("Result"),
+        label={"OK": "success", "Failed": "danger"},
+        ordering="ok",
+    )
+    def display_ok(self, obj):
+        return "OK" if obj.ok else "Failed"
+
+    @display(description=_("Error"))
+    def display_error(self, obj):
+        return (obj.error or "—")[:90]
+
+
+class PollRunInline(PollRunColumns, TabularInline):
+    """The poller's own log, read only.
+
+    A poller is opened to find out whether it is working, and this is
+    what answers that. `poll_service` writes these rows.
+    """
+
+    model = PollRun
+    tab = True
+    verbose_name = _("Poll run")
+    verbose_name_plural = _("Poll runs")
+    extra = 0
+    max_num = 0
+    can_delete = False
+    show_change_link = True
+    per_page = 20
+    fields = ["display_ok", "provider", "started_at", "finished_at", "display_error"]
+    readonly_fields = fields
+    ordering = ["-started_at"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Poller)
@@ -46,9 +88,9 @@ class PollerAdmin(
     which is worse than showing nothing.
     """
 
-    # First column is plain: Django turns it into the link to this record.
     list_display = [
-        "service",
+        "display_poller",
+        "display_service",
         "display_health",
         "consecutive_failure_count",
         "last_success_at",
@@ -64,8 +106,14 @@ class PollerAdmin(
     ]
     autocomplete_fields = ["service"]
     ordering = ["-consecutive_failure_count", "next_at"]
+    inlines = [PollRunInline]
+    display_poller = record_column(_("Poller"))
     actions_row = ["poll_now", "toggle_pause"]
     actions_detail = ["poll_now", "toggle_pause"]
+
+    @display(description=_("Service"), ordering="service__name")
+    def display_service(self, obj):
+        return change_link(obj.service)
 
     def has_add_permission(self, request):
         """There is never a service without one, so there is none to add.
@@ -139,21 +187,22 @@ class PollerAdmin(
 
 
 @admin.register(PollRun)
-class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
+class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     """We are the thing that tells you when services break.
 
     So we cannot quietly break ourselves. A failing poll is a labelled row
     here, not a number to go looking for.
     """
 
-    # First column is plain, so it opens the run and its error text.
     list_display = [
-        "poller",
+        "display_run",
+        "display_poller",
         "display_service",
         "display_ok",
         "provider",
         "started_at",
         "display_error",
+        "display_related",
     ]
     date_hierarchy = "started_at"
     search_fields = ["poller__service__name", "url", "error"]
@@ -165,25 +214,53 @@ class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     ordering = ["-started_at"]
     readonly_fields = ["error"]
+    display_run = record_column(_("Poll run"))
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("poller__service")
+        # The counts are what make the `Wrote` links worth opening. Read
+        # without them, every run offers two links and only some of them
+        # lead anywhere.
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("poller__service")
+            .annotate(
+                status_count=Count("componentstatuss", distinct=True),
+                event_count=Count("serviceevents", distinct=True),
+            )
+        )
+
+    @display(description=_("Poller"), ordering="poller__service__name")
+    def display_poller(self, obj):
+        return change_link(obj.poller)
 
     @display(description=_("Service"), ordering="poller__service__name")
     def display_service(self, obj):
         return change_link(obj.poller.service)
 
-    @display(
-        description=_("Result"),
-        label={"OK": "success", "Failed": "danger"},
-        ordering="ok",
-    )
-    def display_ok(self, obj):
-        return "OK" if obj.ok else "Failed"
+    @display(description=_("View"), dropdown=True)
+    def display_related(self, obj):
+        """What the run wrote.
 
-    @display(description=_("Error"))
-    def display_error(self, obj):
-        return (obj.error or "—")[:90]
+        A run is only worth opening for what it did to the tables. Read
+        without this you can see a reading came from a run and not the
+        rest of what that same run changed.
+        """
+        return {
+            "title": _("Wrote"),
+            "items": [
+                filtered_list(
+                    "admin:status_componentstatus_changelist",
+                    _("Statuses (%d)") % obj.status_count,
+                    poll_run__id__exact=obj.pk,
+                ),
+                filtered_list(
+                    "admin:status_serviceevent_changelist",
+                    _("Events (%d)") % obj.event_count,
+                    poll_run__id__exact=obj.pk,
+                ),
+            ],
+        }
 
 
 # Unfold ships no contrib module for django-celery-beat. Its admin classes

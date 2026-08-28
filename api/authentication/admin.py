@@ -5,7 +5,7 @@ from unfold.contrib.filters.admin import RangeDateTimeFilter
 from unfold.decorators import display
 
 from authentication.models import MagicLinkToken, User
-from common.admin import BaseModelAdmin
+from common.admin import BaseModelAdmin, change_link, record_column
 
 
 @admin.register(User)
@@ -34,7 +34,14 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
 
 @admin.register(MagicLinkToken)
 class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
-    list_display = ["user", "display_state", "expires_at", "used_at"]
+    list_display = [
+        "display_link",
+        "display_user",
+        "display_state",
+        "expires_at",
+        "used_at",
+    ]
+    display_link = record_column(_("Link"))
     search_fields = ["user__email"]
     list_filter = [
         ("expires_at", RangeDateTimeFilter),
@@ -42,6 +49,10 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["user"]
     ordering = ["-created_at"]
+
+    @display(description=_("User"), ordering="user__email")
+    def display_user(self, obj):
+        return change_link(obj.user)
 
     @display(
         description=_("State"),
