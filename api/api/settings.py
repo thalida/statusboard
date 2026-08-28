@@ -244,40 +244,25 @@ UNFOLD = {
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": True,
+        # One flat list. The tabs carry everything below a page now, so
+        # grouping six links under four headings was more chrome than
+        # navigation.
         "navigation": [
             {
-                "title": _("Overview"),
+                "title": _("Navigation"),
                 "items": [
                     {
                         "title": _("Dashboard"),
                         "icon": "dashboard",
                         "link": reverse_lazy("admin:index"),
                     },
-                ],
-            },
-            {
-                "title": _("Catalog"),
-                "items": [
                     {
                         "title": _("Services"),
                         "icon": "lan",
                         "link": reverse_lazy("admin:catalog_service_changelist"),
                     },
                     {
-                        "title": _("Status pages"),
-                        "icon": "captive_portal",
-                        "link": reverse_lazy("admin:catalog_statuspage_changelist"),
-                    },
-                ],
-            },
-            {
-                "title": _("Polling"),
-                "collapsible": True,
-                "items": [
-                    # Poll runs is a tab of Pollers, not a sidebar entry.
-                    # Listing both lights up two rows for one place.
-                    {
-                        "title": _("Pollers"),
+                        "title": _("Polling"),
                         "icon": "sync",
                         "link": reverse_lazy("admin:polling_poller_changelist"),
                     },
@@ -288,21 +273,15 @@ UNFOLD = {
                             "admin:django_celery_beat_periodictask_changelist"
                         ),
                     },
-                ],
-            },
-            {
-                "title": _("People"),
-                "collapsible": True,
-                "items": [
-                    {
-                        "title": _("Users"),
-                        "icon": "person",
-                        "link": reverse_lazy("admin:authentication_user_changelist"),
-                    },
                     {
                         "title": _("Boards"),
                         "icon": "dashboard_customize",
                         "link": reverse_lazy("admin:dashboards_dashboard_changelist"),
+                    },
+                    {
+                        "title": _("Users"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:authentication_user_changelist"),
                     },
                 ],
             },

@@ -379,16 +379,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         return request.user.has_perm("catalog.change_service")
 
 
-@admin.register(StatusPage)
-class StatusPageAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
-    list_display = ["service", "display_provider", "url"]
-    search_fields = ["service__name", "url"]
-    list_filter = [("provider", ChoicesDropdownFilter)]
-    autocomplete_fields = ["service"]
-
-    @display(description=_("Provider"), label=True, ordering="provider")
-    def display_provider(self, obj):
-        return obj.get_provider_display()
+# StatusPage has no admin of its own. A service has exactly one and it is
+# edited on the service form, so a separate list is a second route to the
+# same field. The model still filters the service list by provider.
 
 
 @admin.register(ServiceComponent)

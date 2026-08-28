@@ -146,7 +146,7 @@ def test_the_seeding_flag_lifts_the_lock(staff_client, settings, label):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "label", ["catalog.Service", "catalog.StatusPage", "polling.Poller"]
+    "label", ["catalog.Service", "catalog.ServiceComponent", "polling.Poller"]
 )
 def test_the_admin_tunable_tables_stay_editable(staff_client, label):
     # A Poller's interval and pause flag are meant to be changed here.
