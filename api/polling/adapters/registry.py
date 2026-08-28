@@ -10,6 +10,7 @@ from polling.adapters.services.apple import AppleAdapter
 from polling.adapters.services.aws import AwsAdapter
 from polling.adapters.services.azure import AzureAdapter
 from polling.adapters.services.betterstack import BetterStackAdapter
+from polling.adapters.services.cstate import CStateAdapter
 from polling.adapters.services.googlecloud import GoogleCloudAdapter
 from polling.adapters.services.googlefeed import GoogleFeedAdapter
 from polling.adapters.services.incidentio import IncidentIoAdapter
@@ -34,6 +35,7 @@ ADAPTERS: tuple[type[Adapter], ...] = (
     # Last of the real adapters: it has no URL to match on, so it is
     # only ever reached by probing.
     StatusIoAdapter,
+    CStateAdapter,
 )
 
 BY_PROVIDER = {adapter.provider: adapter for adapter in ADAPTERS}
@@ -49,6 +51,21 @@ FEED_LINK = re.compile(
     re.IGNORECASE,
 )
 FEED_TYPE = re.compile(r"application/(?:rss|atom)\+xml", re.IGNORECASE)
+
+# Where status pages put a feed when they do not advertise one. Trying
+# these is only safe because the RSS adapter refuses anything that is not
+# a feed: several of these pages answer 200 with HTML for any path.
+FEED_PATHS = (
+    "history.rss",
+    "feed.rss",
+    "feed/atom",
+    "feed",
+    "rss",
+    "atom.xml",
+    "current/atom.xml",
+    "state_feed/feed",
+    "en/feed.atom",
+)
 FEED_HREF = re.compile(r"href=[\"']([^\"']+)[\"']", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
@@ -111,6 +128,17 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
                 return RSSAdapter, feed_url
         except Exception as error:  # noqa: BLE001 — try the next feed
             logger.debug("no usable feed at %s: %s", feed_url, error)
+
+    # Still nothing. Try where a feed usually lives, since a page that
+    # advertises none often still serves one.
+    base = url if url.endswith("/") else url + "/"
+    for path in FEED_PATHS:
+        guess_url = urljoin(base, path)
+        try:
+            if RSSAdapter(guess_url, session=session).fetch_status():
+                return RSSAdapter, guess_url
+        except Exception as error:  # noqa: BLE001 — try the next path
+            logger.debug("no feed at %s: %s", guess_url, error)
 
     # A page that points at another host has usually moved there.
     # intercomstatus.com links finstatus.com, whose own feed 404s while

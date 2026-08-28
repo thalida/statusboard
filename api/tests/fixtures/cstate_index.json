@@ -1,0 +1,19 @@
+{"is":"index","cStateVersion":"5.0.3","apiVersion":"2.0","title":"Jenkins Status Page","languageCodeHTML":"en","languageCode":"en","baseURL":"https://status.jenkins.io/","description":"We continuously monitor the status of our services and if there is any interruptions,a note will be posted here.
+Feel free to contribute to this page [here](https://github.com/jenkins-infra/status)
+
+For further questions, you can open an infrastructure related issue [in our help desk](https://github.com/jenkins-infra/helpdesk/issues) or contact us on our mailing list [here](https://groups.google.com/u/1/g/jenkins-infra).
+","summaryStatus":"ok","categories":[{"name":"[ a -> f ]","hideTitle":true,"closedByDefault":false},{"name":"[ g -> l ]","hideTitle":true,"closedByDefault":false},{"name":"[ m -> r ]","hideTitle":true,"closedByDefault":false},{"name":"[ s -> x ]","hideTitle":true,"closedByDefault":false},{"name":"[ y -> z ]","hideTitle":true,"closedByDefault":false}],"systems":[{"name":"archives.jenkins.io","description":"Jenkins mirror archives
+","category":"[ a -> f ]","status":"ok","unresolvedIssues":[]},{"name":"ci.jenkins.io","description":"Jenkins instance to continuously test jenkins pull requests.
+","category":"[ a -> f ]","status":"ok","unresolvedIssues":[]},{"name":"get.jenkins.io","description":"Service that redirect download request to the closest mirror
+","category":"[ g -> l ]","status":"ok","unresolvedIssues":[]},{"name":"issues.jenkins.io","description":"Jenkins Jira
+","category":"[ g -> l ]","status":"ok","unresolvedIssues":[]},{"name":"javadoc.jenkins.io","description":"Jenkins javadoc
+","category":"[ g -> l ]","status":"ok","unresolvedIssues":[]},{"name":"ldap.jenkins.io","description":"Jenkins ldap service
+","category":"[ g -> l ]","status":"ok","unresolvedIssues":[]},{"name":"pkg.jenkins.io","description":"Service used to download and install Jenkins distribution packages
+","category":"[ m -> r ]","status":"ok","unresolvedIssues":[]},{"name":"publick8s","description":"Public facing Kubernetes cluster running on AKS
+","category":"[ m -> r ]","status":"ok","unresolvedIssues":[]},{"name":"plugins.jenkins.io","description":"Jenkins plugins site
+","category":"[ m -> r ]","status":"ok","unresolvedIssues":[]},{"name":"updates.jenkins.io","description":"Jenkins update-center
+","category":"[ s -> x ]","status":"ok","unresolvedIssues":[]},{"name":"private.vpn.jenkins.io","description":"Service running our private VPN
+","category":"[ s -> x ]","status":"ok","unresolvedIssues":[]},{"name":"weekly.ci.jenkins.io","description":"Jenkins instance demonstrating features running on weekly releases
+","category":"[ s -> x ]","status":"ok","unresolvedIssues":[]},{"name":"wiki.jenkins.io","description":"Service running our Confluence, service deprecated
+","category":"[ s -> x ]","status":"ok","unresolvedIssues":[]},{"name":"www.jenkins.io","description":"Jenkins main website
+","category":"[ s -> x ]","status":"ok","unresolvedIssues":[]}],"tabs":[{"name":"Services","link":"<no value>"},{"name":"Monitoring","link":"<no value>"}],"buildDate":"2026-08-05","buildTime":"12:51","buildTimezone":"UTC","colorBrand":"#0a0c0f","colorOk":"#008000","colorDisrupted":"#cc4400","colorDown":"#e60000","colorNotice":"#24478f","alwaysKeepBrandColor":"true","logo":"https://status.jenkins.io/logo.png","googleAnalytics":"UA-00000000-1"}

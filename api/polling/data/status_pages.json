@@ -62,7 +62,7 @@
   {
     "name": "Bitwarden",
     "url": "https://status.bitwarden.com/",
-    "adapter": null
+    "adapter": "RSSAdapter"
   },
   {
     "name": "Box",
@@ -187,7 +187,7 @@
   {
     "name": "Heroku",
     "url": "https://status.heroku.com/",
-    "adapter": null
+    "adapter": "RSSAdapter"
   },
   {
     "name": "Heroku2",
@@ -222,12 +222,12 @@
   {
     "name": "Jenkins",
     "url": "https://status.jenkins.io/",
-    "adapter": null
+    "adapter": "CStateAdapter"
   },
   {
     "name": "LastPass",
     "url": "https://status.lastpass.com/",
-    "adapter": null
+    "adapter": "RSSAdapter"
   },
   {
     "name": "Linear",
@@ -412,7 +412,7 @@
   {
     "name": "Slack",
     "url": "https://status.slack.com/",
-    "adapter": null
+    "adapter": "RSSAdapter"
   },
   {
     "name": "Snowflake",
