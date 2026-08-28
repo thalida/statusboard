@@ -60,15 +60,10 @@ test-cov:
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
 
-# Run the server and the poller together. Ctrl-C stops both.
+# Run the app: server and poller together. Ctrl-C stops both.
 dev:
-    @trap 'kill 0' EXIT INT TERM ; just worker & just serve
-
-# Run the dev server on this worktree's port.
-serve:
-    @{{wt}} ; echo "http://localhost:$DJANGO_PORT/" ; \
-      cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
-
-# Run the Celery worker and beat scheduler.
-worker:
-    @{{wt}} ; cd api && uv run celery -A api worker -B -l info
+    @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
+      echo "http://localhost:$DJANGO_PORT/" ; \
+      cd api ; \
+      uv run celery -A api worker -B -l info & \
+      uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT

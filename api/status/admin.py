@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html_join
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
@@ -73,6 +76,46 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     filter_horizontal = ["affected_components"]
     ordering = ["-starts_at"]
     inlines = [EventUpdateInline]
+
+    FORM_FIELDS = [
+        "service",
+        "external_id",
+        "kind",
+        "title",
+        "phase",
+        "starts_at",
+        "ends_at",
+    ]
+
+    def get_fields(self, request, obj=None):
+        # Editable, the components need their picker. Read only, they are
+        # more useful as links than as a comma-separated string.
+        if self.has_change_permission(request, obj):
+            return self.FORM_FIELDS + ["affected_components"]
+        return self.FORM_FIELDS + ["display_affected_components"]
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        return fields + ["display_affected_components"]
+
+    @display(description=_("Affected components"))
+    def display_affected_components(self, obj):
+        rows = obj.affected_components.select_related("service")
+        if not rows:
+            return "—"
+        return format_html_join(
+            mark_safe(", "),
+            '<a href="{}" class="text-primary-600 dark:text-primary-500">{}</a>',
+            (
+                (
+                    reverse(
+                        "admin:catalog_servicecomponent_change", args=[component.pk]
+                    ),
+                    component.name,
+                )
+                for component in rows
+            ),
+        )
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("service")
