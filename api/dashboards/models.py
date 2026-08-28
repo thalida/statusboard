@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 
 from catalog.models import ServiceComponent
 from common.models import BaseModel
@@ -20,6 +20,20 @@ class Dashboard(BaseModel):
                 name="one_default_dashboard_per_owner",
             )
         ]
+
+    def save(self, *args, **kwargs):
+        """A new default stands down the old one.
+
+        An owner has one default, and the column holds that. Without this
+        the second one is an integrity error, which the person who ticked
+        the box can do nothing about. Moving the flag is what they meant.
+        """
+        with transaction.atomic():
+            if self.is_default:
+                Dashboard.objects.filter(owner=self.owner, is_default=True).exclude(
+                    pk=self.pk
+                ).update(is_default=False)
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

@@ -167,12 +167,17 @@ class ServiceComponentInline(TabularInline):
     can_delete = False
     show_change_link = True
     per_page = 20
-    fields = ["name", "external_id", "display_severity", "is_overall", "archived_at"]
+    fields = ["name", "display_parent", "display_severity", "is_overall", "archived_at"]
     readonly_fields = fields
     ordering = ["status_page_order", "name"]
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(severity_now=CURRENT_SEVERITY)
+
+    @display(description=_("Under"))
+    def display_parent(self, obj):
+        # The service is the page you are on, so the path starts below it.
+        return " / ".join(a.name for a in obj.ancestors) or "—"
 
     @display(description=_("Status"), label=SEVERITY_VARIANTS)
     def display_severity(self, obj):
@@ -441,7 +446,13 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
     @display(description=_("Component"), header=True, ordering="name")
     def display_component(self, obj):
-        return [obj.name, obj.external_id]
+        # The second line is where the component sits, not the provider's
+        # key. The key is on the record for anyone who needs it, and it
+        # says nothing to a reader scanning the list.
+        return [
+            obj.name,
+            " / ".join([obj.service.name, *(a.name for a in obj.ancestors)]),
+        ]
 
     @display(description=_("Service"), ordering="service__name")
     def display_service(self, obj):

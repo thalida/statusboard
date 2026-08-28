@@ -221,5 +221,26 @@ class ServiceComponent(BaseModel):
             ),
         ]
 
+    @property
+    def ancestors(self):
+        """The components above this one, top down.
+
+        A provider can nest a component under another. The chain is what
+        tells you where it sits on the status page. The guard is for bad
+        data: the column points at its own table, so a loop is possible.
+        """
+        chain, node, seen = [], self.parent, {self.pk}
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
+            chain.append(node)
+            node = node.parent
+        return list(reversed(chain))
+
+    @property
+    def path(self):
+        """Where the component sits, read from the service down."""
+        names = [self.service.name, *(a.name for a in self.ancestors), self.name]
+        return " / ".join(names)
+
     def __str__(self):
-        return f"{self.service.name} / {self.name}"
+        return self.path

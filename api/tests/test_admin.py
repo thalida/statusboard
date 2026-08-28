@@ -382,3 +382,27 @@ def test_a_service_cannot_hold_two_pollers():
     service = ServiceFactory()
     with pytest.raises(IntegrityError):
         Poller.objects.create(service=service)
+
+
+@pytest.mark.django_db
+def test_only_the_pause_is_open_on_the_polling_schedule():
+    # Everything else either doubles the polling or sends the worker
+    # somewhere that does not exist, and neither fails loudly.
+    from django_celery_beat.models import PeriodicTask
+
+    schedule_admin = admin.site._registry[PeriodicTask]
+    readonly = schedule_admin.get_readonly_fields(None)
+
+    assert "enabled" not in readonly
+    for name in ["task", "regtask", "args", "kwargs", "interval", "queue"]:
+        assert name in readonly
+
+
+@pytest.mark.django_db
+def test_a_polling_schedule_cannot_be_added_or_deleted_by_hand():
+    from django_celery_beat.models import PeriodicTask
+
+    schedule_admin = admin.site._registry[PeriodicTask]
+
+    assert not schedule_admin.has_add_permission(None)
+    assert not schedule_admin.has_delete_permission(None)

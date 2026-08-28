@@ -194,8 +194,34 @@ class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
 #
 # django_celery_beat precedes this app in INSTALLED_APPS, so its admin is
 # already registered by the time this runs.
+class PollingScheduleAdmin(PeriodicTaskAdmin):
+    """The schedule the poller runs on. Only the pause belongs to a person.
+
+    A second task on the same job doubles every poll of every provider. A
+    changed argument, queue or routing key sends the worker somewhere
+    that does not exist. Neither one fails where anybody sees it. Turning
+    the schedule off is the safe control, so it is the only one open.
+
+    The schedule itself is set up by `polling.setup`, which is also what
+    puts it back if it goes missing.
+    """
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        # Read the names off the fieldsets, not the model. `regtask` is a
+        # field of the form alone, and leaving it open would let a person
+        # point the schedule at a different job.
+        named = [name for _, options in self.fieldsets for name in options["fields"]]
+        return [name for name in named if name != "enabled"]
+
+
 RESTYLED_BEAT_ADMIN = [
-    (PeriodicTask, PeriodicTaskAdmin),
+    (PeriodicTask, PollingScheduleAdmin),
     (IntervalSchedule, IntervalScheduleAdmin),
     (CrontabSchedule, CrontabScheduleAdmin),
     (SolarSchedule, SolarScheduleAdmin),
