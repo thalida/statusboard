@@ -91,7 +91,7 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     def display_component(self, obj):
         return change_link(obj.component)
 
-    @display(description=_("Held"), ordering="started_at")
+    @display(description=_("Span"), ordering="started_at")
     def display_span(self, obj):
         # A row is a stretch, and the open one is the reading now. With
         # the start alone there was no telling which rows were still

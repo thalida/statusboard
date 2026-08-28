@@ -2,7 +2,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from authentication.models import User
+from authentication.models import SYSTEM_EMAIL, User
 
 
 @pytest.fixture
@@ -33,12 +33,21 @@ def test_running_it_twice_does_not_create_a_second_admin(credentials):
     assert User.objects.filter(is_superuser=True).count() == 1
 
 
+def made_anybody():
+    """Whether the command created a user.
+
+    The system account is put in every database as migrate finishes, so
+    an empty table is no longer what "created nobody" looks like.
+    """
+    return User.objects.exclude(email=SYSTEM_EMAIL).exists()
+
+
 @pytest.mark.django_db
 def test_it_does_nothing_without_credentials(no_credentials):
     # It must never ask. `just env` owns the one prompt, so an answer
     # typed here would be lost and the next run would ask again.
     call_command("seed_admin")
-    assert not User.objects.exists()
+    assert not made_anybody()
 
 
 @pytest.mark.django_db
@@ -47,4 +56,4 @@ def test_it_refuses_to_run_outside_local(credentials, settings):
     settings.ENVIRONMENT = "production"
     with pytest.raises(CommandError):
         call_command("seed_admin")
-    assert not User.objects.exists()
+    assert not made_anybody()

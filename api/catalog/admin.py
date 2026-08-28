@@ -175,7 +175,7 @@ class ServiceComponentInline(TabularInline):
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(severity_now=CURRENT_SEVERITY)
 
-    @display(description=_("Under"))
+    @display(description=_("Parent"))
     def display_parent(self, obj):
         # The service is the page you are on, so the path starts below it.
         return " / ".join(a.name for a in obj.ancestors) or "—"

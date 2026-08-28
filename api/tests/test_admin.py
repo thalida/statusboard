@@ -533,3 +533,33 @@ def test_every_table_can_be_searched(staff_client, model):
 
     assert staff_client.get(url, {"q": "nothing matches this"}).status_code == 200
     assert admin.site._registry[model].search_fields, opts.label
+
+
+@pytest.mark.django_db
+def test_the_system_account_is_in_every_database():
+    """It is made as migrate finishes, next to the content types.
+
+    Made on first use instead, it was absent from a database until
+    something happened to write a row, and the admin showed an author
+    nobody could look up.
+    """
+    from authentication.models import SYSTEM_EMAIL
+
+    assert User.objects.filter(email=SYSTEM_EMAIL).exists()
+
+
+@pytest.mark.django_db
+def test_the_system_account_cannot_be_deleted(staff_client):
+    from django.test import RequestFactory
+
+    from authentication.models import SYSTEM_EMAIL
+
+    admin_user = User.objects.get(email="admin@example.com")
+    request = RequestFactory().get("/")
+    request.user = admin_user
+    user_admin = admin.site._registry[User]
+
+    assert not user_admin.has_delete_permission(
+        request, User.objects.get(email=SYSTEM_EMAIL)
+    )
+    assert user_admin.has_delete_permission(request, admin_user)

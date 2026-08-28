@@ -105,9 +105,11 @@ class Service(BaseModel):
     description = models.TextField(blank=True, default="")
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
-    is_featured = models.BooleanField(default=False)
+    is_featured = models.BooleanField(verbose_name="Featured", default=False)
     # Derived. Never set by hand: it decides what gets polled.
-    watcher_count = models.PositiveIntegerField(default=0, editable=False)
+    watcher_count = models.PositiveIntegerField(
+        verbose_name="Watchers", default=0, editable=False
+    )
 
     objects = ServiceManager()
 
@@ -204,7 +206,7 @@ class ServiceComponent(BaseModel):
         Service, on_delete=models.CASCADE, related_name="components"
     )
     name = models.CharField(max_length=200)
-    external_id = models.CharField(max_length=200)
+    external_id = models.CharField(verbose_name="Provider ID", max_length=200)
     parent = models.ForeignKey(
         "self",
         null=True,
@@ -212,9 +214,9 @@ class ServiceComponent(BaseModel):
         on_delete=models.SET_NULL,
         related_name="children",
     )
-    status_page_order = models.IntegerField(default=0)
-    is_overall = models.BooleanField(default=False)
-    archived_at = models.DateTimeField(null=True, blank=True)
+    status_page_order = models.IntegerField(verbose_name="Page order", default=0)
+    is_overall = models.BooleanField(verbose_name="Overall", default=False)
+    archived_at = models.DateTimeField(verbose_name="Archived", null=True, blank=True)
 
     history = HistoricalRecords()
 

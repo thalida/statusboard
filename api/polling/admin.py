@@ -143,7 +143,7 @@ class PollerAdmin(
     def display_service(self, obj):
         return change_link(obj.service)
 
-    @display(description=_("Every"), ordering="interval_seconds")
+    @display(description=_("Interval"), ordering="interval_seconds")
     def display_interval(self, obj):
         # What it actually polls at. The column is blank when the poller
         # takes the deployment default, so the number was not readable

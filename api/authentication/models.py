@@ -68,7 +68,9 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=128, default=_unusable_password)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-    last_active_at = models.DateTimeField(null=True, blank=True)
+    last_active_at = models.DateTimeField(
+        verbose_name="Last active", null=True, blank=True
+    )
 
     def save(self, *args, **kwargs):
         """Give a new user their default board.
@@ -103,8 +105,8 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
 class MagicLinkToken(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="magic_links")
     token = models.CharField(max_length=64, unique=True, default=secrets.token_urlsafe)
-    expires_at = models.DateTimeField()
-    used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(verbose_name="Expires")
+    used_at = models.DateTimeField(verbose_name="Used", null=True, blank=True)
 
     def save(self, *args, **kwargs):
         # Set the expiry only on first save. A later save must not extend it.

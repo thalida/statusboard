@@ -5,7 +5,12 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import AutocompleteSelectFilter, RangeDateTimeFilter
 from unfold.decorators import display
 
-from common.admin import BaseModelAdmin, change_link, record_column
+from common.admin import (
+    BaseModelAdmin,
+    change_link,
+    record_column,
+    related_count,
+)
 from dashboards.models import Dashboard, DashboardItem
 
 
@@ -29,7 +34,13 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
     inlines = [DashboardItemInline]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("owner")
+        # The count was a query per row. It is one subquery now.
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("owner")
+            .annotate(tracked=related_count(DashboardItem.objects, "dashboard"))
+        )
 
     def has_delete_permission(self, request, obj=None):
         """An owner keeps their last board, so it is not offered.
@@ -68,15 +79,15 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
     def display_board(self, obj):
         return [obj.name, obj.owner.email]
 
-    @display(description=_("Tracked"))
+    @display(description=_("Tracked"), ordering="tracked")
     def item_count(self, obj):
-        return obj.items.count()
+        return obj.tracked
 
 
 @admin.register(DashboardItem)
 class DashboardItemAdmin(BaseModelAdmin, ModelAdmin):
     list_display = ["display_item", "display_dashboard", "display_component"]
-    display_item = record_column(_("Tracked"))
+    display_item = record_column(_("Item"))
     search_fields = [
         "dashboard__name",
         "dashboard__owner__email",

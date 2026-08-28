@@ -7,7 +7,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
-from authentication.models import MagicLinkToken, User
+from authentication.models import SYSTEM_EMAIL, MagicLinkToken, User
 from common.admin import BaseModelAdmin, change_link, record_column
 
 
@@ -15,9 +15,9 @@ from common.admin import BaseModelAdmin, change_link, record_column
 class UserAdmin(BaseModelAdmin, ModelAdmin):
     list_display = [
         "display_user",
-        "is_active",
-        "is_staff",
-        "is_superuser",
+        "display_active",
+        "display_staff",
+        "display_superuser",
         "last_login",
         "last_active_at",
     ]
@@ -31,6 +31,31 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     ordering = ["-created_at"]
+
+    def has_delete_permission(self, request, obj=None):
+        """The system account stays. It signs rows it did not sign twice.
+
+        Removing it blanks the author on everything the importer and the
+        signals made, and the next migrate makes a new one that is not
+        the same account.
+        """
+        if obj is not None and obj.email == SYSTEM_EMAIL:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    # Django's own labels read "active", "staff status" and "superuser
+    # status". The three sit side by side, so they read as a set here.
+    @display(description=_("Active"), boolean=True, ordering="is_active")
+    def display_active(self, obj):
+        return obj.is_active
+
+    @display(description=_("Staff"), boolean=True, ordering="is_staff")
+    def display_staff(self, obj):
+        return obj.is_staff
+
+    @display(description=_("Superuser"), boolean=True, ordering="is_superuser")
+    def display_superuser(self, obj):
+        return obj.is_superuser
 
     @display(description=_("User"), header=True, ordering="email")
     def display_user(self, obj):

@@ -12,6 +12,7 @@ class Dashboard(BaseModel):
     )
     name = models.CharField(max_length=200, default="My board")
     is_default = models.BooleanField(
+        verbose_name="Default",
         default=False,
         help_text=(
             "An owner always reads a board, so this cannot be cleared. "

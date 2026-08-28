@@ -21,16 +21,28 @@ class Poller(BaseModel):
     )
 
     # Admin-tunable. Null inherits the deployment default.
-    interval_seconds = models.PositiveIntegerField(null=True, blank=True)
-    cooldown_seconds = models.PositiveIntegerField(null=True, blank=True)
-    max_interval_seconds = models.PositiveIntegerField(null=True, blank=True)
-    is_paused = models.BooleanField(default=False)
+    interval_seconds = models.PositiveIntegerField(
+        verbose_name="Interval", null=True, blank=True
+    )
+    cooldown_seconds = models.PositiveIntegerField(
+        verbose_name="Cooldown", null=True, blank=True
+    )
+    max_interval_seconds = models.PositiveIntegerField(
+        verbose_name="Longest interval", null=True, blank=True
+    )
+    is_paused = models.BooleanField(verbose_name="Paused", default=False)
     note = models.TextField(blank=True, default="", help_text="Why this was tuned.")
 
     # Written by the poller.
-    next_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    last_success_at = models.DateTimeField(null=True, blank=True)
-    consecutive_failure_count = models.PositiveIntegerField(default=0)
+    next_at = models.DateTimeField(
+        verbose_name="Next poll", null=True, blank=True, db_index=True
+    )
+    last_success_at = models.DateTimeField(
+        verbose_name="Last success", null=True, blank=True
+    )
+    consecutive_failure_count = models.PositiveIntegerField(
+        verbose_name="Failures", default=0
+    )
 
     history = HistoricalRecords()
 
@@ -60,8 +72,8 @@ class PollRun(BaseModel):
     poller = models.ForeignKey(Poller, on_delete=models.CASCADE, related_name="runs")
     url = models.URLField()
     provider = models.CharField(max_length=32, choices=StatusPageProvider.choices)
-    started_at = models.DateTimeField()
-    finished_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(verbose_name="Started")
+    finished_at = models.DateTimeField(verbose_name="Finished", null=True, blank=True)
     ok = models.BooleanField(default=False)
     error = models.TextField(blank=True, default="")
 

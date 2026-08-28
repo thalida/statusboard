@@ -16,9 +16,17 @@ class ComponentStatus(BaseModel):
         ServiceComponent, on_delete=models.CASCADE, related_name="statuses"
     )
     severity = models.IntegerField(choices=Severity.choices)
-    source = models.CharField(max_length=32, choices=StatusSource.choices)
-    started_at = models.DateTimeField()
-    ended_at = models.DateTimeField(null=True, blank=True)
+    source = models.CharField(
+        max_length=32,
+        choices=StatusSource.choices,
+        help_text=(
+            "How the severity was arrived at: published by the provider, "
+            "taken as the worst of the components, or derived from the "
+            "open incidents."
+        ),
+    )
+    started_at = models.DateTimeField(verbose_name="Started")
+    ended_at = models.DateTimeField(verbose_name="Ended", null=True, blank=True)
     # Which poll wrote this. A wrong or stale reading is otherwise
     # untraceable: you can see what it says and not where it came from.
     # SET_NULL because runs are a log and may be pruned.
@@ -62,12 +70,12 @@ class ServiceEvent(BaseModel):
     service = models.ForeignKey(
         Service, on_delete=models.CASCADE, related_name="events"
     )
-    external_id = models.CharField(max_length=200)
+    external_id = models.CharField(verbose_name="Provider ID", max_length=200)
     kind = models.CharField(max_length=32, choices=EventKind.choices)
     title = models.CharField(max_length=500)
     phase = models.CharField(max_length=32)
-    starts_at = models.DateTimeField()
-    ends_at = models.DateTimeField(null=True, blank=True)
+    starts_at = models.DateTimeField(verbose_name="Starts")
+    ends_at = models.DateTimeField(verbose_name="Ends", null=True, blank=True)
     # No component is a valid case. A provider can publish an event
     # against the whole service. An FK cannot hold that case.
     affected_components = models.ManyToManyField(
@@ -113,7 +121,7 @@ class EventUpdate(BaseModel):
     )
     phase = models.CharField(max_length=32)
     body = models.TextField()
-    posted_at = models.DateTimeField()
+    posted_at = models.DateTimeField(verbose_name="Posted")
 
     def __str__(self):
         return f"{self.event} — {self.phase}"
