@@ -67,6 +67,14 @@ class PollerAdmin(
     actions_row = ["poll_now", "toggle_pause"]
     actions_detail = ["poll_now", "toggle_pause"]
 
+    def has_add_permission(self, request):
+        """There is never a service without one, so there is none to add.
+
+        A signal on Service creates it, and the column is one-to-one, so
+        the form could only offer a duplicate the database refuses.
+        """
+        return False
+
     @display(description=_("View"), dropdown=True)
     def display_related(self, obj):
         return {

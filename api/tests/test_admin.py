@@ -355,3 +355,30 @@ def test_a_blank_interval_says_what_it_will_do(staff_client, settings):
         reverse("admin:polling_poller_change", args=[service.poller.pk])
     ).content.decode()
     assert "deployment default of 900 seconds" in body
+
+
+@pytest.mark.django_db
+def test_a_poller_cannot_be_added_by_hand(staff_client):
+    """One per service, made with the service.
+
+    The column is one-to-one and a signal fills it, so an add form could
+    only ever offer a duplicate the database refuses.
+    """
+    from polling.models import Poller
+
+    site_admin = admin.site._registry[Poller]
+    assert not site_admin.has_add_permission(staff_client.request().wsgi_request)
+    assert staff_client.get(reverse("admin:polling_poller_add")).status_code == 403
+
+
+@pytest.mark.django_db
+def test_a_service_cannot_hold_two_pollers():
+    # The database is the thing that guarantees it, not the admin.
+    from django.db import IntegrityError
+
+    from polling.models import Poller
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory()
+    with pytest.raises(IntegrityError):
+        Poller.objects.create(service=service)
