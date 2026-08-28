@@ -47,6 +47,12 @@ class Adapter(ABC):
 
     provider: str = ""
 
+    # True for an adapter written for one company's page. Probing must
+    # not offer these to a page they do not match: several read a path
+    # that other platforms also serve, and would claim someone else's
+    # page and report the wrong company's status on it.
+    host_specific: bool = False
+
     def __init__(self, url: str, session=None):
         self.url = url
         self.session = session

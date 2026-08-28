@@ -123,3 +123,36 @@ def test_no_adapter_answers_for_a_page_that_is_not_its_own():
         except Exception as refusal:  # noqa: BLE001 — refusing is correct
             assert refusal is not None
         assert answered is None, f"{adapter_class.__name__} answered anyway"
+
+
+def test_probing_never_offers_a_company_adapter_someone_elses_page():
+    """The bug this guards against was live, twice.
+
+    Several company adapters read a path other platforms also serve —
+    Oracle's api/v2/status.json is one Statuspage answers — so being
+    tried against a foreign page meant claiming it and reporting the
+    wrong company's status under that service's name.
+    """
+    from polling.adapters.registry import ADAPTERS, RSSAdapter, detect
+
+    url = "https://status.someone-else.example/"
+    guess = detect(url)
+    offered = [guess] + [
+        a for a in (*ADAPTERS, RSSAdapter) if a is not guess and not a.host_specific
+    ]
+    assert not [a for a in offered if a.host_specific], (
+        "a company adapter was offered a page that is not that company's"
+    )
+
+
+def test_a_company_adapter_matches_only_its_own_company():
+    # The flag keeps it out of the probe; matches() keeps it off pages
+    # that are not its own. Both have to hold.
+    from polling.adapters.registry import ADAPTERS
+
+    for adapter_class in ADAPTERS:
+        if not adapter_class.host_specific:
+            continue
+        assert not adapter_class.matches("https://status.someone-else.example/"), (
+            f"{adapter_class.__name__} is host_specific and still claims a foreign page"
+        )

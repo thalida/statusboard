@@ -22,6 +22,7 @@ class GoogleCloudAdapter(Adapter):
     """
 
     provider = StatusPageProvider.GOOGLE_CLOUD
+    host_specific = True
     status_source = StatusSource.INCIDENTS
 
     # Google's own impact vocabulary.

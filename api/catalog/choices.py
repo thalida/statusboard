@@ -9,4 +9,8 @@ class StatusPageProvider(models.TextChoices):
     STATUS_IO = "status_io", "status.io"
     GOOGLE_CLOUD = "google_cloud", "Google Cloud"
     AWS = "aws", "Amazon Web Services"
+    AZURE = "azure", "Microsoft Azure"
+    APPLE = "apple", "Apple"
+    ORACLE = "oracle", "Oracle Cloud"
+    GOOGLE_FEED = "google_feed", "Google status feed"
     RSS = "rss", "RSS feed"

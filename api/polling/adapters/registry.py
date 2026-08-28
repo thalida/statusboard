@@ -6,19 +6,27 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import requests
 
 from polling.adapters.base import Adapter
+from polling.adapters.services.apple import AppleAdapter
 from polling.adapters.services.aws import AwsAdapter
+from polling.adapters.services.azure import AzureAdapter
 from polling.adapters.services.betterstack import BetterStackAdapter
 from polling.adapters.services.googlecloud import GoogleCloudAdapter
+from polling.adapters.services.googlefeed import GoogleFeedAdapter
 from polling.adapters.services.incidentio import IncidentIoAdapter
 from polling.adapters.services.instatus import InstatusAdapter
+from polling.adapters.services.oracle import OracleAdapter
 from polling.adapters.services.rss import RSSAdapter
 from polling.adapters.services.statusio import StatusIoAdapter
 from polling.adapters.services.statuspage import StatuspageAdapter
 
 # Order matters: RSS is last because it is the fallback, not a match.
 ADAPTERS: tuple[type[Adapter], ...] = (
+    AppleAdapter,
     AwsAdapter,
+    AzureAdapter,
     GoogleCloudAdapter,
+    GoogleFeedAdapter,
+    OracleAdapter,
     IncidentIoAdapter,
     StatuspageAdapter,
     InstatusAdapter,
@@ -79,7 +87,13 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
     because nothing ever read it.
     """
     guess = detect(url)
-    candidates = [guess] + [a for a in (*ADAPTERS, RSSAdapter) if a is not guess]
+    # Everything else offered to a page is a general platform. A
+    # company-specific adapter is only tried when the URL is that
+    # company's, because several read a path other platforms also serve.
+    general = [
+        a for a in (*ADAPTERS, RSSAdapter) if a is not guess and not a.host_specific
+    ]
+    candidates = [guess, *general]
 
     for adapter_class in candidates:
         try:

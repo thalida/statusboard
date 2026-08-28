@@ -14,6 +14,7 @@ class AwsAdapter(RSSAdapter):
     """
 
     provider = StatusPageProvider.AWS
+    host_specific = True
 
     @classmethod
     def matches(cls, url: str) -> bool:
