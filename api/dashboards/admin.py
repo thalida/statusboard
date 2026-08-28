@@ -1,5 +1,8 @@
+from uuid import UUID
+
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.db.models import BooleanField, ExpressionWrapper, F, Q
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import AutocompleteSelectFilter, RangeDateTimeFilter
@@ -7,6 +10,7 @@ from unfold.decorators import display
 
 from common.admin import (
     BaseModelAdmin,
+    audit_section,
     change_link,
     record_column,
     related_count,
@@ -21,17 +25,47 @@ class DashboardItemInline(TabularInline):
     autocomplete_fields = ["component"]
 
 
+# Which board is the default is a pointer on the user, so it is a
+# comparison here rather than a column to read.
+IS_DEFAULT = ExpressionWrapper(
+    Q(owner__default_dashboard=F("pk")), output_field=BooleanField()
+)
+
+
+class DefaultBoardFilter(admin.SimpleListFilter):
+    """Whether a board is the one its owner opens.
+
+    There is no column to filter on. The answer is whether the owner
+    points back at this row.
+    """
+
+    title = _("Default")
+    parameter_name = "default"
+
+    def lookups(self, request, model_admin):
+        return [("1", _("Yes")), ("0", _("No"))]
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        return queryset.filter(default_for_owner=self.value() == "1")
+
+
 @admin.register(Dashboard)
 class DashboardAdmin(BaseModelAdmin, ModelAdmin):
-    list_display = ["display_board", "display_owner", "is_default", "item_count"]
+    list_display = ["display_board", "display_owner", "display_default", "item_count"]
     search_fields = ["name", "owner__email"]
     list_filter = [
         ("owner", AutocompleteSelectFilter),
-        "is_default",
+        DefaultBoardFilter,
         ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["owner"]
     inlines = [DashboardItemInline]
+    fieldsets = [
+        (None, {"fields": ["owner", "name"]}),
+        audit_section(),
+    ]
 
     def get_queryset(self, request):
         # The count was a query per row. It is one subquery now.
@@ -39,8 +73,28 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
             super()
             .get_queryset(request)
             .select_related("owner")
-            .annotate(tracked=related_count(DashboardItem.objects, "dashboard"))
+            .annotate(
+                tracked=related_count(DashboardItem.objects, "dashboard"),
+                default_for_owner=IS_DEFAULT,
+            )
         )
+
+    def get_search_results(self, request, queryset, search_term):
+        """Narrow the autocomplete to the owner that asked.
+
+        The endpoint is shared by every autocomplete, so without this a
+        person picking their default board is offered everybody's.
+        """
+        queryset, may_have_duplicates = super().get_search_results(
+            request, queryset, search_term
+        )
+        owner = request.GET.get("owner")
+        if owner:
+            try:
+                queryset = queryset.filter(owner_id=UUID(owner))
+            except ValueError:
+                queryset = queryset.none()
+        return queryset, may_have_duplicates
 
     def has_delete_permission(self, request, obj=None):
         """An owner keeps their last board, so it is not offered.
@@ -70,6 +124,14 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
                 _("Kept %s. An owner keeps their last board.") % ", ".join(kept),
                 messages.WARNING,
             )
+
+    @display(
+        description=_("Default"),
+        label={"Default": "success", "—": "default"},
+        ordering="default_for_owner",
+    )
+    def display_default(self, obj):
+        return "Default" if obj.default_for_owner else "—"
 
     @display(description=_("Owner"), ordering="owner__email")
     def display_owner(self, obj):
@@ -103,6 +165,10 @@ class DashboardItemAdmin(BaseModelAdmin, ModelAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["dashboard", "component"]
+    fieldsets = [
+        (None, {"fields": ["dashboard", "component"]}),
+        audit_section(),
+    ]
 
     @display(description=_("Board"), ordering="dashboard__name")
     def display_dashboard(self, obj):

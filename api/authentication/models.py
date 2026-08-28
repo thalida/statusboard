@@ -7,6 +7,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -79,9 +80,37 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     last_active_at = models.DateTimeField(
         verbose_name="Last active", null=True, blank=True
     )
+    # The board they open on sign-in. One pointer, so there is no way to
+    # hold two defaults or none. Null only while the first board is being
+    # made, which `save` does immediately below.
+    #
+    # SET_NULL rather than CASCADE: deleting a board must not delete the
+    # person who read it. `Dashboard.delete` moves this on instead.
+    default_dashboard = models.ForeignKey(
+        "dashboards.Dashboard",
+        verbose_name="Default board",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    def clean(self):
+        """A person opens one of their own boards, not somebody else's.
+
+        The column cannot say whose board it points at, so nothing stops
+        it naming another owner's. That would show one person another
+        person's board on sign-in.
+        """
+        super().clean()
+        board = self.default_dashboard
+        if board is not None and board.owner_id != self.pk:
+            raise ValidationError(
+                {"default_dashboard": "That board belongs to somebody else."}
+            )
 
     def save(self, *args, **kwargs):
-        """Give a new user their default board.
+        """Give a new user their board, and open it by default.
 
         Imported here rather than at module scope: authentication is the
         lower layer, and a top-level import would tie it to dashboards for
@@ -93,11 +122,11 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         if creating and not self.is_bot:
             from dashboards.models import Dashboard
 
-            Dashboard.objects.get_or_create(
-                owner=self,
-                is_default=True,
-                defaults={"created_by": self, "updated_by": self},
+            board = Dashboard.objects.create(
+                owner=self, created_by=self, updated_by=self
             )
+            self.default_dashboard = board
+            super().save(update_fields=["default_dashboard"])
 
     objects = UserManager()
     USERNAME_FIELD = "email"

@@ -192,6 +192,16 @@ def severity_label(value):
     return Severity(value).label if value is not None else "—"
 
 
+def audit_section():
+    """The trail, folded away at the end of every form.
+
+    It is the same four fields on every record and nobody opens a form
+    to read them, so it closes and sits last rather than pushing the
+    fields somebody came for down the page.
+    """
+    return (_("Audit"), {"classes": ["collapse"], "fields": list(AUDIT_FIELDS)})
+
+
 def date_span(start, end):
     """The stretch of time a row covers.
 

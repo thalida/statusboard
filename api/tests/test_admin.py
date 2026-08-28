@@ -563,3 +563,71 @@ def test_the_system_account_cannot_be_deleted(staff_client):
         request, User.objects.get(email=SYSTEM_EMAIL)
     )
     assert user_admin.has_delete_permission(request, admin_user)
+
+
+@pytest.mark.django_db
+def test_the_admin_cannot_overwrite_a_password_with_plain_text(staff_client):
+    """The field shows the hash. It must not take one.
+
+    A plain field writes whatever is typed straight into the column, so
+    a new password there is stored as the hash: the account can never
+    sign in again, and the password is readable in the database.
+    """
+    from django.contrib import admin as django_admin
+
+    user = User.objects.get(email="admin@example.com")
+    stored = user.password
+    user_admin = django_admin.site._registry[User]
+
+    from django.test import RequestFactory
+
+    request = RequestFactory().get("/")
+    request.user = user
+    form_class = user_admin.get_form(request, user, change=True)
+    form = form_class(
+        instance=user,
+        data={"email": user.email, "password": "hunter2", "is_active": "on"},
+    )
+
+    assert form.is_valid(), dict(form.errors)
+    form.save()
+    user.refresh_from_db()
+    assert user.password == stored
+    assert user.check_password("admin-only")
+
+
+@pytest.mark.django_db
+def test_the_default_board_is_searched_not_listed(staff_client):
+    """A dropdown would carry every board of every owner.
+
+    The widget is the admin's autocomplete, which is served by the board
+    admin's own search.
+    """
+    from django.test import RequestFactory
+
+    from dashboards.models import Dashboard
+
+    user = User.objects.get(email="admin@example.com")
+    assert "default_dashboard" in admin.site._registry[User].autocomplete_fields
+
+    request = RequestFactory().get("/")
+    request.user = user
+    board_admin = admin.site._registry[Dashboard]
+    found, _ = board_admin.get_search_results(
+        request, board_admin.get_queryset(request), user.default_dashboard.name
+    )
+    assert found.exists()
+
+
+@pytest.mark.django_db
+def test_a_person_cannot_open_somebody_elses_board():
+    # The column cannot say whose board it names, so nothing else stops
+    # it naming another owner's.
+    from django.core.exceptions import ValidationError as Invalid
+
+    mine = User.objects.create(email="a@b.com")
+    theirs = User.objects.create(email="c@d.com")
+
+    mine.default_dashboard = theirs.default_dashboard
+    with pytest.raises(Invalid):
+        mine.full_clean()

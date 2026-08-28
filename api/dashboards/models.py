@@ -11,61 +11,37 @@ class Dashboard(BaseModel):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="dashboards"
     )
     name = models.CharField(max_length=200, default="My board")
-    is_default = models.BooleanField(
-        verbose_name="Default",
-        default=False,
-        help_text=(
-            "An owner always reads a board, so this cannot be cleared. "
-            "Marking another board default is what moves it."
-        ),
-    )
 
-    class Meta(BaseModel.Meta):
-        constraints = [
-            models.UniqueConstraint(
-                fields=["owner"],
-                condition=models.Q(is_default=True),
-                name="one_default_dashboard_per_owner",
-            )
-        ]
+    # Which board is the default is on the user, as `default_dashboard`.
+    # A column here would be one flag per board with a rule saying only
+    # one may be set, and a rule can be broken. One pointer cannot.
 
-    def save(self, *args, **kwargs):
-        """A new default stands down the old one, and one always stands.
-
-        An owner reads a board when they sign in, so the flag has to be
-        somewhere. Marking a second board moves it, which is what the
-        person ticking the box meant; without this it was an integrity
-        error they could do nothing about. Clearing the last one would
-        leave nothing to open, so it does not clear.
-        """
-        with transaction.atomic():
-            siblings = Dashboard.objects.filter(owner=self.owner).exclude(pk=self.pk)
-            if self.is_default:
-                siblings.filter(is_default=True).update(is_default=False)
-            elif not siblings.filter(is_default=True).exists():
-                self.is_default = True
-                fields = kwargs.get("update_fields")
-                if fields is not None:
-                    kwargs["update_fields"] = [*fields, "is_default"]
-            super().save(*args, **kwargs)
+    @property
+    def is_default(self):
+        return self.owner.default_dashboard_id == self.pk
 
     def delete(self, *args, **kwargs):
-        """The flag moves on. The last board does not go at all.
+        """The default moves on. The last board does not go at all.
 
         Deleting a user takes their boards with it, and that path is a
         bulk one that never reaches this method, so an account can still
         be closed.
         """
-        siblings = Dashboard.objects.filter(owner=self.owner).exclude(pk=self.pk)
-        heir = siblings.order_by("created_at").first()
+        owner = self.owner
+        heir = (
+            Dashboard.objects.filter(owner=owner)
+            .exclude(pk=self.pk)
+            .order_by("created_at")
+            .first()
+        )
         if heir is None:
             raise ValidationError("An owner keeps their last board.")
         with transaction.atomic():
             was_default = self.is_default
             result = super().delete(*args, **kwargs)
             if was_default:
-                heir.is_default = True
-                heir.save(update_fields=["is_default"])
+                owner.default_dashboard = heir
+                owner.save(update_fields=["default_dashboard"])
         return result
 
     def __str__(self):

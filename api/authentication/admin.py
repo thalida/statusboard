@@ -1,4 +1,7 @@
+from django import forms
 from django.contrib import admin
+from django.contrib.admin.widgets import AutocompleteSelect
+from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin
 from unfold.contrib.filters.admin import (
@@ -8,13 +11,106 @@ from unfold.contrib.filters.admin import (
 from unfold.decorators import display
 
 from authentication.models import SYSTEM_EMAIL, MagicLinkToken, User
-from common.admin import BaseModelAdmin, change_link, record_column
+from common.admin import (
+    BaseModelAdmin,
+    audit_section,
+    change_link,
+    record_column,
+)
+from dashboards.models import Dashboard
+
+
+class OwnersBoardSelect(AutocompleteSelect):
+    """The admin's autocomplete, narrowed to one person's boards.
+
+    The shared endpoint is told which field is asking but never which
+    row, so on its own it offers every board in the system, including
+    other people's. The owner goes on the URL and the board admin reads
+    it back.
+    """
+
+    def __init__(self, *args, owner_id=None, **kwargs):
+        self.owner_id = owner_id
+        super().__init__(*args, **kwargs)
+
+    def get_url(self):
+        url = super().get_url()
+        return f"{url}?owner={self.owner_id}" if self.owner_id else url
+
+
+class UserForm(forms.ModelForm):
+    """The user form, with the password left where it is.
+
+    A plain field renders the stored hash in an editable box. Anybody
+    typing a new password there writes it in as the hash: the account
+    can never sign in again, and the password sits in the column in the
+    clear. This shows it and does not take a new one.
+
+    There is no change-password screen to link to. Signing in is a magic
+    link, and the only password is the seeded admin's.
+    """
+
+    password = ReadOnlyPasswordHashField(
+        label=_("Password"),
+        help_text=_("Not stored in a form anybody can read."),
+    )
+
+    class Meta:
+        model = User
+        fields = "__all__"
+
+    def clean_password(self):
+        # The field is shown, never taken. Keep what is stored.
+        return self.initial["password"]
 
 
 @admin.register(User)
 class UserAdmin(BaseModelAdmin, ModelAdmin):
+    form = UserForm
+    # A person can have many boards, and a plain dropdown would list
+    # every board of every owner.
+    autocomplete_fields = ["default_dashboard"]
+    # Django orders the form by the model's fields, and PermissionsMixin
+    # declares its own first, so `is_superuser` sat above the address
+    # and away from the other two flags it belongs with.
+    fieldsets = [
+        (None, {"fields": ["email", "password"]}),
+        (_("Board"), {"fields": ["default_dashboard"]}),
+        (
+            _("Access"),
+            {"fields": ["is_active", "is_bot", "is_staff", "is_superuser"]},
+        ),
+        (
+            _("Permissions"),
+            {"classes": ["collapse"], "fields": ["groups", "user_permissions"]},
+        ),
+        (_("Activity"), {"fields": ["last_login", "last_active_at"]}),
+        audit_section(),
+    ]
+
+    def get_form(self, request, obj=None, **kwargs):
+        # The widget needs to know whose boards to offer, and this is
+        # where the row being edited is known.
+        request._editing = obj
+        return super().get_form(request, obj, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "default_dashboard":
+            owner = getattr(request, "_editing", None)
+            kwargs["widget"] = OwnersBoardSelect(
+                db_field,
+                self.admin_site,
+                owner_id=owner.pk if owner else None,
+            )
+            if owner is not None:
+                # Also the server's half of it. The URL narrows what is
+                # offered; this refuses anything else that is posted.
+                kwargs["queryset"] = Dashboard.objects.filter(owner=owner)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     list_display = [
         "display_user",
+        "display_default_board",
         "display_active",
         "display_bot",
         "display_staff",
@@ -47,6 +143,10 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
 
     # Django's own labels read "active", "staff status" and "superuser
     # status". The three sit side by side, so they read as a set here.
+    @display(description=_("Board"), ordering="default_dashboard__name")
+    def display_default_board(self, obj):
+        return change_link(obj.default_dashboard)
+
     @display(description=_("Bot"), boolean=True, ordering="is_bot")
     def display_bot(self, obj):
         return obj.is_bot
@@ -89,6 +189,14 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["user"]
     ordering = ["-created_at"]
+    # The token is the credential. It is shown, never typed over: a new
+    # one by hand is a link nobody was sent.
+    readonly_fields = ["token"]
+    fieldsets = [
+        (None, {"fields": ["user", "token"]}),
+        (_("Life"), {"fields": ["expires_at", "used_at"]}),
+        audit_section(),
+    ]
 
     @display(description=_("User"), ordering="user__email")
     def display_user(self, obj):

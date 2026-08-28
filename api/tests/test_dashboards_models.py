@@ -8,41 +8,46 @@ from tests.factories import ComponentFactory
 
 
 @pytest.mark.django_db
-def test_a_user_gets_a_default_dashboard_on_creation():
+def test_a_user_gets_a_board_and_opens_it():
     user = User.objects.create(email="a@b.com")
-    assert Dashboard.objects.filter(owner=user, is_default=True).count() == 1
+
+    board = Dashboard.objects.get(owner=user)
+    assert user.default_dashboard == board
+    assert board.is_default
 
 
 @pytest.mark.django_db
-def test_a_new_default_stands_down_the_old_one():
-    user = User.objects.create(email="a@b.com")
-    first = Dashboard.objects.get(owner=user, is_default=True)
+def test_a_user_cannot_hold_two_defaults():
+    """It is one pointer, so there is no second one to hold.
 
-    second = Dashboard.objects.create(owner=user, name="Second", is_default=True)
+    A flag on each board needed a rule saying only one may be set, and a
+    rule can be broken. This cannot.
+    """
+    user = User.objects.create(email="a@b.com")
+    first = user.default_dashboard
+    second = Dashboard.objects.create(owner=user, name="Second")
+
+    user.default_dashboard = second
+    user.save(update_fields=["default_dashboard"])
 
     first.refresh_from_db()
+    user.refresh_from_db()
     assert not first.is_default
     assert second.is_default
-    assert Dashboard.objects.filter(owner=user, is_default=True).count() == 1
+    assert user.default_dashboard == second
 
 
 @pytest.mark.django_db
-def test_one_owner_default_does_not_stand_down_another_owner():
+def test_one_owner_default_does_not_move_another_owner():
     mine = User.objects.create(email="a@b.com")
     theirs = User.objects.create(email="c@d.com")
-    other = Dashboard.objects.get(owner=theirs, is_default=True)
+    other = theirs.default_dashboard
 
-    Dashboard.objects.create(owner=mine, name="Second", is_default=True)
+    mine.default_dashboard = Dashboard.objects.create(owner=mine, name="Second")
+    mine.save(update_fields=["default_dashboard"])
 
-    other.refresh_from_db()
-    assert other.is_default
-
-
-@pytest.mark.django_db
-def test_two_owners_may_each_have_a_default():
-    User.objects.create(email="a@b.com")
-    User.objects.create(email="c@d.com")
-    assert Dashboard.objects.filter(is_default=True).count() == 2
+    theirs.refresh_from_db()
+    assert theirs.default_dashboard == other
 
 
 @pytest.mark.django_db
@@ -96,8 +101,7 @@ def test_the_system_account_is_one_account():
 def test_a_user_signs_their_own_default_board():
     user = User.objects.create(email="a@b.com")
 
-    board = Dashboard.objects.get(owner=user, is_default=True)
-    assert board.created_by == user
+    assert user.default_dashboard.created_by == user
 
 
 @pytest.mark.django_db
@@ -115,35 +119,28 @@ def test_an_owner_keeps_their_last_board():
 @pytest.mark.django_db
 def test_the_default_moves_on_when_its_board_goes():
     user = User.objects.create(email="a@b.com")
-    first = Dashboard.objects.get(owner=user, is_default=True)
+    first = user.default_dashboard
     second = Dashboard.objects.create(owner=user, name="Second")
 
     first.delete()
 
-    second.refresh_from_db()
-    assert second.is_default
+    user.refresh_from_db()
+    assert user.default_dashboard == second
 
 
 @pytest.mark.django_db
-def test_the_last_default_cannot_be_cleared():
+def test_an_owner_is_never_left_without_a_default():
+    """There is no state where a person has boards and opens none.
+
+    Clearing the last flag used to be the way in. A pointer has no
+    cleared state that a board can be in.
+    """
     user = User.objects.create(email="a@b.com")
-    only = Dashboard.objects.get(owner=user)
+    Dashboard.objects.create(owner=user, name="Second")
 
-    only.is_default = False
-    only.save()
-
-    only.refresh_from_db()
-    assert only.is_default
-
-
-@pytest.mark.django_db
-def test_a_default_can_be_cleared_when_another_board_holds_it():
-    user = User.objects.create(email="a@b.com")
-    first = Dashboard.objects.get(owner=user, is_default=True)
-    Dashboard.objects.create(owner=user, name="Second", is_default=True)
-
-    first.refresh_from_db()
-    assert not first.is_default
+    user.refresh_from_db()
+    assert user.default_dashboard is not None
+    assert user.default_dashboard.owner == user
 
 
 @pytest.mark.django_db

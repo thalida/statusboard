@@ -16,6 +16,7 @@ from catalog.models import ServiceComponent
 from common.admin import (
     SEVERITY_VARIANTS,
     PollerWrittenAdmin,
+    audit_section,
     change_link,
     date_span,
     filtered_list,
@@ -82,6 +83,12 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["component"]
     ordering = ["-started_at"]
+    fieldsets = [
+        (None, {"fields": ["component", "severity", "source"]}),
+        (_("Span"), {"fields": ["started_at", "ended_at"]}),
+        (_("Written by"), {"fields": ["display_poll_run"]}),
+        audit_section(),
+    ]
     display_reading = record_column(_("Reading"))
 
     def get_queryset(self, request):
@@ -192,23 +199,22 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     def display_when(self, obj):
         return date_span(obj.starts_at, obj.ends_at)
 
-    FORM_FIELDS = [
-        "display_poll_run",
-        "service",
-        "external_id",
-        "kind",
-        "title",
-        "phase",
-        "starts_at",
-        "ends_at",
-    ]
-
-    def get_fields(self, request, obj=None):
+    def get_fieldsets(self, request, obj=None):
         # Editable, the components need their picker. Read only, they are
         # more useful as links than as a comma-separated string.
-        if self.has_change_permission(request, obj):
-            return self.FORM_FIELDS + ["affected_components"]
-        return self.FORM_FIELDS + ["display_affected_components"]
+        components = (
+            "affected_components"
+            if self.has_change_permission(request, obj)
+            else "display_affected_components"
+        )
+        return [
+            (None, {"fields": ["service", "external_id", "title"]}),
+            (_("What kind"), {"fields": ["kind", "phase"]}),
+            (_("When"), {"fields": ["starts_at", "ends_at"]}),
+            (_("Affected"), {"fields": [components]}),
+            (_("Written by"), {"fields": ["display_poll_run"]}),
+            audit_section(),
+        ]
 
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
@@ -305,6 +311,11 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         ("event", AutocompleteSelectFilter),
         ("posted_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
+    ]
+    fieldsets = [
+        (None, {"fields": ["event", "phase", "posted_at"]}),
+        (_("What was posted"), {"fields": ["body"]}),
+        audit_section(),
     ]
 
     @display(description=_("Service"), ordering="event__service__name")

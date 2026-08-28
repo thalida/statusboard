@@ -19,7 +19,7 @@ from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
 @pytest.fixture
 def board(db):
     user = User.objects.create(email="a@b.com")
-    return Dashboard.objects.get(owner=user, is_default=True)
+    return user.default_dashboard
 
 
 @pytest.fixture

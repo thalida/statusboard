@@ -23,6 +23,7 @@ from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
     InheritedDefaultsMixin,
+    audit_section,
     change_link,
     filtered_list,
     phase_label,
@@ -301,6 +302,12 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         ("updated_at", RangeDateTimeFilter),
     ]
     ordering = ["-watcher_count", "name"]
+    fieldsets = [
+        (None, {"fields": ["name", "slug", "description"]}),
+        (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
+        (_("Catalog"), {"fields": ["is_featured"]}),
+        audit_section(),
+    ]
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
     actions_list = ["import_from_status_page"]
@@ -481,6 +488,15 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
+    fieldsets = [
+        (None, {"fields": ["service", "name", "external_id"]}),
+        (
+            _("Place on the page"),
+            {"fields": ["parent", "status_page_order", "is_overall"]},
+        ),
+        (_("Life"), {"fields": ["archived_at"]}),
+        audit_section(),
+    ]
     inlines = [ComponentStatusInline]
 
     def get_queryset(self, request):

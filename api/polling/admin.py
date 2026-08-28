@@ -31,6 +31,7 @@ from common.admin import (
     BaseModelAdmin,
     InheritedDefaultsMixin,
     PollerWrittenAdmin,
+    audit_section,
     change_link,
     filtered_list,
     record_column,
@@ -122,6 +123,24 @@ class PollerAdmin(
     autocomplete_fields = ["service"]
     ordering = ["-consecutive_failure_count", "next_at"]
     inlines = [PollRunInline]
+    fieldsets = [
+        (None, {"fields": ["service", "is_paused", "note"]}),
+        (
+            _("Tuning"),
+            {
+                "fields": [
+                    "interval_seconds",
+                    "cooldown_seconds",
+                    "max_interval_seconds",
+                ]
+            },
+        ),
+        (
+            _("Where it stands"),
+            {"fields": ["next_at", "last_success_at", "consecutive_failure_count"]},
+        ),
+        audit_section(),
+    ]
     display_poller = record_column(_("Poller"))
     actions_row = ["poll_now", "toggle_pause"]
     actions_detail = ["poll_now", "toggle_pause"]
@@ -259,6 +278,12 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     ]
     ordering = ["-started_at"]
     readonly_fields = ["error"]
+    fieldsets = [
+        (None, {"fields": ["poller", "url", "provider"]}),
+        (_("Result"), {"fields": ["ok", "error"]}),
+        (_("Timing"), {"fields": ["started_at", "finished_at"]}),
+        audit_section(),
+    ]
     display_run = record_column(_("Poll run"))
 
     def get_queryset(self, request):
