@@ -5,7 +5,9 @@ from django.db.models import Count, IntegerField, Min, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.html import format_html
+from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import display
 
@@ -188,6 +190,23 @@ SEVERITY_VARIANTS = {
 
 def severity_label(value):
     return Severity(value).label if value is not None else "—"
+
+
+def date_span(start, end):
+    """The stretch of time a row covers.
+
+    A span with no end is still running, and one inside a single day
+    would print that day twice. Neither is written out.
+    """
+    if start is None:
+        return "—"
+    start = localtime(start)
+    opens = date_format(start, "j M Y, H:i")
+    if end is None:
+        return f"{opens} →"
+    end = localtime(end)
+    closes = "H:i" if start.date() == end.date() else "j M Y, H:i"
+    return f"{opens} → {date_format(end, closes)}"
 
 
 def record_column(description):

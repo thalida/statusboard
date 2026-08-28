@@ -55,6 +55,14 @@ class PollRunColumns:
     def display_error(self, obj):
         return (obj.error or "—")[:90]
 
+    @display(description=_("Took"), ordering="finished_at")
+    def display_took(self, obj):
+        # A provider that has become slow shows here first. A run that
+        # never finished has no answer, which is itself the answer.
+        if obj.finished_at is None or obj.started_at is None:
+            return "—"
+        return f"{(obj.finished_at - obj.started_at).total_seconds():.1f}s"
+
 
 class PollRunInline(PollRunColumns, TabularInline):
     """The poller's own log, read only.
@@ -95,12 +103,13 @@ class PollerAdmin(
         "display_service",
         "display_health",
         "is_paused",
+        "display_interval",
         "consecutive_failure_count",
         "last_success_at",
         "next_at",
         "display_related",
     ]
-    search_fields = ["service__name", "service__slug"]
+    search_fields = ["service__name", "service__slug", "note"]
     list_filter = [
         ("service", AutocompleteSelectFilter),
         "is_paused",
@@ -133,6 +142,13 @@ class PollerAdmin(
     @display(description=_("Service"), ordering="service__name")
     def display_service(self, obj):
         return change_link(obj.service)
+
+    @display(description=_("Every"), ordering="interval_seconds")
+    def display_interval(self, obj):
+        # What it actually polls at. The column is blank when the poller
+        # takes the deployment default, so the number was not readable
+        # from the table at all.
+        return f"{obj.effective_interval_seconds}s"
 
     def has_add_permission(self, request):
         """There is never a service without one, so there is none to add.
@@ -222,11 +238,17 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
         "display_ok",
         "provider",
         "started_at",
+        "display_took",
         "display_error",
         "display_related",
     ]
     date_hierarchy = "started_at"
-    search_fields = ["poller__service__name", "url", "error"]
+    search_fields = [
+        "poller__service__name",
+        "poller__service__slug",
+        "url",
+        "error",
+    ]
     list_filter = [
         ("poller__service", AutocompleteSelectFilter),
         ("poller", AutocompleteSelectFilter),

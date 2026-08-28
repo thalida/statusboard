@@ -77,7 +77,13 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
 class DashboardItemAdmin(BaseModelAdmin, ModelAdmin):
     list_display = ["display_item", "display_dashboard", "display_component"]
     display_item = record_column(_("Tracked"))
-    search_fields = ["dashboard__name", "component__name"]
+    search_fields = [
+        "dashboard__name",
+        "dashboard__owner__email",
+        "component__name",
+        "component__external_id",
+        "component__service__name",
+    ]
     list_filter = [
         ("dashboard__owner", AutocompleteSelectFilter),
         ("dashboard", AutocompleteSelectFilter),

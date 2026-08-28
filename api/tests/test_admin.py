@@ -506,3 +506,30 @@ def test_every_filter_choice_opens(staff_client, model):
             assert staff_client.get(url + query).status_code == 200, (
                 f"{opts.label}: {query}"
             )
+
+
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_search_field_names_a_real_path(model):
+    """A search path that does not resolve raises only when searched.
+
+    The changelist renders fine until somebody types, so a typo sits
+    there until a person hits it.
+    """
+    for path in admin.site._registry[model].search_fields or []:
+        target = model
+        for part in path.lstrip("^=@").split("__"):
+            field = target._meta.get_field(part)
+            if field.is_relation:
+                target = field.related_model
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_table_can_be_searched(staff_client, model):
+    # Every row hangs off a service somewhere, so the service's name is
+    # the one term that should reach every table.
+    opts = model._meta
+    url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+
+    assert staff_client.get(url, {"q": "nothing matches this"}).status_code == 200
+    assert admin.site._registry[model].search_fields, opts.label

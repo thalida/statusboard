@@ -1,9 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
-from django.utils.formats import date_format
 from django.utils.html import format_html_join
 from django.utils.safestring import mark_safe
-from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import (
@@ -19,6 +17,7 @@ from common.admin import (
     SEVERITY_VARIANTS,
     PollerWrittenAdmin,
     change_link,
+    date_span,
     filtered_list,
     phase_label,
     poll_run_link,
@@ -58,11 +57,17 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_component",
         "display_service",
         "display_severity",
-        "started_at",
+        "display_span",
+        "display_source",
         "display_poll_run",
     ]
     date_hierarchy = "started_at"
-    search_fields = ["component__name", "component__service__name"]
+    search_fields = [
+        "component__name",
+        "component__external_id",
+        "component__service__name",
+        "component__service__slug",
+    ]
     # Also what makes ?component__service__id__exact and
     # ?poll_run__id__exact permitted lookups, which is how the services
     # table and a poll run reach the readings they own.
@@ -85,6 +90,19 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     @display(description=_("Component"), ordering="component__name")
     def display_component(self, obj):
         return change_link(obj.component)
+
+    @display(description=_("Held"), ordering="started_at")
+    def display_span(self, obj):
+        # A row is a stretch, and the open one is the reading now. With
+        # the start alone there was no telling which rows were still
+        # standing.
+        return date_span(obj.started_at, obj.ended_at)
+
+    @display(description=_("Source"))
+    def display_source(self, obj):
+        # How the severity was arrived at, which is not the same question
+        # as what it is.
+        return obj.get_source_display()
 
     def get_readonly_fields(self, request, obj=None):
         # The run is not an editable column, so it reaches the record
@@ -140,7 +158,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_related",
     ]
     date_hierarchy = "starts_at"
-    search_fields = ["title", "service__name", "external_id"]
+    search_fields = ["title", "external_id", "service__name", "service__slug"]
     # Also what makes ?poll_run__id__exact a permitted lookup, which is
     # how a run reaches the events it wrote.
     list_filter = [
@@ -172,19 +190,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
 
     @display(description=_("When"), ordering="starts_at")
     def display_when(self, obj):
-        """The span the event covers.
-
-        An event is a range, not a moment. The end is open while it still
-        runs, and a span inside one day would print that day twice, so
-        neither is written out.
-        """
-        start = localtime(obj.starts_at)
-        opens = date_format(start, "j M Y, H:i")
-        if obj.ends_at is None:
-            return f"{opens} →"
-        end = localtime(obj.ends_at)
-        closes = "H:i" if start.date() == end.date() else "j M Y, H:i"
-        return f"{opens} → {date_format(end, closes)}"
+        return date_span(obj.starts_at, obj.ends_at)
 
     FORM_FIELDS = [
         "display_poll_run",
@@ -278,10 +284,21 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
 
 @admin.register(EventUpdate)
 class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
-    list_display = ["display_update", "display_event", "phase", "posted_at"]
+    list_display = [
+        "display_update",
+        "display_event",
+        "display_service",
+        "phase",
+        "posted_at",
+    ]
     display_update = record_column(_("Update"))
     date_hierarchy = "posted_at"
-    search_fields = ["event__title", "body"]
+    search_fields = [
+        "event__title",
+        "event__external_id",
+        "event__service__name",
+        "body",
+    ]
     autocomplete_fields = ["event"]
     list_filter = [
         ("event__service", AutocompleteSelectFilter),
@@ -289,6 +306,10 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         ("posted_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+
+    @display(description=_("Service"), ordering="event__service__name")
+    def display_service(self, obj):
+        return change_link(obj.event.service)
 
     @display(description=_("Event"), ordering="event__title")
     def display_event(self, obj):

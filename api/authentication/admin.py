@@ -17,6 +17,7 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
         "display_user",
         "is_active",
         "is_staff",
+        "is_superuser",
         "last_login",
         "last_active_at",
     ]
@@ -46,6 +47,8 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
         "used_at",
     ]
     display_link = record_column(_("Link"))
+    # Never the token. It is a credential, and a search term is kept in
+    # the address bar, in history and in the log.
     search_fields = ["user__email"]
     list_filter = [
         ("user", AutocompleteSelectFilter),

@@ -277,11 +277,18 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
         "display_service",
         "display_severity",
+        "is_featured",
         "watcher_count",
         "provider",
         "display_related",
     ]
-    search_fields = ["name", "slug", "homepage_url"]
+    search_fields = [
+        "name",
+        "slug",
+        "description",
+        "homepage_url",
+        "status_page__url",
+    ]
     # Status first: it is what anyone scanning a catalog wants.
     # What it belongs to, then what state it is in, then how much, then
     # when. A service belongs to nothing, so its state leads.
@@ -451,9 +458,16 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "is_overall",
+        "display_archived",
         "display_related",
     ]
-    search_fields = ["name", "external_id", "service__name"]
+    search_fields = [
+        "name",
+        "external_id",
+        "parent__name",
+        "service__name",
+        "service__slug",
+    ]
     # Service first: it is how anyone narrows a list of every component
     # of every service.
     list_filter = [
@@ -494,6 +508,16 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     @display(description=_("Service"), ordering="service__name")
     def display_service(self, obj):
         return change_link(obj.service)
+
+    @display(
+        description=_("State"),
+        label={"Live": "success", "Archived": "default"},
+        ordering="archived_at",
+    )
+    def display_archived(self, obj):
+        # An archived component still reads on the table. Without this
+        # it looked like one the provider is still publishing.
+        return "Archived" if obj.archived_at else "Live"
 
     @display(description=_("View"), dropdown=True)
     def display_related(self, obj):
