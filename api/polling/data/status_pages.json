@@ -1,0 +1,507 @@
+[
+  {
+    "name": "AWS",
+    "url": "https://health.aws.amazon.com/health/status",
+    "adapter": "AwsAdapter"
+  },
+  {
+    "name": "Airtable",
+    "url": "https://status.airtable.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Akamai",
+    "url": "https://www.akamaistatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Algolia",
+    "url": "https://status.algolia.com/",
+    "adapter": null
+  },
+  {
+    "name": "Amplitude",
+    "url": "https://status.amplitude.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Anthropic",
+    "url": "https://status.anthropic.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Apple",
+    "url": "https://www.apple.com/support/systemstatus/",
+    "adapter": "AppleAdapter"
+  },
+  {
+    "name": "Asana",
+    "url": "https://status.asana.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Atlassian",
+    "url": "https://status.atlassian.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Auth0",
+    "url": "https://status.auth0.com/",
+    "adapter": null
+  },
+  {
+    "name": "Azure",
+    "url": "https://azure.status.microsoft/",
+    "adapter": "AzureAdapter"
+  },
+  {
+    "name": "Bitbucket",
+    "url": "https://bitbucket.status.atlassian.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Bitwarden",
+    "url": "https://status.bitwarden.com/",
+    "adapter": null
+  },
+  {
+    "name": "Box",
+    "url": "https://status.box.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Calendly",
+    "url": "https://status.calendly.com/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "CircleCI",
+    "url": "https://status.circleci.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Clerk",
+    "url": "https://status.clerk.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Cloudflare",
+    "url": "https://www.cloudflarestatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Cloudinary",
+    "url": "https://status.cloudinary.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Coinbase",
+    "url": "https://status.coinbase.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Contentful",
+    "url": "https://www.contentfulstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Databricks",
+    "url": "https://status.databricks.com/",
+    "adapter": "StatusIoAdapter"
+  },
+  {
+    "name": "Datadog",
+    "url": "https://status.datadoghq.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "DigitalOcean",
+    "url": "https://status.digitalocean.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Discord",
+    "url": "https://discordstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Docker",
+    "url": "https://www.dockerstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Dropbox",
+    "url": "https://status.dropbox.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Elastic",
+    "url": "https://status.elastic.co/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Fastly",
+    "url": "https://status.fastly.com/",
+    "adapter": null
+  },
+  {
+    "name": "Figma",
+    "url": "https://status.figma.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Firebase",
+    "url": "https://status.firebase.google.com/",
+    "adapter": "GoogleFeedAdapter"
+  },
+  {
+    "name": "Fly.io",
+    "url": "https://status.flyio.net/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "GitHub",
+    "url": "https://www.githubstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "GitLab",
+    "url": "https://status.gitlab.com/",
+    "adapter": "StatusIoAdapter"
+  },
+  {
+    "name": "GoogleCloud",
+    "url": "https://status.cloud.google.com/",
+    "adapter": "GoogleCloudAdapter"
+  },
+  {
+    "name": "GoogleWorkspace",
+    "url": "https://www.google.com/appsstatus/dashboard/",
+    "adapter": "GoogleFeedAdapter"
+  },
+  {
+    "name": "Grafana",
+    "url": "https://status.grafana.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Heroku",
+    "url": "https://status.heroku.com/",
+    "adapter": null
+  },
+  {
+    "name": "Heroku2",
+    "url": "https://status.salesforce.com/products/heroku",
+    "adapter": null
+  },
+  {
+    "name": "HubSpot",
+    "url": "https://status.hubspot.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "HuggingFace",
+    "url": "https://status.huggingface.co/",
+    "adapter": "BetterStackAdapter"
+  },
+  {
+    "name": "IBM",
+    "url": "https://cloud.ibm.com/status",
+    "adapter": null
+  },
+  {
+    "name": "Intercom",
+    "url": "https://www.intercomstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "JFrog",
+    "url": "https://status.jfrog.io/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Jenkins",
+    "url": "https://status.jenkins.io/",
+    "adapter": null
+  },
+  {
+    "name": "LastPass",
+    "url": "https://status.lastpass.com/",
+    "adapter": null
+  },
+  {
+    "name": "Linear",
+    "url": "https://status.linear.app/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "Linode",
+    "url": "https://status.linode.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Loom",
+    "url": "https://status.loom.com/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "Mailchimp",
+    "url": "https://status.mailchimp.com/",
+    "adapter": null
+  },
+  {
+    "name": "Mailgun",
+    "url": "https://status.mailgun.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Microsoft365",
+    "url": "https://status.cloud.microsoft/",
+    "adapter": null
+  },
+  {
+    "name": "Miro",
+    "url": "https://status.miro.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Mixpanel",
+    "url": "https://www.mixpanelstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "MongoDB",
+    "url": "https://status.mongodb.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Netlify",
+    "url": "https://www.netlifystatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "NewRelic",
+    "url": "https://status.newrelic.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Notion",
+    "url": "https://status.notion.so/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "Okta",
+    "url": "https://status.okta.com/",
+    "adapter": null
+  },
+  {
+    "name": "OnePassword",
+    "url": "https://status.1password.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "OpenAI",
+    "url": "https://status.openai.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Oracle",
+    "url": "https://ocistatus.oraclecloud.com/",
+    "adapter": "OracleAdapter"
+  },
+  {
+    "name": "PagerDuty",
+    "url": "https://status.pagerduty.com/",
+    "adapter": null
+  },
+  {
+    "name": "PayPal",
+    "url": "https://www.paypal-status.com/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "Plaid",
+    "url": "https://status.plaid.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "PlanetScale",
+    "url": "https://www.planetscalestatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Postman",
+    "url": "https://status.postman.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Postmark",
+    "url": "https://status.postmarkapp.com/",
+    "adapter": null
+  },
+  {
+    "name": "PyPI",
+    "url": "https://status.python.org/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Railway",
+    "url": "https://status.railway.app/",
+    "adapter": null
+  },
+  {
+    "name": "Reddit",
+    "url": "https://www.redditstatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Redis",
+    "url": "https://status.redis.io/",
+    "adapter": null
+  },
+  {
+    "name": "Render",
+    "url": "https://status.render.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Replicate",
+    "url": "https://replicatestatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Resend",
+    "url": "https://resend-status.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Retool",
+    "url": "https://status.retool.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Salesforce",
+    "url": "https://status.salesforce.com/",
+    "adapter": null
+  },
+  {
+    "name": "Sanity",
+    "url": "https://www.sanity-status.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Segment",
+    "url": "https://status.segment.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "SendGrid",
+    "url": "https://status.sendgrid.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Sentry",
+    "url": "https://status.sentry.io/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Shopify",
+    "url": "https://www.shopifystatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Slack",
+    "url": "https://status.slack.com/",
+    "adapter": null
+  },
+  {
+    "name": "Snowflake",
+    "url": "https://status.snowflake.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Sonar",
+    "url": "https://sonarsource.statuspage.io/",
+    "adapter": null
+  },
+  {
+    "name": "Sonatype",
+    "url": "https://status.maven.org/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Square",
+    "url": "https://www.issquareup.com/",
+    "adapter": "IncidentIoAdapter"
+  },
+  {
+    "name": "Statuspage",
+    "url": "https://metastatuspage.com/",
+    "adapter": "IncidentIoAdapter"
+  },
+  {
+    "name": "Stripe",
+    "url": "https://status.stripe.com/",
+    "adapter": "RSSAdapter"
+  },
+  {
+    "name": "Supabase",
+    "url": "https://status.supabase.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Terraform",
+    "url": "https://status.hashicorp.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "TravisCI",
+    "url": "https://www.traviscistatus.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Trello",
+    "url": "https://trello.status.atlassian.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Twilio",
+    "url": "https://status.twilio.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Vercel",
+    "url": "https://www.vercel-status.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Webflow",
+    "url": "https://status.webflow.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "WorkOS",
+    "url": "https://status.workos.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Zapier",
+    "url": "https://status.zapier.com/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "Zendesk",
+    "url": "https://status.zendesk.com/",
+    "adapter": null
+  },
+  {
+    "name": "Zoom",
+    "url": "https://status.zoom.us/",
+    "adapter": "StatuspageAdapter"
+  },
+  {
+    "name": "npm",
+    "url": "https://status.npmjs.org/",
+    "adapter": "StatuspageAdapter"
+  }
+]

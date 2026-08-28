@@ -33,3 +33,21 @@ Otherwise it asks for the admin credentials.
 
 Run tests with `just test`, not `pytest` — the database port is
 per-worktree, and only the `just` recipes know it.
+
+### Checking the status pages we can read
+
+Status pages are somebody else's software. They get rebuilt, moved to
+another platform, or retired, and the first sign is a service that quietly
+stops updating.
+
+```bash
+just check-pages
+```
+
+It probes every page in `api/polling/data/status_pages.json` and fails if
+one stopped working or changed platform. A page that started working is
+reported and is never a failure. `just check-pages --update` records what
+they serve today.
+
+It reaches the live internet, so it is a command rather than a test — the
+suite blocks sockets on purpose.

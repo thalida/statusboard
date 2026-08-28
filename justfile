@@ -48,6 +48,10 @@ migrate:
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
 
+# Probe the recorded status pages and report any that moved or broke.
+check-pages *args:
+    @{{wt}} ; cd api && uv run python manage.py check_status_pages {{args}}
+
 # Run the test suite.
 test:
     @{{wt}} ; cd api && uv run pytest -n auto
