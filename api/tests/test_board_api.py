@@ -248,3 +248,23 @@ def test_untracking_the_last_component_drops_the_watcher(client, board):
     )
     service.refresh_from_db()
     assert service.watcher_count == 0
+
+
+@pytest.mark.django_db
+def test_tracking_through_the_admin_also_counts(board):
+    """The count decides what gets polled, so the door must not matter.
+
+    Adding an item in the admin used to leave the service uncounted, and
+    therefore unpolled, because only the board endpoints recounted.
+    """
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    component = ComponentFactory(service=service)
+
+    DashboardItem.objects.create(dashboard=board, component=component)
+    service.refresh_from_db()
+    assert service.watcher_count == 1
+
+    DashboardItem.objects.get(dashboard=board, component=component).delete()
+    service.refresh_from_db()
+    assert service.watcher_count == 0

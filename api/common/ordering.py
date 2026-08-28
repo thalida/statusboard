@@ -56,3 +56,14 @@ NEXT_TRANSITION = Coalesce(
         .values("starts_at")[:1]
     ),
 )
+
+
+# A service's own status: the open row of its overall component, which is
+# the provider's page-level reading rather than the worst of its parts.
+OVERALL_SEVERITY = Subquery(
+    ComponentStatus.objects.filter(
+        component__service=OuterRef("pk"),
+        component__is_overall=True,
+        ended_at__isnull=True,
+    ).values("severity")[:1]
+)

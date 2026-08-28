@@ -6,4 +6,5 @@ class StatusPageProvider(models.TextChoices):
     INSTATUS = "instatus", "Instatus"
     BETTERSTACK = "betterstack", "Better Stack"
     INCIDENT_IO = "incident_io", "incident.io"
+    STATUS_IO = "status_io", "status.io"
     RSS = "rss", "RSS feed"

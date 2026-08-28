@@ -1,7 +1,7 @@
 import html
 import logging
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 
@@ -10,6 +10,7 @@ from polling.adapters.services.betterstack import BetterStackAdapter
 from polling.adapters.services.incidentio import IncidentIoAdapter
 from polling.adapters.services.instatus import InstatusAdapter
 from polling.adapters.services.rss import RSSAdapter
+from polling.adapters.services.statusio import StatusIoAdapter
 from polling.adapters.services.statuspage import StatuspageAdapter
 
 # Order matters: RSS is last because it is the fallback, not a match.
@@ -18,6 +19,9 @@ ADAPTERS: tuple[type[Adapter], ...] = (
     StatuspageAdapter,
     InstatusAdapter,
     BetterStackAdapter,
+    # Last of the real adapters: it has no URL to match on, so it is
+    # only ever reached by probing.
+    StatusIoAdapter,
 )
 
 BY_PROVIDER = {adapter.provider: adapter for adapter in ADAPTERS}
@@ -82,14 +86,40 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
 
     # No API. Ask the page where its feed is, which is how a page that
     # publishes nothing machine-readable still tells you.
-    for feed_url in advertised_feeds(url, session):
+    feeds = advertised_feeds(url, session)
+    for feed_url in feeds:
         try:
             if RSSAdapter(feed_url, session=session).fetch_status():
                 return RSSAdapter, feed_url
         except Exception as error:  # noqa: BLE001 — try the next feed
             logger.debug("no usable feed at %s: %s", feed_url, error)
 
+    # A page that points at another host has usually moved there.
+    # intercomstatus.com links finstatus.com, whose own feed 404s while
+    # its API answers, so the host is worth a proper look and not just
+    # the file it named.
+    for origin in _other_origins(url, feeds):
+        for adapter_class in candidates:
+            try:
+                if adapter_class(origin, session=session).fetch_status():
+                    return adapter_class, origin
+            except Exception as error:  # noqa: BLE001 — try the next one
+                logger.debug("%s could not read %s: %s", adapter_class, origin, error)
+
     raise ValueError(f"No adapter could read {url}")
+
+
+def _other_origins(url: str, feeds: list[str]) -> list[str]:
+    """Hosts a page pointed at that are not its own, in order."""
+    here = urlparse(url).netloc.lower().removeprefix("www.")
+    seen, out = set(), []
+    for feed in feeds:
+        parts = urlparse(feed)
+        host = parts.netloc.lower().removeprefix("www.")
+        if host and host != here and host not in seen:
+            seen.add(host)
+            out.append(urlunparse((parts.scheme, parts.netloc, "/", "", "", "")))
+    return out
 
 
 def advertised_feeds(url: str, session=None) -> list[str]:

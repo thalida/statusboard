@@ -8,6 +8,7 @@ from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
     ChoicesDropdownFilter,
+    DropdownFilter,
     RangeDateTimeFilter,
     RangeNumericFilter,
 )
@@ -27,9 +28,9 @@ from common.admin import (
     phase_label,
     severity_label,
 )
-from common.ordering import CURRENT_SEVERITY
+from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY
 from polling.models import Poller, PollRun
-from status.choices import EventKind
+from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
 
 
@@ -220,6 +221,30 @@ class ServiceEventInline(TabularInline):
         return False
 
 
+class ServiceSeverityFilter(DropdownFilter):
+    """Filter services by the status they are actually showing.
+
+    A service has no severity column. It is the open status of its
+    overall component, which is the provider's own page-level reading,
+    so this filters through that rather than on the service.
+    """
+
+    title = _("Status")
+    parameter_name = "severity"
+
+    def lookups(self, request, model_admin):
+        return Severity.choices
+
+    def queryset(self, request, queryset):
+        if not self.value():
+            return queryset
+        return queryset.filter(
+            components__is_overall=True,
+            components__statuses__ended_at__isnull=True,
+            components__statuses__severity=self.value(),
+        )
+
+
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
@@ -230,7 +255,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         "display_related",
     ]
     search_fields = ["name", "slug", "homepage_url"]
+    # Status first: it is what anyone scanning a catalog wants.
     list_filter = [
+        ServiceSeverityFilter,
         "is_featured",
         ("status_page__provider", ChoicesDropdownFilter),
         ("watcher_count", RangeNumericFilter),
@@ -251,7 +278,12 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("status_page", "poller")
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("status_page", "poller")
+            .annotate(severity_now=OVERALL_SEVERITY)
+        )
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):
@@ -266,15 +298,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             {"path": obj.logo, "squared": False, "borderless": True},
         ]
 
-    @display(description=_("Status"), label=SEVERITY_VARIANTS)
+    @display(description=_("Status"), label=SEVERITY_VARIANTS, ordering="severity_now")
     def display_severity(self, obj):
-        row = (
-            obj.components.filter(is_overall=True)
-            .values_list("statuses__severity", flat=True)
-            .filter(statuses__ended_at__isnull=True)
-            .first()
-        )
-        return severity_label(row)
+        return severity_label(obj.severity_now)
 
     @display(description=_("Provider"))
     def provider(self, obj):

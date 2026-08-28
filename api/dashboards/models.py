@@ -42,3 +42,22 @@ class DashboardItem(BaseModel):
                 name="one_item_per_component_per_dashboard",
             )
         ]
+
+    def save(self, *args, **kwargs):
+        """Keep the service's watcher count true.
+
+        It is derived from these rows and it decides what gets polled, so
+        it cannot depend on which door the row came through. Doing this
+        in the board endpoints alone left anything added in the admin
+        uncounted, and therefore unpolled.
+        """
+        super().save(*args, **kwargs)
+        self.component.service.refresh_watcher_count()
+
+    def delete(self, *args, **kwargs):
+        service = self.component.service
+        super().delete(*args, **kwargs)
+        service.refresh_watcher_count()
+
+    def __str__(self):
+        return f"{self.dashboard} / {self.component}"

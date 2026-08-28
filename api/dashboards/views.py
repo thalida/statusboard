@@ -62,11 +62,10 @@ class BoardComponentListView(generics.ListCreateAPIView):
         component = get_object_or_404(
             ServiceComponent, id=request.data.get("component_id")
         )
+        # DashboardItem.save keeps the service's watcher count true.
         _, created = DashboardItem.objects.get_or_create(
             dashboard=board, component=component
         )
-        if created:
-            component.service.refresh_watcher_count()
         return Response(
             ComponentSerializer(component, context={"request": request}).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -87,7 +86,5 @@ class BoardComponentDetailView(APIView):
         item = get_object_or_404(
             DashboardItem, dashboard=board, component_id=component_id
         )
-        service = item.component.service
         item.delete()
-        service.refresh_watcher_count()
         return Response(status=status.HTTP_204_NO_CONTENT)
