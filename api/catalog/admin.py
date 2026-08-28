@@ -26,6 +26,7 @@ from common.admin import (
     change_link,
     filtered_list,
     phase_label,
+    related_count,
     severity_label,
 )
 from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY
@@ -287,7 +288,14 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             super()
             .get_queryset(request)
             .select_related("status_page", "poller")
-            .annotate(severity_now=OVERALL_SEVERITY)
+            .annotate(
+                severity_now=OVERALL_SEVERITY,
+                component_count=related_count(ServiceComponent.objects, "service"),
+                event_count=related_count(ServiceEvent.objects, "service"),
+                status_count=related_count(
+                    ComponentStatus.objects, "component__service"
+                ),
+            )
         )
 
     @display(description=_("Service"), header=True, ordering="name")
@@ -322,27 +330,24 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         return {
             "title": _("Related"),
             "items": [
-                {
-                    "title": _("Components"),
-                    "link": (
-                        reverse("admin:catalog_servicecomponent_changelist")
-                        + f"?service__id__exact={obj.pk}"
-                    ),
-                },
-                {
-                    "title": _("Events"),
-                    "link": (
-                        reverse("admin:status_serviceevent_changelist")
-                        + f"?service__id__exact={obj.pk}"
-                    ),
-                },
-                {
-                    "title": _("Status history"),
-                    "link": (
-                        reverse("admin:status_componentstatus_changelist")
-                        + f"?component__service__id__exact={obj.pk}"
-                    ),
-                },
+                filtered_list(
+                    "admin:catalog_servicecomponent_changelist",
+                    _("Components"),
+                    obj.component_count,
+                    service__id__exact=obj.pk,
+                ),
+                filtered_list(
+                    "admin:status_serviceevent_changelist",
+                    _("Events"),
+                    obj.event_count,
+                    service__id__exact=obj.pk,
+                ),
+                filtered_list(
+                    "admin:status_componentstatus_changelist",
+                    _("Status history"),
+                    obj.status_count,
+                    component__service__id__exact=obj.pk,
+                ),
                 {
                     "title": _("Poll runs"),
                     "link": (
@@ -441,7 +446,11 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             super()
             .get_queryset(request)
             .select_related("service", "parent")
-            .annotate(severity_now=CURRENT_SEVERITY)
+            .annotate(
+                severity_now=CURRENT_SEVERITY,
+                status_count=related_count(ComponentStatus.objects, "component"),
+                event_count=related_count(ServiceEvent.objects, "affected_components"),
+            )
         )
 
     @display(description=_("Component"), header=True, ordering="name")
@@ -466,11 +475,13 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
                 filtered_list(
                     "admin:status_componentstatus_changelist",
                     _("Status history"),
+                    obj.status_count,
                     component__id__exact=obj.pk,
                 ),
                 filtered_list(
                     "admin:status_serviceevent_changelist",
                     _("Events"),
+                    obj.event_count,
                     affected_components__id__exact=obj.pk,
                 ),
             ],

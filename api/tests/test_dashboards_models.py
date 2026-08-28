@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 
 from authentication.models import User
@@ -87,3 +88,60 @@ def test_a_user_signs_their_own_default_board():
 
     board = Dashboard.objects.get(owner=user, is_default=True)
     assert board.created_by == user
+
+
+@pytest.mark.django_db
+def test_an_owner_keeps_their_last_board():
+    # They read a board on sign-in. With none there is nothing to open.
+    user = User.objects.create(email="a@b.com")
+    only = Dashboard.objects.get(owner=user)
+
+    with pytest.raises(ValidationError):
+        only.delete()
+
+    assert Dashboard.objects.filter(owner=user).exists()
+
+
+@pytest.mark.django_db
+def test_the_default_moves_on_when_its_board_goes():
+    user = User.objects.create(email="a@b.com")
+    first = Dashboard.objects.get(owner=user, is_default=True)
+    second = Dashboard.objects.create(owner=user, name="Second")
+
+    first.delete()
+
+    second.refresh_from_db()
+    assert second.is_default
+
+
+@pytest.mark.django_db
+def test_the_last_default_cannot_be_cleared():
+    user = User.objects.create(email="a@b.com")
+    only = Dashboard.objects.get(owner=user)
+
+    only.is_default = False
+    only.save()
+
+    only.refresh_from_db()
+    assert only.is_default
+
+
+@pytest.mark.django_db
+def test_a_default_can_be_cleared_when_another_board_holds_it():
+    user = User.objects.create(email="a@b.com")
+    first = Dashboard.objects.get(owner=user, is_default=True)
+    Dashboard.objects.create(owner=user, name="Second", is_default=True)
+
+    first.refresh_from_db()
+    assert not first.is_default
+
+
+@pytest.mark.django_db
+def test_closing_an_account_still_takes_its_boards():
+    # The rule is on the model. Deleting a user is a bulk path that does
+    # not reach it, which is what lets the account close at all.
+    user = User.objects.create(email="a@b.com")
+
+    user.delete()
+
+    assert not Dashboard.objects.filter(owner_id=user.pk).exists()

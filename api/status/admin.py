@@ -14,6 +14,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
+from catalog.models import ServiceComponent
 from common.admin import (
     SEVERITY_VARIANTS,
     PollerWrittenAdmin,
@@ -22,6 +23,7 @@ from common.admin import (
     phase_label,
     poll_run_link,
     record_column,
+    related_count,
     severity_label,
 )
 from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
@@ -156,6 +158,19 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     ordering = ["-starts_at"]
     inlines = [EventUpdateInline]
 
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("service")
+            .annotate(
+                update_count=related_count(EventUpdate.objects, "event"),
+                component_count=related_count(
+                    ServiceComponent.objects, "service", ref="service_id"
+                ),
+            )
+        )
+
     @display(description=_("When"), ordering="starts_at")
     def display_when(self, obj):
         """The span the event covers.
@@ -206,11 +221,13 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
                 filtered_list(
                     "admin:status_eventupdate_changelist",
                     _("Updates"),
+                    obj.update_count,
                     event__id__exact=obj.pk,
                 ),
                 filtered_list(
                     "admin:catalog_servicecomponent_changelist",
                     _("Components"),
+                    obj.component_count,
                     service__id__exact=obj.service_id,
                 ),
             ],
@@ -238,9 +255,6 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
                 for component in rows
             ),
         )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("service")
 
     @display(
         description=_("Kind"),

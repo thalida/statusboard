@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.db.models import Count
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_celery_beat.admin import (
@@ -27,6 +26,7 @@ from unfold.contrib.filters.admin import (
 from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 
+from catalog.models import ServiceComponent
 from common.admin import (
     BaseModelAdmin,
     InheritedDefaultsMixin,
@@ -34,8 +34,10 @@ from common.admin import (
     change_link,
     filtered_list,
     record_column,
+    related_count,
 )
 from polling.models import Poller, PollRun
+from status.models import ComponentStatus, ServiceEvent
 
 
 class PollRunColumns:
@@ -111,6 +113,19 @@ class PollerAdmin(
     actions_row = ["poll_now", "toggle_pause"]
     actions_detail = ["poll_now", "toggle_pause"]
 
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("service")
+            .annotate(
+                run_count=related_count(PollRun.objects, "poller"),
+                component_count=related_count(
+                    ServiceComponent.objects, "service", ref="service_id"
+                ),
+            )
+        )
+
     @display(description=_("Service"), ordering="service__name")
     def display_service(self, obj):
         return change_link(obj.service)
@@ -137,11 +152,13 @@ class PollerAdmin(
                 filtered_list(
                     "admin:polling_pollrun_changelist",
                     _("Poll runs"),
+                    obj.run_count,
                     poller__service__id__exact=obj.service_id,
                 ),
                 filtered_list(
                     "admin:catalog_servicecomponent_changelist",
                     _("Components"),
+                    obj.component_count,
                     service__id__exact=obj.service_id,
                 ),
             ],
@@ -225,8 +242,8 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
             .get_queryset(request)
             .select_related("poller__service")
             .annotate(
-                status_count=Count("componentstatuss", distinct=True),
-                event_count=Count("serviceevents", distinct=True),
+                status_count=related_count(ComponentStatus.objects, "poll_run"),
+                event_count=related_count(ServiceEvent.objects, "poll_run"),
             )
         )
 

@@ -1,4 +1,5 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.contrib.filters.admin import AutocompleteSelectFilter, RangeDateTimeFilter
@@ -17,7 +18,7 @@ class DashboardItemInline(TabularInline):
 
 @admin.register(Dashboard)
 class DashboardAdmin(BaseModelAdmin, ModelAdmin):
-    list_display = ["display_board", "owner", "is_default", "item_count"]
+    list_display = ["display_board", "display_owner", "is_default", "item_count"]
     search_fields = ["name", "owner__email"]
     list_filter = [
         "is_default",
@@ -29,6 +30,39 @@ class DashboardAdmin(BaseModelAdmin, ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("owner")
+
+    def has_delete_permission(self, request, obj=None):
+        """An owner keeps their last board, so it is not offered.
+
+        The model refuses it too. This is so the button is not there to
+        press in the first place.
+        """
+        if obj is not None and not obj.owner.dashboards.exclude(pk=obj.pk).exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        """Delete one at a time, so the rule on the model is reached.
+
+        A bulk delete goes straight to SQL. The last board of an owner
+        would go with it, and they would sign in to nothing.
+        """
+        kept = []
+        for board in queryset:
+            try:
+                board.delete()
+            except ValidationError:
+                kept.append(str(board))
+        if kept:
+            self.message_user(
+                request,
+                _("Kept %s. An owner keeps their last board.") % ", ".join(kept),
+                messages.WARNING,
+            )
+
+    @display(description=_("Owner"), ordering="owner__email")
+    def display_owner(self, obj):
+        return change_link(obj.owner)
 
     @display(description=_("Board"), header=True, ordering="name")
     def display_board(self, obj):

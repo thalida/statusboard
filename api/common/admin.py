@@ -1,7 +1,8 @@
 """Admin-wide callbacks: the environment badge and the dashboard."""
 
 from django.conf import settings
-from django.db.models import Count, Min, Q
+from django.db.models import Count, IntegerField, Min, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -221,10 +222,32 @@ def change_link(obj, label=None):
     )
 
 
-def filtered_list(model_admin_path, label, **filters):
-    """One entry for a `View` dropdown: a changelist, already filtered."""
+def filtered_list(model_admin_path, label, count=None, **filters):
+    """One entry for a `View` dropdown: a changelist, already filtered.
+
+    The count goes on the label because a link to nothing reads exactly
+    like a link to something until you have opened it.
+    """
     query = "&".join(f"{k}={v}" for k, v in filters.items())
-    return {"title": label, "link": f"{reverse(model_admin_path)}?{query}"}
+    title = label if count is None else f"{label} ({count})"
+    return {"title": title, "link": f"{reverse(model_admin_path)}?{query}"}
+
+
+def related_count(queryset, group_by, ref="pk"):
+    """How many rows are on the other end, without joining to fetch them.
+
+    Several counts on one row, each done as a join, multiply into one
+    another: every service is read once per component per event. So each
+    count asks its own question instead of riding the same query.
+    """
+    counted = (
+        queryset.filter(**{group_by: OuterRef(ref)})
+        .order_by()
+        .values(group_by)
+        .annotate(total=Count("pk"))
+        .values("total")
+    )
+    return Coalesce(Subquery(counted, output_field=IntegerField()), 0)
 
 
 def poll_run_link(obj):
