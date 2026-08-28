@@ -228,7 +228,13 @@ UNFOLD = {
             ],
         },
         {
-            "models": ["polling.poller", "polling.pollrun"],
+            # The beat schedule is polling machinery: it is what decides
+            # when due_pollers runs at all.
+            "models": [
+                "polling.poller",
+                "polling.pollrun",
+                "django_celery_beat.periodictask",
+            ],
             "items": [
                 {
                     "title": _("Pollers"),
@@ -237,6 +243,12 @@ UNFOLD = {
                 {
                     "title": _("Poll runs"),
                     "link": reverse_lazy("admin:polling_pollrun_changelist"),
+                },
+                {
+                    "title": _("Scheduled tasks"),
+                    "link": reverse_lazy(
+                        "admin:django_celery_beat_periodictask_changelist"
+                    ),
                 },
             ],
         },
@@ -265,13 +277,6 @@ UNFOLD = {
                         "title": _("Polling"),
                         "icon": "sync",
                         "link": reverse_lazy("admin:polling_poller_changelist"),
-                    },
-                    {
-                        "title": _("Scheduled tasks"),
-                        "icon": "schedule",
-                        "link": reverse_lazy(
-                            "admin:django_celery_beat_periodictask_changelist"
-                        ),
                     },
                     {
                         "title": _("Boards"),
