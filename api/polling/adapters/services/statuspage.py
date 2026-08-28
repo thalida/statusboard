@@ -54,11 +54,12 @@ class StatuspageAdapter(Adapter):
 
     @classmethod
     def matches(cls, url: str) -> bool:
-        # Instatus and Better Stack also use "status." subdomains.
-        # Rule those out first so they stay on their own adapters.
+        # Instatus, Better Stack and incident.io also use "status."
+        # subdomains. Rule those out so they keep their own adapters.
         return (
             "instatus.com" not in url
             and "betterstack.com" not in url
+            and "incident.io" not in url
             and ("status." in url or "githubstatus" in url or "statuspage.io" in url)
         )
 
@@ -138,18 +139,32 @@ class StatuspageAdapter(Adapter):
             ),
         )
 
+    def _maintenances(self):
+        """Statuspage keeps maintenance on its own endpoint.
+
+        incidents.json never carries a scheduled_maintenances key, unlike
+        summary.json. Some Statuspage-compatible pages — incident.io on a
+        custom domain, for one — serve everything else and answer 404
+        here. A provider with no maintenance to report is not a failed
+        poll, so that is an empty list rather than an error.
+        """
+        try:
+            return self._get("api/v2/scheduled-maintenances.json").get(
+                "scheduled_maintenances", []
+            )
+        except requests.HTTPError as error:
+            if error.response is not None and error.response.status_code == 404:
+                return []
+            raise
+
     def fetch_incidents(self):
-        # Statuspage keeps maintenance on its own endpoint. incidents.json
-        # never carries a scheduled_maintenances key, unlike summary.json.
         incidents = self._get("api/v2/incidents.json")
-        maintenances = self._get("api/v2/scheduled-maintenances.json")
         events = [
             self._event(raw, EventKind.INCIDENT)
             for raw in incidents.get("incidents", [])
         ]
         events += [
-            self._event(raw, EventKind.MAINTENANCE)
-            for raw in maintenances.get("scheduled_maintenances", [])
+            self._event(raw, EventKind.MAINTENANCE) for raw in self._maintenances()
         ]
         return events
 

@@ -15,6 +15,9 @@ from unfold.decorators import display
 from common.admin import (
     SEVERITY_VARIANTS,
     PollerWrittenAdmin,
+    change_link,
+    filtered_list,
+    phase_label,
     poll_run_link,
     severity_label,
 )
@@ -45,10 +48,11 @@ class PhaseFilter(DropdownFilter):
 
 @admin.register(ComponentStatus)
 class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
+    # First column is plain: Django turns it into the link to this row.
     list_display = [
         "component",
+        "display_service",
         "display_severity",
-        "source",
         "started_at",
         "display_poll_run",
     ]
@@ -57,6 +61,10 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     list_filter = [
         ("severity", ChoicesDropdownFilter),
         ("source", ChoicesDropdownFilter),
+        # Also what makes ?component__service__id__exact a permitted
+        # lookup, which the links on the services table rely on.
+        ("component__service", AutocompleteSelectFilter),
+        ("component", AutocompleteSelectFilter),
         ("started_at", RangeDateTimeFilter),
         ("ended_at", RangeDateTimeFilter),
     ]
@@ -73,6 +81,10 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
     @display(description=_("Written by"))
     def display_poll_run(self, obj):
         return poll_run_link(obj)
+
+    @display(description=_("Service"), ordering="component__service__name")
+    def display_service(self, obj):
+        return change_link(obj.component.service)
 
 
 class EventUpdateInline(TabularInline):
@@ -100,13 +112,20 @@ class EventUpdateInline(TabularInline):
 
 @admin.register(ServiceEvent)
 class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
-    list_display = ["title", "service", "display_kind", "display_phase", "starts_at"]
+    list_display = [
+        "title",
+        "display_service",
+        "display_kind",
+        "display_phase",
+        "display_related",
+    ]
     date_hierarchy = "starts_at"
     search_fields = ["title", "service__name", "external_id"]
     list_filter = [
         ("kind", ChoicesDropdownFilter),
         PhaseFilter,
         ("service", AutocompleteSelectFilter),
+        ("affected_components", AutocompleteSelectFilter),
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),
     ]
@@ -136,6 +155,28 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
         return fields + ["display_affected_components", "display_poll_run"]
+
+    @display(description=_("Service"), ordering="service__name")
+    def display_service(self, obj):
+        return change_link(obj.service)
+
+    @display(description=_("View"), dropdown=True)
+    def display_related(self, obj):
+        return {
+            "title": _("Related"),
+            "items": [
+                filtered_list(
+                    "admin:status_eventupdate_changelist",
+                    _("Updates"),
+                    event__id__exact=obj.pk,
+                ),
+                filtered_list(
+                    "admin:catalog_servicecomponent_changelist",
+                    _("Components"),
+                    service__id__exact=obj.service_id,
+                ),
+            ],
+        }
 
     @display(description=_("Written by"))
     def display_poll_run(self, obj):
@@ -177,7 +218,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     @display(description=_("Phase"), label=True, ordering="phase")
     def display_phase(self, obj):
         # A closed phase means the event is over.
-        return obj.phase.replace("_", " ").title()
+        return phase_label(obj)
 
     @display(description=_("Open"), boolean=True)
     def display_open(self, obj):
@@ -186,8 +227,16 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
 
 @admin.register(EventUpdate)
 class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
-    list_display = ["event", "phase", "posted_at"]
+    # First column is plain, so it opens the update itself.
+    list_display = ["event", "display_event", "phase", "posted_at"]
     date_hierarchy = "posted_at"
     search_fields = ["event__title", "body"]
-    list_filter = [("posted_at", RangeDateTimeFilter)]
     autocomplete_fields = ["event"]
+    list_filter = [
+        ("event", AutocompleteSelectFilter),
+        ("posted_at", RangeDateTimeFilter),
+    ]
+
+    @display(description=_("Open event"), ordering="event__title")
+    def display_event(self, obj):
+        return change_link(obj.event, obj.event.title)

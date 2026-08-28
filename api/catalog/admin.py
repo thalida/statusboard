@@ -11,14 +11,23 @@ from unfold.contrib.filters.admin import (
     RangeDateTimeFilter,
     RangeNumericFilter,
 )
+from unfold.contrib.inlines.admin import NonrelatedTabularInline
 from unfold.dataclasses import ActionDialog
 from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
 from catalog.models import Service, ServiceComponent, StatusPage
-from common.admin import SEVERITY_VARIANTS, BaseModelAdmin, severity_label
+from common.admin import (
+    SEVERITY_VARIANTS,
+    BaseModelAdmin,
+    change_link,
+    filtered_list,
+    phase_label,
+    severity_label,
+)
 from common.ordering import CURRENT_SEVERITY
+from polling.models import Poller, PollRun
 from status.choices import EventKind
 from status.models import ComponentStatus, ServiceEvent
 
@@ -71,9 +80,73 @@ class StatusPageInline(StackedInline):
 
     model = StatusPage
     tab = True
+    verbose_name = _("Status page")
+    verbose_name_plural = _("Status page")
     extra = 1
     max_num = 1
     can_delete = False
+
+
+class PollerInline(StackedInline):
+    """How often this service is polled, and how that is going.
+
+    Editable, unlike the records a poll writes. The interval, the
+    cooldown and the pause flag are meant to be tuned here.
+    """
+
+    model = Poller
+    tab = True
+    verbose_name = _("Polling")
+    verbose_name_plural = _("Polling")
+    extra = 0
+    max_num = 1
+    can_delete = False
+    show_change_link = True
+    fields = [
+        "is_paused",
+        "interval_seconds",
+        "cooldown_seconds",
+        "max_interval_seconds",
+        "note",
+        "consecutive_failure_count",
+        "last_success_at",
+        "next_at",
+    ]
+    readonly_fields = ["consecutive_failure_count", "last_success_at", "next_at"]
+
+    def has_add_permission(self, request, obj=None):
+        # A signal makes it with the service. There is never a second one.
+        return False
+
+
+class PollRunInline(NonrelatedTabularInline):
+    """The service's recent polls, read only.
+
+    A PollRun points at a Poller, not at a Service, so this cannot be an
+    ordinary inline. The rows still belong here: a stale reading is
+    explained by the run that produced it.
+    """
+
+    model = PollRun
+    tab = True
+    verbose_name = _("Poll run")
+    verbose_name_plural = _("Poll runs")
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    per_page = 10
+    fields = ["started_at", "ok", "provider", "error"]
+    readonly_fields = fields
+    ordering = ["-started_at"]
+
+    def get_form_queryset(self, service):
+        return PollRun.objects.filter(poller__service=service).order_by("-started_at")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 class ServiceComponentInline(TabularInline):
@@ -85,6 +158,8 @@ class ServiceComponentInline(TabularInline):
 
     model = ServiceComponent
     tab = True
+    verbose_name = _("Component")
+    verbose_name_plural = _("Components")
     extra = 0
     max_num = 0
     can_delete = False
@@ -114,6 +189,8 @@ class ServiceEventInline(TabularInline):
 
     model = ServiceEvent
     tab = True
+    verbose_name = _("Event")
+    verbose_name_plural = _("Events")
     extra = 0
     max_num = 0
     can_delete = False
@@ -136,7 +213,7 @@ class ServiceEventInline(TabularInline):
 
     @display(description=_("Phase"), label=True)
     def display_phase(self, obj):
-        return obj.phase.replace("_", " ").title()
+        return phase_label(obj)
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -144,7 +221,13 @@ class ServiceEventInline(TabularInline):
 
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
-    list_display = ["display_service", "display_severity", "watcher_count", "provider"]
+    list_display = [
+        "display_service",
+        "display_severity",
+        "watcher_count",
+        "provider",
+        "display_related",
+    ]
     search_fields = ["name", "slug", "homepage_url"]
     list_filter = [
         "is_featured",
@@ -156,15 +239,31 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
     actions_list = ["import_from_status_page"]
-    inlines = [StatusPageInline, ServiceComponentInline, ServiceEventInline]
+    # What the service is, then what is happening to it, then how it is
+    # configured, then the log of us reading it.
+    inlines = [
+        ServiceComponentInline,
+        ServiceEventInline,
+        StatusPageInline,
+        PollerInline,
+        PollRunInline,
+    ]
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("status_page", "poller")
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):
-        # Two lines and an avatar initial, so a long catalog stays scannable.
-        return [obj.name, obj.slug, obj.name[:2].upper()]
+        # Two lines and the product's own mark, so a long catalog stays
+        # scannable. Unfold ignores the initials when there is an image,
+        # which is the fallback the spec asks for: a missing logo looks
+        # incomplete, a wrong one names the wrong product.
+        return [
+            obj.name,
+            obj.slug,
+            obj.name[:2].upper(),
+            {"path": obj.logo, "squared": False, "borderless": True},
+        ]
 
     @display(description=_("Status"), label=SEVERITY_VARIANTS)
     def display_severity(self, obj):
@@ -180,6 +279,47 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     def provider(self, obj):
         page = getattr(obj, "status_page", None)
         return page.get_provider_display() if page else "—"
+
+    @display(description=_("View"), dropdown=True)
+    def display_related(self, obj):
+        """Everything hanging off this service, one filtered list each.
+
+        Reaching a service's components meant opening their changelist and
+        filtering it by hand.
+        """
+        return {
+            "title": _("Related"),
+            "items": [
+                {
+                    "title": _("Components"),
+                    "link": (
+                        reverse("admin:catalog_servicecomponent_changelist")
+                        + f"?service__id__exact={obj.pk}"
+                    ),
+                },
+                {
+                    "title": _("Events"),
+                    "link": (
+                        reverse("admin:status_serviceevent_changelist")
+                        + f"?service__id__exact={obj.pk}"
+                    ),
+                },
+                {
+                    "title": _("Status history"),
+                    "link": (
+                        reverse("admin:status_componentstatus_changelist")
+                        + f"?component__service__id__exact={obj.pk}"
+                    ),
+                },
+                {
+                    "title": _("Poll runs"),
+                    "link": (
+                        reverse("admin:polling_pollrun_changelist")
+                        + f"?poller__service__id__exact={obj.pk}"
+                    ),
+                },
+            ],
+        }
 
     @action(
         description=_("Import from URL"),
@@ -254,14 +394,17 @@ class StatusPageAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
         "display_component",
+        "display_service",
         "display_severity",
         "is_overall",
-        "archived_at",
+        "display_related",
     ]
     search_fields = ["name", "external_id", "service__name"]
+    # Service first: it is how anyone narrows a list of every component
+    # of every service.
     list_filter = [
-        "is_overall",
         ("service", AutocompleteSelectFilter),
+        "is_overall",
         ("archived_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["service", "parent"]
@@ -278,7 +421,29 @@ class ServiceComponentAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
     @display(description=_("Component"), header=True, ordering="name")
     def display_component(self, obj):
-        return [obj.name, obj.service.name]
+        return [obj.name, obj.external_id]
+
+    @display(description=_("Service"), ordering="service__name")
+    def display_service(self, obj):
+        return change_link(obj.service)
+
+    @display(description=_("View"), dropdown=True)
+    def display_related(self, obj):
+        return {
+            "title": _("Related"),
+            "items": [
+                filtered_list(
+                    "admin:status_componentstatus_changelist",
+                    _("Status history"),
+                    component__id__exact=obj.pk,
+                ),
+                filtered_list(
+                    "admin:status_serviceevent_changelist",
+                    _("Events"),
+                    affected_components__id__exact=obj.pk,
+                ),
+            ],
+        }
 
     @display(description=_("Status"), label=SEVERITY_VARIANTS, ordering="severity_now")
     def display_severity(self, obj):

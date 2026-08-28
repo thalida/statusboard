@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 
-from status.choices import Severity
+from status.choices import EVENT_PHASES_BY_KIND, Severity
 
 
 def environment_callback(request):
@@ -187,17 +187,50 @@ def severity_label(value):
     return Severity(value).label if value is not None else "—"
 
 
+def change_link(obj, label=None):
+    """A link to another record's own page.
+
+    Every table is a place you arrive from somewhere else, so a related
+    column should carry you on rather than print a name and stop.
+    """
+    if obj is None:
+        return "—"
+    opts = obj._meta
+    return format_html(
+        '<a href="{}" class="text-primary-600 dark:text-primary-500">{}</a>',
+        reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk]),
+        label or str(obj),
+    )
+
+
+def filtered_list(model_admin_path, label, **filters):
+    """One entry for a `View` dropdown: a changelist, already filtered."""
+    query = "&".join(f"{k}={v}" for k, v in filters.items())
+    return {"title": label, "link": f"{reverse(model_admin_path)}?{query}"}
+
+
 def poll_run_link(obj):
     """A link to the poll that wrote this row.
 
     Null on anything seeded by hand, and on rows written before the link
     existed. A reading with no provenance is exactly what this is for.
     """
-    run = obj.poll_run
-    if run is None:
-        return "—"
-    return format_html(
-        '<a href="{}" class="text-primary-600 dark:text-primary-500">{}</a>',
-        reverse("admin:polling_pollrun_change", args=[run.pk]),
-        run,
-    )
+    return change_link(obj.poll_run)
+
+
+def phase_label(event):
+    """The phase's own label, read through the event's kind.
+
+    `phase` carries no choices: an incident and a maintenance window move
+    through different ones, and a flat enum would claim `scheduled` is
+    valid on an incident. So the label comes from the enum that kind
+    names, not from reformatting the stored string.
+    """
+    phases = EVENT_PHASES_BY_KIND.get(event.kind)
+    if phases is None:
+        return event.phase
+    try:
+        return phases(event.phase).label
+    except ValueError:
+        # A provider can invent a phase we have not seen.
+        return event.phase

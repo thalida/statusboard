@@ -22,6 +22,7 @@ ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",
 INSTALLED_APPS = [
     "unfold",
     "unfold.contrib.filters",
+    "unfold.contrib.inlines",
     "unfold.contrib.simple_history",
     "django.contrib.admin",
     "django.contrib.auth",

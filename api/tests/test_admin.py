@@ -13,18 +13,16 @@ def staff_client(client):
     return client
 
 
-def service_form_data(**fields):
-    """The service add form, including a management form per inline.
+def service_form_data(staff_client, **fields):
+    """The service add form, with a management form per inline.
 
-    Derived from ServiceAdmin rather than hardcoded: a browser posts these
-    and a test has to as well, and adding a fourth inline should not fail
-    two unrelated tests with a confusing form error.
+    The prefixes are read off the rendered page rather than derived. One
+    of the inlines is a nonrelated one with no foreign key to work back
+    from, and a browser posts exactly what the page asks for.
     """
-    from django.forms.models import _get_foreign_key
+    import re
 
-    from catalog.admin import ServiceAdmin
-    from catalog.models import Service
-
+    body = staff_client.get(reverse("admin:catalog_service_add")).content.decode()
     data = {
         "name": "",
         "slug": "",
@@ -33,9 +31,7 @@ def service_form_data(**fields):
         "homepage_url": "",
         **fields,
     }
-    for inline in ServiceAdmin.inlines:
-        fk = _get_foreign_key(Service, inline.model)
-        prefix = fk.remote_field.get_accessor_name(model=inline.model).replace("+", "")
+    for prefix in set(re.findall(r'name="([\w-]+)-TOTAL_FORMS"', body)):
         for key in ("TOTAL_FORMS", "INITIAL_FORMS", "MIN_NUM_FORMS", "MAX_NUM_FORMS"):
             data[f"{prefix}-{key}"] = "0"
     return data
@@ -90,7 +86,9 @@ def test_a_service_can_be_added_from_a_related_popup(staff_client):
 
     url = reverse("admin:catalog_service_add") + "?_to_field=id&_popup=1"
     assert staff_client.get(url).status_code == 200
-    staff_client.post(url, service_form_data(slug="from-popup", name="From popup"))
+    staff_client.post(
+        url, service_form_data(staff_client, slug="from-popup", name="From popup")
+    )
     assert Service.objects.filter(slug="from-popup").exists()
 
 
@@ -165,7 +163,8 @@ def test_the_admin_stamps_who_created_a_row(staff_client):
     from catalog.models import Service
 
     staff_client.post(
-        reverse("admin:catalog_service_add"), service_form_data(name="Stamped")
+        reverse("admin:catalog_service_add"),
+        service_form_data(staff_client, name="Stamped"),
     )
     service = Service.objects.get(name="Stamped")
     assert service.created_by.email == "admin@example.com"
@@ -259,3 +258,83 @@ def test_events_can_be_filtered_by_phase(staff_client):
     assert list(response.context["cl"].queryset) == [
         ServiceEvent.objects.get(external_id="1")
     ]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "url_name",
+    [
+        "admin:catalog_service_changelist",
+        "admin:catalog_servicecomponent_changelist",
+        "admin:status_serviceevent_changelist",
+        "admin:status_componentstatus_changelist",
+        "admin:polling_poller_changelist",
+        "admin:polling_pollrun_changelist",
+    ],
+)
+def test_every_table_links_somewhere(staff_client, url_name):
+    """A table is a place you arrive from somewhere else.
+
+    Each row carries a link to the record it belongs to, so reaching a
+    service's components no longer means filtering a list by hand.
+    """
+    import re
+
+    from django.utils import timezone
+
+    from catalog.models import Service
+    from polling.models import PollRun
+    from status.choices import EventKind, IncidentPhase, Severity, StatusSource
+    from status.models import ComponentStatus, ServiceEvent
+    from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
+
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    component = ComponentFactory(service=service)
+    run = PollRun.objects.create(
+        poller=service.poller,
+        url="https://status.example.com",
+        provider="statuspage",
+        started_at=timezone.now(),
+    )
+    ComponentStatus.objects.create(
+        component=component,
+        severity=Severity.OPERATIONAL,
+        source=StatusSource.PROVIDER,
+        started_at=timezone.now(),
+        poll_run=run,
+    )
+    ServiceEvent.objects.create(
+        service=service,
+        external_id="1",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+        poll_run=run,
+    )
+    assert Service.objects.filter(pk=service.pk).exists()
+
+    body = staff_client.get(reverse(url_name)).content.decode()
+    assert re.search(r'href="/admin/\w+/\w+/[0-9a-f-]{36}/change/"', body), (
+        f"{url_name} has no row that leads anywhere"
+    )
+
+
+@pytest.mark.django_db
+def test_a_service_shows_its_logo_and_falls_back_to_an_initial(staff_client):
+    """A missing logo looks incomplete; a wrong one names the wrong thing.
+
+    Unfold drops the initials when there is an image, which is the
+    fallback the spec asks for.
+    """
+    from tests.factories import ServiceFactory
+
+    ServiceFactory(name="Withlogo", logo="https://cdn.example/mark.png")
+    ServiceFactory(name="Nologo", logo="")
+
+    body = staff_client.get(
+        reverse("admin:catalog_service_changelist")
+    ).content.decode()
+    assert "https://cdn.example/mark.png" in body
+    assert "NO" in body  # the initial standing in for the missing one

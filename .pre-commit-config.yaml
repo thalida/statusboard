@@ -14,8 +14,12 @@ repos:
         # would be a 1300-line diff on prose nobody asked to rewrite.
         exclude: ^docs/specs/
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    # Must match the ruff in api/uv.lock. On different versions the hook
+    # and `just lint` format differently and undo each other, so a commit
+    # fails with "files were modified by this hook" and nothing explains
+    # why.
+    rev: v0.16.4
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
       - id: ruff-format

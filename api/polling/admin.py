@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_celery_beat.admin import (
     ClockedScheduleAdmin,
@@ -25,7 +26,12 @@ from unfold.contrib.filters.admin import (
 from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 
-from common.admin import BaseModelAdmin, PollerWrittenAdmin
+from common.admin import (
+    BaseModelAdmin,
+    PollerWrittenAdmin,
+    change_link,
+    filtered_list,
+)
 from polling.models import Poller, PollRun
 
 
@@ -37,12 +43,14 @@ class PollerAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     which is worse than showing nothing.
     """
 
+    # First column is plain: Django turns it into the link to this record.
     list_display = [
         "service",
         "display_health",
         "consecutive_failure_count",
         "last_success_at",
         "next_at",
+        "display_related",
     ]
     search_fields = ["service__name", "service__slug"]
     list_filter = [
@@ -55,6 +63,30 @@ class PollerAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     ordering = ["-consecutive_failure_count", "next_at"]
     actions_row = ["poll_now", "toggle_pause"]
     actions_detail = ["poll_now", "toggle_pause"]
+
+    @display(description=_("View"), dropdown=True)
+    def display_related(self, obj):
+        return {
+            "title": _("Related"),
+            "items": [
+                {
+                    "title": _("Service"),
+                    "link": reverse(
+                        "admin:catalog_service_change", args=[obj.service_id]
+                    ),
+                },
+                filtered_list(
+                    "admin:polling_pollrun_changelist",
+                    _("Poll runs"),
+                    poller__service__id__exact=obj.service_id,
+                ),
+                filtered_list(
+                    "admin:catalog_servicecomponent_changelist",
+                    _("Components"),
+                    service__id__exact=obj.service_id,
+                ),
+            ],
+        }
 
     @display(
         description=_("Health"),
@@ -103,7 +135,15 @@ class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
     here, not a number to go looking for.
     """
 
-    list_display = ["poller", "display_ok", "provider", "started_at", "display_error"]
+    # First column is plain, so it opens the run and its error text.
+    list_display = [
+        "poller",
+        "display_service",
+        "display_ok",
+        "provider",
+        "started_at",
+        "display_error",
+    ]
     date_hierarchy = "started_at"
     search_fields = ["poller__service__name", "url", "error"]
     list_filter = [
@@ -117,6 +157,10 @@ class PollRunAdmin(PollerWrittenAdmin, ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("poller__service")
+
+    @display(description=_("Service"), ordering="poller__service__name")
+    def display_service(self, obj):
+        return change_link(obj.poller.service)
 
     @display(
         description=_("Result"),
