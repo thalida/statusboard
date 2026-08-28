@@ -153,7 +153,9 @@ UNFOLD = {
     # chrome makes an active link read as a status. This is a warm sand
     # pulled from the cream #F5EDD6 instead — same family, no collision
     # with up-green or down-red. Base runs from the cream down through the
-    # brand brown #29140A, so a dark page reads brown rather than black.
+    # brand brown, so a dark page reads brown rather than black. The last
+    # steps sit below the old near-black: brown reads lighter than a
+    # neutral at the same value, so it has to go further down.
     "COLORS": {
         "primary": {
             "50": "#FBF8EF",
@@ -176,10 +178,10 @@ UNFOLD = {
             "400": "#97806A",
             "500": "#6E5847",
             "600": "#533F31",
-            "700": "#3D2C21",
-            "800": "#2E2018",
-            "900": "#29140A",
-            "950": "#1A0D06",
+            "700": "#3A281C",
+            "800": "#241610",
+            "900": "#150C06",
+            "950": "#0A0503",
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
