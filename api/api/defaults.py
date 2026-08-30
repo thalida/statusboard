@@ -70,3 +70,20 @@ SYSTEM_EMAIL = "system@statusboard.invalid"
 # How long a sign-in link works for. Long enough to walk to a phone,
 # short enough that a link left in an inbox is not a key.
 MAGIC_LINK_TTL = timedelta(minutes=15)
+
+
+# Where a sign-in link opens. The client serves that page, not Django, so
+# it is a whole address rather than a reverse.
+MAGIC_LINK_PATH = "/verify"
+
+
+def site_url(configured, port):
+    """The address a link in an email points at.
+
+    Blank counts as unset. .env.local is shared by every worktree, and
+    each serves on its own port. A value written there would be wrong in
+    all the others, so blank follows the worktree.
+
+    The path is joined onto it, so a trailing slash would reach nothing.
+    """
+    return (configured or "").strip().rstrip("/") or f"http://localhost:{port}"

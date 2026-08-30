@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 # Re-exported so `django.conf.settings` carries them. See api/defaults.py.
 from api.defaults import (  # noqa: F401
     DEFAULT_PAGE_SIZE,
+    MAGIC_LINK_PATH,
     MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,
@@ -19,6 +20,7 @@ from api.defaults import (  # noqa: F401
     POLL_MAX_INTERVAL_SECONDS,
     SYSTEM_EMAIL,
     Environment,
+    site_url,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -364,10 +366,6 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.app>"
 )
 
-# Where a sign-in link opens. The client serves it, not Django, so it is
-# a whole address rather than a reverse. A hardcoded production host sent
-# every tester a link to somewhere they were not working.
-SITE_URL = os.environ.get(
-    "SITE_URL", f"http://localhost:{os.environ.get('DJANGO_PORT', '8000')}"
-).rstrip("/")
-MAGIC_LINK_PATH = "/verify"
+# A hardcoded production host sent every tester a link to somewhere they
+# were not working. See `site_url` for what blank means.
+SITE_URL = site_url(os.environ.get("SITE_URL"), os.environ.get("DJANGO_PORT", "8000"))

@@ -155,3 +155,19 @@ def test_the_subject_is_one_line():
     subject = mail.outbox[0].subject
     assert "\n" not in subject
     assert subject == "Your sign-in link for Statusboard"
+
+
+@pytest.mark.parametrize("given", ["", "   ", None])
+def test_a_blank_site_url_falls_back_to_this_worktree(given):
+    # .env.local is shared by every worktree, and each serves on its own
+    # port. A value written there would be wrong in all the others.
+    from api.defaults import site_url
+
+    assert site_url(given, "54999") == "http://localhost:54999"
+
+
+def test_a_site_url_loses_its_trailing_slash():
+    # The path is joined onto it, so two slashes would reach nothing.
+    from api.defaults import site_url
+
+    assert site_url("https://statusboard.app/", "8000") == "https://statusboard.app"
