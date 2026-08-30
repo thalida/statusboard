@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
+from api.defaults import Environment
 from catalog.models import Service
 from dashboards.models import Dashboard, DashboardItem
 
@@ -14,9 +15,10 @@ SERVICES = [
     "https://status.twilio.com",
     "https://status.openai.com",
 ]
-# What the board tracks. The rest of the catalog stays untracked, which
-# is what makes "tracked" mean anything on the dashboard.
-TRACKED = "https://www.githubstatus.com"
+# What the board tracks, out of the catalog above. The rest stays
+# untracked, which is what makes "tracked" mean anything on the
+# dashboard, so keep this shorter than SERVICES.
+TRACKED = ["https://www.githubstatus.com"]
 
 
 class Command(BaseCommand):
@@ -34,7 +36,7 @@ class Command(BaseCommand):
     help = "Import a few real status pages and track one, for local development."
 
     def handle(self, *args, **options):
-        if settings.ENVIRONMENT != "local":
+        if settings.ENVIRONMENT is not Environment.LOCAL:
             raise CommandError(
                 f"seed_dev is local-only; ENVIRONMENT is {settings.ENVIRONMENT!r}."
             )
@@ -44,30 +46,34 @@ class Command(BaseCommand):
         if owner is None:
             raise CommandError("No admin to own a board. Run `just env` first.")
 
-        tracked = None
+        imported = {}
         for url in SERVICES:
             service, created = Service.objects.import_from_url(url)
+            imported[url] = service
             self.stdout.write(
                 f"{'imported' if created else 'already had'} {service.name} "
                 f"({service.components.count()} components)"
             )
-            if url == TRACKED:
-                tracked = service
 
         board = owner.default_dashboard or Dashboard.objects.filter(owner=owner).first()
         if board is None:
             raise CommandError("The admin has no board.")
 
-        # The rollup, not a leaf: it is the row a new user would add
-        # first, and tracking it is what makes the service polled.
-        overall = tracked.components.filter(is_overall=True).first()
-        _, added = DashboardItem.objects.get_or_create(
-            dashboard=board,
-            component=overall,
-            defaults={"created_by": owner, "updated_by": owner},
-        )
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"{'tracked' if added else 'already tracking'} {overall} on {board.name}"
+        for url in TRACKED:
+            service = imported.get(url)
+            if service is None:
+                raise CommandError(f"{url} is in TRACKED but not in SERVICES.")
+            # The rollup, not a leaf: it is the row a new user would add
+            # first, and tracking it is what makes the service polled.
+            overall = service.components.filter(is_overall=True).first()
+            _, added = DashboardItem.objects.get_or_create(
+                dashboard=board,
+                component=overall,
+                defaults={"created_by": owner, "updated_by": owner},
             )
-        )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"{'tracked' if added else 'already tracking'} {overall} "
+                    f"on {board.name}"
+                )
+            )

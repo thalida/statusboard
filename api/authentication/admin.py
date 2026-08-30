@@ -1,7 +1,19 @@
 from django import forms
 from django.contrib import admin
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.forms import ReadOnlyPasswordHashField
+from django.contrib.auth.models import Group
 from django.utils.translation import gettext_lazy as _
+from rest_framework_simplejwt.token_blacklist.admin import (
+    BlacklistedTokenAdmin as BaseBlacklistedTokenAdmin,
+)
+from rest_framework_simplejwt.token_blacklist.admin import (
+    OutstandingTokenAdmin as BaseOutstandingTokenAdmin,
+)
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 from unfold.admin import ModelAdmin
 from unfold.contrib.filters.admin import (
     AutocompleteSelectFilter,
@@ -9,7 +21,8 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
-from authentication.models import SYSTEM_EMAIL, MagicLinkToken, User
+from api.defaults import SYSTEM_EMAIL
+from authentication.models import MagicLinkToken, User
 from common.admin import (
     BaseModelAdmin,
     ScopedAutocompleteSelect,
@@ -192,3 +205,21 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
         if obj.used_at:
             return "Used"
         return "Usable" if obj.is_usable else "Expired"
+
+
+# Django registers Group and simplejwt registers its two token tables, all
+# with plain `admin.ModelAdmin`. Inside Unfold those pages render
+# unstyled: no sidebar, no filters, a different form. Rebuilding each
+# class over `ModelAdmin` keeps the behaviour and takes the chrome. The
+# same is done for the beat schedules in `polling.admin`.
+RESTYLED_AUTH_ADMIN = [
+    (Group, BaseGroupAdmin),
+    (OutstandingToken, BaseOutstandingTokenAdmin),
+    (BlacklistedToken, BaseBlacklistedTokenAdmin),
+]
+
+for _model, _base in RESTYLED_AUTH_ADMIN:
+    admin.site.unregister(_model)
+    admin.site.register(
+        _model, type(f"Unfold{_base.__name__}", (_base, ModelAdmin), {})
+    )

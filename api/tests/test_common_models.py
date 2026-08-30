@@ -1,5 +1,6 @@
 import uuid
 
+import pytest
 from django.db import models
 
 from common.models import BaseModel
@@ -36,3 +37,19 @@ def test_audit_columns_exist_and_are_optional():
         assert field.null is True, (
             f"{name} must be null — the poller writes rows with no user"
         )
+
+
+@pytest.mark.django_db
+def test_the_system_account_exists_before_anything_writes():
+    # A migration makes it, so a fresh database has an author to name
+    # before the first import or signal runs.
+    from django.contrib.auth import get_user_model
+
+    from api.defaults import SYSTEM_EMAIL
+
+    account = get_user_model().objects.system()
+    assert account.email == SYSTEM_EMAIL
+    assert account.is_bot is True
+    assert account.is_active is False
+    # It signed itself, so no row the system wrote is left unsigned.
+    assert account.created_by_id == account.pk

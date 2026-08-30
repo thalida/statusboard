@@ -15,6 +15,12 @@ class BaseModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     # An audit trail, so nobody fills these in. The admin stamps them.
+    #
+    # `related_name="+"` asks Django for no reverse accessor. Every model
+    # in this project inherits both fields, so the default names would
+    # collide on User the moment a second model existed, and the ones
+    # that did not collide would be noise: `user.pollrun_set` meaning
+    # "runs this person happens to have edited".
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

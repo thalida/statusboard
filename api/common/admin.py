@@ -16,6 +16,7 @@ from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import display
 
+from api.defaults import Environment
 from status.choices import EVENT_PHASES_BY_KIND, Severity
 
 
@@ -25,18 +26,21 @@ def environment_callback(request):
     Acting on production while believing it is local is the mistake worth
     making loud.
     """
+    # `default` is the neutral label. Local is not a warning, and a blue
+    # badge would read as the maintenance colour. Settings validates the
+    # variable, so there is no unknown value to fall back for.
     return {
-        # `default` is the neutral label. Local is not a warning, and a
-        # blue badge would read as the maintenance colour.
-        "local": ["Local", "default"],
-        "staging": ["Staging", "warning"],
-        "production": ["Production", "danger"],
-    }.get(settings.ENVIRONMENT, [settings.ENVIRONMENT.title(), "warning"])
+        Environment.LOCAL: ["Local", "default"],
+        Environment.STAGING: ["Staging", "warning"],
+        Environment.PRODUCTION: ["Production", "danger"],
+    }[settings.ENVIRONMENT]
 
 
 def environment_prefix_callback(request):
     """Put the environment in the browser tab, where a stray tab shows it."""
-    return "" if settings.ENVIRONMENT == "production" else f"[{settings.ENVIRONMENT}]"
+    if settings.ENVIRONMENT is Environment.PRODUCTION:
+        return ""
+    return f"[{settings.ENVIRONMENT}]"
 
 
 def dashboard_callback(request, context):

@@ -96,3 +96,37 @@ def test_the_project_tunables_come_from_one_module():
         "POLL_MAX_INTERVAL_SECONDS",
     ):
         assert getattr(settings, name) == getattr(defaults, name)
+
+
+def test_the_environment_is_one_of_a_known_set():
+    from django.conf import settings
+
+    from api.defaults import Environment
+
+    assert isinstance(settings.ENVIRONMENT, Environment)
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("local", "local"),
+        ("  Production  ", "production"),
+        ("STAGING", "staging"),
+        ("", "local"),
+        (None, "local"),
+    ],
+)
+def test_the_environment_is_normalised(given, expected):
+    # Case and stray whitespace are the shape a typo usually takes.
+    from api.defaults import Environment
+
+    assert Environment.parse(given) is Environment(expected)
+
+
+def test_an_unknown_environment_is_refused():
+    # Falling back would colour a production banner as an unknown
+    # deployment and let the seeding commands run there.
+    from api.defaults import Environment
+
+    with pytest.raises(ValueError, match="Expected one of"):
+        Environment.parse("prod")

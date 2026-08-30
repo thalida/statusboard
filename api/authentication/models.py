@@ -1,5 +1,4 @@
 import secrets
-from datetime import timedelta
 
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import (
@@ -11,19 +10,13 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from api.defaults import MAGIC_LINK_TTL, SYSTEM_EMAIL
 from common.models import BaseModel
-
-MAGIC_LINK_TTL = timedelta(minutes=15)
 
 
 def _unusable_password():
     # Give every new row an unusable password, even outside `create_user`.
     return make_password(None)
-
-
-# The domain is reserved by RFC 2606, so no mail can leave for it and no
-# person can ever hold the address.
-SYSTEM_EMAIL = "system@statusboard.invalid"
 
 
 class UserManager(BaseUserManager):
@@ -37,12 +30,13 @@ class UserManager(BaseUserManager):
 
         A row written by a poll carries its run instead. The run says
         which request read the page, which is more than a name.
+
+        A fetch, not a get_or_create. The account is made by a migration,
+        so every database has it before anything writes. Creating it here
+        as well would mean two makers of one row, and a database that had
+        lost it would carry on quietly instead of saying so.
         """
-        user, _ = self.get_or_create(
-            email=SYSTEM_EMAIL,
-            defaults={"is_active": False, "is_bot": True},
-        )
-        return user
+        return self.get(email=SYSTEM_EMAIL)
 
     def create_user(self, email, **extra):
         user = self.model(email=self.normalize_email(email), **extra)
@@ -86,6 +80,9 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     #
     # SET_NULL rather than CASCADE: deleting a board must not delete the
     # person who read it. `Dashboard.delete` moves this on instead.
+    # No reverse accessor: `dashboard.user_set` would read as "whose
+    # board is this", which `Dashboard.owner` already answers. This says
+    # only which of their boards opens first.
     default_dashboard = models.ForeignKey(
         "dashboards.Dashboard",
         verbose_name="Default board",

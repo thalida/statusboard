@@ -3,6 +3,7 @@ from pathlib import Path
 
 import dj_database_url
 from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
@@ -11,10 +12,13 @@ from dotenv import load_dotenv
 # Re-exported so `django.conf.settings` carries them. See api/defaults.py.
 from api.defaults import (  # noqa: F401
     DEFAULT_PAGE_SIZE,
+    MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,
     POLL_INTERVAL_SECONDS,
     POLL_MAX_INTERVAL_SECONDS,
+    SYSTEM_EMAIL,
+    Environment,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +29,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env.local")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "local")
+# The banner colour and the local-only commands both branch on this, so a
+# value nobody recognises stops the process here.
+try:
+    ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
+except ValueError as error:
+    raise ImproperlyConfigured(str(error)) from error
 # A wildcard accepts any Host header, and a laptop running the dev server
 # is usually also on a network. Debug adds the loopback names the server
 # is actually reached by, and nothing else. `0.0.0.0` is one of them

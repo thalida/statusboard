@@ -553,7 +553,7 @@ def test_the_system_account_is_in_every_database():
     something happened to write a row, and the admin showed an author
     nobody could look up.
     """
-    from authentication.models import SYSTEM_EMAIL
+    from api.defaults import SYSTEM_EMAIL
 
     assert User.objects.filter(email=SYSTEM_EMAIL).exists()
 
@@ -562,7 +562,7 @@ def test_the_system_account_is_in_every_database():
 def test_the_system_account_cannot_be_deleted(staff_client):
     from django.test import RequestFactory
 
-    from authentication.models import SYSTEM_EMAIL
+    from api.defaults import SYSTEM_EMAIL
 
     admin_user = User.objects.get(email="admin@example.com")
     request = RequestFactory().get("/")

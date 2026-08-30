@@ -4,6 +4,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
+from api.defaults import Environment
+
 
 class Command(BaseCommand):
     """Create the local development admin, idempotently.
@@ -23,7 +25,7 @@ class Command(BaseCommand):
     help = "Create the local dev admin from DJANGO_SUPERUSER_EMAIL and _PASSWORD."
 
     def handle(self, *args, **options):
-        if settings.ENVIRONMENT != "local":
+        if settings.ENVIRONMENT is not Environment.LOCAL:
             raise CommandError(
                 f"seed_admin is local-only; ENVIRONMENT is {settings.ENVIRONMENT!r}."
             )
