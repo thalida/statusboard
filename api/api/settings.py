@@ -144,6 +144,9 @@ UNFOLD = {
     # anywhere the light theme needs it.
     "LOGIN": {"image": lambda request: static("statusboard/icon-ultramarine.svg")},
     "SITE_URL": None,
+    # One theme. The palette is ultramarine on a near-black ground and
+    # the light half was never designed, only tolerated.
+    "THEME": "dark",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "SHOW_BACK_BUTTON": True,
@@ -152,8 +155,6 @@ UNFOLD = {
     "ENVIRONMENT": "common.admin.environment_callback",
     "ENVIRONMENT_TITLE_PREFIX": "common.admin.environment_prefix_callback",
     "DASHBOARD_CALLBACK": "common.admin.dashboard_callback",
-    # Unfold's primary button has no dark variant. See the file.
-    "STYLES": [lambda request: static("statusboard/admin.css")],
     "SITE_DROPDOWN": [
         {"icon": "api", "title": _("API docs"), "link": "/"},
         {"icon": "schema", "title": _("OpenAPI schema"), "link": "/schema/"},
@@ -173,22 +174,36 @@ UNFOLD = {
     # further than a neutral would: a saturated hue reads lighter than a
     # grey of the same value.
     "COLORS": {
-        # There is no accent hue, so `primary` is bone at the steps the
-        # dark theme reads and ink at the steps the light theme reads.
-        # Unfold takes its dark link from primary-500 and its light link
-        # and button from primary-600, so those two carry the accent.
+        # One theme, so one ramp. `primary` used to hold bone at the
+        # steps the dark theme reads and ink at the steps the light one
+        # reads, which only worked where Unfold pairs a class with a
+        # `dark:` variant. It does not always: `bg-primary-600` under
+        # white text and the current page number are written once, for
+        # both themes, and both took the light theme's ink on the dark
+        # page. Forcing the theme lets these be one ordinary ramp.
+        #
+        # Two roles decide the two shades that matter, and they pull
+        # against each other. 500 is read as text (the link, fifty
+        # places), so it is measured against the page: 5.7:1. 600 is
+        # filled and carries white (buttons, the add link, the site
+        # icon), so it is measured against white: 4.8:1. Neither can be
+        # pushed further without failing the other.
+        #
+        # Still no accent hue. These are the ultramarine neutrals, so a
+        # link is the ground lightened rather than a colour that would
+        # read as a state.
         "primary": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
             "200": "#DEDEF0",
             "300": "#C6C5E4",
-            "400": "#F5F2EA",
-            "500": "#EDE9E0",
-            "600": "#12123A",
-            "700": "#1A193F",
-            "800": "#0D0C2B",
-            "900": "#06061F",
-            "950": "#030310",
+            "400": "#C6C5E4",
+            "500": "#8A88B8",
+            "600": "#6F6F92",
+            "700": "#3B3A66",
+            "800": "#1A193F",
+            "900": "#12123A",
+            "950": "#0D0C2B",
         },
         # Unfold paints the dark page with base-900, its cards with
         # base-800 and its borders with base-700, and the light page with
