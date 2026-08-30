@@ -360,6 +360,3 @@ SPECTACULAR_SETTINGS = {
 }
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-
-# For seeding a local database by hand. Only .env.local sets it.
-ADMIN_EDITABLE_POLLER_DATA = os.environ.get("ADMIN_EDITABLE_POLLER_DATA") == "1"

@@ -343,18 +343,17 @@ class PollerWrittenAdmin(BaseModelAdmin):
     Only the three permissions are refused. Django still renders the
     detail page read-only, so a poll error stays readable.
 
-    ADMIN_EDITABLE_POLLER_DATA lifts this for seeding a local database by
-    hand. It is off unless .env.local sets it.
+    Seed a database with `just seed-dev`, which polls for real.
     """
 
     def has_add_permission(self, request, obj=None):
-        return settings.ADMIN_EDITABLE_POLLER_DATA
+        return False
 
     def has_change_permission(self, request, obj=None):
-        return settings.ADMIN_EDITABLE_POLLER_DATA
+        return False
 
     def has_delete_permission(self, request, obj=None):
-        return settings.ADMIN_EDITABLE_POLLER_DATA
+        return False
 
 
 # Lower is worse, so the scale runs danger to success.

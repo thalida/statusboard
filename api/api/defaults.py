@@ -7,6 +7,11 @@ intervals for one service.
 
 No environment is read here. `settings.py` loads `.env.local` before it
 reads any variable, so anything from the environment belongs there.
+
+A duration is a timedelta unless something else fixes its type. The poll
+values are seconds because they are also `PositiveIntegerField` columns
+on Poller, and the API publishes them as integers. The link lifetime is
+neither, so it stays a timedelta and is added to a datetime.
 """
 
 from datetime import timedelta
@@ -57,7 +62,6 @@ POLL_COOLDOWN_SECONDS = 60
 # Backoff doubles up to this. A provider that is down for a day is polled
 # hourly, not every five minutes.
 POLL_MAX_INTERVAL_SECONDS = 3600
-
 
 # Who the system writes as. RFC 2606 reserves the domain. No mail leaves
 # for it, and nobody can hold the address.
