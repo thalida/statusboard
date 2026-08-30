@@ -48,6 +48,15 @@ migrate:
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
 
+# Fill an empty local database: the admin, a small catalog, one tracked
+# service. Fetches three real status pages, so it needs the network.
+seed-dev:
+    @{{wt}} ; cd api && uv run python manage.py seed_dev
+
+# Drop this worktree's database and build it again from nothing.
+reset:
+    @{{wt}} ; docker compose down -v ; just up ; just migrate ; just seed-dev
+
 # Probe the recorded status pages and report any that moved or broke.
 check-pages *args:
     @{{wt}} ; cd api && uv run python manage.py check_status_pages {{args}}
