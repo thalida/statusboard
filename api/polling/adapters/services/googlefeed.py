@@ -3,8 +3,8 @@ from urllib.parse import urljoin
 from catalog.choices import StatusPageProvider
 from polling.adapters.services.rss import RSSAdapter
 
-# Google's status dashboards publish a feed at a fixed path and link it
-# nowhere the page's markup can be read from.
+# Google's status dashboards publish a feed at a fixed path. Nothing in
+# the page's markup links to it.
 FEED_PATH = "en/feed.atom"
 
 HOSTS = ("status.firebase.google.com", "google.com/appsstatus")

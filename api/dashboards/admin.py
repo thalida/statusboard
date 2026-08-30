@@ -24,8 +24,8 @@ class DashboardItemInline(TabularInline):
     autocomplete_fields = ["component"]
 
 
-# Which board is the default is a pointer on the user, so it is a
-# comparison here rather than a column to read.
+# Which board is the default is a pointer on the user. So it is a
+# comparison here, not a column to read.
 IS_DEFAULT = ExpressionWrapper(
     Q(owner__default_dashboard=F("pk")), output_field=BooleanField()
 )

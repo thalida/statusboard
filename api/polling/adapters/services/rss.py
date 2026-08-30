@@ -43,11 +43,12 @@ class RSSAdapter(Adapter):
     def _feed(self):
         """Parse the feed, or refuse.
 
-        This is the fallback adapter, so anything unrecognised lands
-        here — including pages that are not feeds at all. feedparser is
-        lenient and returns an empty feed for HTML, which used to become
-        one synthetic component reading OPERATIONAL. A page we cannot
-        read must fail the poll, not invent green for it.
+        This is the fallback adapter. Anything unrecognised lands here,
+        pages that are not feeds included.
+
+        feedparser is lenient and returns an empty feed for HTML. That
+        became one synthetic component reading OPERATIONAL. A page we
+        cannot read must fail the poll, not invent green.
         """
         session = self.session or requests
         feed = feedparser.parse(session.get(self.url, timeout=10).text)

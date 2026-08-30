@@ -230,9 +230,8 @@ def test_an_event_carries_no_component_ids():
 def test_suggestions_put_what_is_broken_ahead_of_what_is_popular():
     """Severity sits ahead of popularity on purpose.
 
-    A mid-popularity service that is broken right now is worth surfacing
-    over a more popular one that is fine, which is the whole premise of
-    the public view.
+    A middling service that is broken now beats a popular one that is
+    fine. That is the premise of the public view.
     """
     popular = ServiceFactory(name="Popular", watcher_count=500)
     StatusPageFactory(service=popular)
@@ -250,8 +249,8 @@ def test_suggestions_put_what_is_broken_ahead_of_what_is_popular():
 
 @pytest.mark.django_db
 def test_a_featured_service_still_leads():
-    # Featured is the cold-start seed: on day one nothing has watchers
-    # and nothing has been polled, so it is the whole list.
+    # Featured is the cold-start seed. On day one nothing has watchers
+    # and nothing is polled, so it is the whole list.
     plain = ServiceFactory(name="Plain")
     StatusPageFactory(service=plain)
     _with_status(plain, Severity.MAJOR_OUTAGE, is_overall=True)

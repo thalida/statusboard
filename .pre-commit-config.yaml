@@ -9,10 +9,10 @@ repos:
     rev: v0.42.0
     hooks:
       - id: markdownlint
-        # The design spec is an approved document with 436 long lines. It
-        # has never passed this hook. Reflowing it to land a URL change
-        # would be a 1300-line diff on prose nobody asked to rewrite.
-        exclude: ^docs/specs/
+        # Two approved documents have never passed this hook: the design
+        # spec and the plan it was built from. Reflowing either would be
+        # a huge diff on prose nobody asked to rewrite.
+        exclude: ^docs/(specs|superpowers)/
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Must match the ruff in api/uv.lock. On different versions the hook
     # and `just lint` format differently and undo each other, so a commit
@@ -23,3 +23,13 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  - repo: local
+    hooks:
+      # Three of the prose rules in AGENTS.md are mechanical. Review kept
+      # having to raise them, so they are checked here.
+      - id: check-prose
+        name: comments follow AGENTS.md
+        entry: python3 bin/check_prose.py
+        language: system
+        types: [python]
+        exclude: ^api/[^/]+/migrations/

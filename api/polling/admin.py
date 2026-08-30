@@ -194,16 +194,15 @@ class PollerAdmin(
 
     @display(description=_("Interval"), ordering="interval_seconds")
     def display_interval(self, obj):
-        # What it actually polls at. The column is blank when the poller
-        # takes the deployment default, so the number was not readable
-        # from the table at all.
+        # What it actually polls at. The column is blank on a poller
+        # that takes the default, so the table never showed a number.
         return f"{obj.effective_interval_seconds}s"
 
     def has_add_permission(self, request):
         """There is never a service without one, so there is none to add.
 
-        A signal on Service creates it, and the column is one-to-one, so
-        the form could only offer a duplicate the database refuses.
+        A signal on Service creates it, and the column is one-to-one.
+        The form could only offer a duplicate the database refuses.
         """
         return False
 
@@ -344,9 +343,9 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     def display_related(self, obj):
         """What the run wrote.
 
-        A run is only worth opening for what it did to the tables. Read
-        without this you can see a reading came from a run and not the
-        rest of what that same run changed.
+        A run is only worth opening for what it did to the tables.
+        Without this you see that a reading came from a run. You do not
+        see the rest of what that run changed.
         """
         return {
             "title": _("Wrote"),
@@ -392,10 +391,11 @@ class PollingScheduleAdmin(PeriodicTaskAdmin):
         return False
 
     # `regtask` is a picker that rewrites `task`. Readonly it cannot be
-    # rendered at all — Django drops a readonly field from the form and
-    # then cannot resolve it, which is a 500 on the change page. It is
-    # dropped from the form instead, and nothing is lost: `task` is
-    # right below it and says the same thing.
+    # rendered: Django drops a readonly field, then cannot resolve it.
+    # That is a 500 on the change page.
+    #
+    # So it is dropped from the form. Nothing is lost, because `task`
+    # sits below it and says the same thing.
     HIDDEN = {"regtask"}
 
     def get_fieldsets(self, request, obj=None):

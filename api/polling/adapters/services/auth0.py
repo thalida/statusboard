@@ -12,12 +12,12 @@ class Auth0Adapter(RSSAdapter):
     """Auth0, whose status is per tenant.
 
     There is no feed for Auth0 as a whole. Every feed is scoped to one
-    tenant, so nothing can be discovered from status.auth0.com alone and
+    tenant. Nothing can be discovered from status.auth0.com alone, so
     the URL has to carry the tenant.
 
     This exists to say that. Without it the page fails like any
-    unreadable one, and the reason — that only the person adding it knows
-    their tenant — never reaches them.
+    unreadable one. The reason never reaches the person adding it, and
+    only they know their tenant.
     """
 
     provider = StatusPageProvider.AUTH0

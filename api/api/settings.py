@@ -35,16 +35,14 @@ try:
     ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 except ValueError as error:
     raise ImproperlyConfigured(str(error)) from error
-# A wildcard accepts any Host header, and a laptop running the dev server
-# is usually also on a network. Debug adds the loopback names the server
-# is actually reached by, and nothing else. `0.0.0.0` is one of them
-# because that is what runserver binds to and what gets typed. Anything
-# further, a phone on the same wifi hitting the machine's LAN address,
-# goes in ALLOWED_HOSTS in .env.local.
+# A wildcard accepts any Host header. The dev machine is usually on a
+# network too. So debug adds the loopback names and nothing else.
+# `0.0.0.0` is one: runserver binds to it. A LAN address goes in
+# .env.local.
 #
-# `"".split(",")` is `[""]`, not `[]`: a deployment with the variable
-# unset would have looked configured and matched nothing. Empty entries
-# are dropped so it stays empty, which Django refuses out loud.
+# `"".split(",")` is `[""]`, not `[]`. Unset, that looked configured and
+# matched nothing. Blank entries are dropped, so Django refuses an empty
+# list out loud.
 LOCAL_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", ".localhost"]
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
@@ -201,24 +199,15 @@ UNFOLD = {
     # grey. The dark end goes further than a neutral. A saturated hue
     # reads lighter than a grey of the same value.
     "COLORS": {
-        # One theme, so one ramp. `primary` used to hold bone at the
-        # steps the dark theme reads and ink at the steps the light one
-        # reads, which only worked where Unfold pairs a class with a
-        # `dark:` variant. It does not always: `bg-primary-600` under
-        # white text and the current page number are written once, for
-        # both themes, and both took the light theme's ink on the dark
-        # page. Forcing the theme lets these be one ordinary ramp.
+        # One theme, so one ramp. Unfold writes `bg-primary-600` once,
+        # for both themes. The old ramp held ink there, for the light
+        # theme, and painted it on the dark page.
         #
-        # Two roles decide the two shades that matter, and they pull
-        # against each other. 500 is read as text (the link, fifty
-        # places), so it is measured against the page: 5.7:1. 600 is
-        # filled and carries white (buttons, the add link, the site
-        # icon), so it is measured against white: 4.8:1. Neither can be
-        # pushed further without failing the other.
+        # Two shades matter, and they pull apart. 500 is read as text,
+        # so it is measured against the page: 5.7:1. 600 is filled and
+        # carries white: 4.8:1. Neither moves without failing the other.
         #
-        # Still no accent hue. These are the ultramarine neutrals, so a
-        # link is the ground lightened rather than a colour that would
-        # read as a state.
+        # Still no accent hue. These are ultramarine neutrals.
         "primary": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -232,23 +221,17 @@ UNFOLD = {
             "900": "#12123A",
             "950": "#0D0C2B",
         },
-        # Unfold paints the dark page with base-900, its cards with
-        # base-800 and its borders with base-700, and the light page with
-        # base-50. So those four steps carry the palette's ground,
-        # surface and edge rather than sitting wherever an even ramp
-        # would put them. Read the step roles off the templates before
-        # moving any of these.
+        # Unfold paints the page with base-900 and cards with base-800.
+        # Borders take base-700. So four steps carry ground, surface and
+        # edge. Read the roles off the templates before moving one.
         #
-        # The dark steps are set by contrast against the page, not by
-        # lightness: a deep blue holds very little luminance, so a step
-        # that looks like a step on a ramp is not one on a screen.
+        # The dark steps are set by contrast, not by lightness. A deep
+        # blue holds little luminance. A step on a ramp is not a step on
+        # a screen.
         #
-        # Two failures got us here. At 1.05:1 the card was invisible and
-        # a table could not be read. At 1.42:1 with 30% saturation it
-        # was a purple slab, because Unfold fills whole blocks with
-        # base-800 — a section header, an active tab — not just card
-        # backgrounds. The card is 1.22:1 at 18% saturation now, which
-        # reads as a lift rather than as a colour.
+        # At 1.05:1 the card was invisible. At 1.42:1 it was a purple
+        # slab, because Unfold fills whole blocks with base-800. The
+        # card is 1.22:1 now, which reads as a lift.
         "base": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -264,15 +247,10 @@ UNFOLD = {
         },
     },
     "COMMAND": {"search_models": True, "show_history": True},
-    # The sidebar is two levels deep and cannot nest an item under an item.
-    # Tabs carry the relationship instead: a status history belongs to the
-    # component it describes, not to a separate area of the admin. A sidebar
-    # entry also stays active while you are on one of its tabs.
-    # The sidebar is two levels deep and cannot nest an item under an
-    # item. Tabs carry the relationship instead: a component belongs to a
-    # service, and a status history to a component, so all four are one
-    # page rather than four sidebar entries. A sidebar entry stays active
-    # while you are on any of its tabs.
+    # The sidebar is two levels deep. It cannot nest an item under an
+    # item, so tabs carry the relationship. A component belongs to a
+    # service, and a status history to a component. All four are one
+    # page. The sidebar entry stays active on any of its tabs.
     "TABS": [
         {
             "models": [

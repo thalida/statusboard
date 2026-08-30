@@ -35,8 +35,8 @@ def worktree_root() -> pathlib.Path:
     """This checkout's top level.
 
     Every path here is anchored to it. Resolving against the cwd would
-    hand a different port file to anyone running from api/, while the
-    containers stayed bound to the first one.
+    hand a different port file to anyone running from api/. The
+    containers would stay bound to the first one.
     """
     return pathlib.Path(
         subprocess.run(

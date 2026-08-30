@@ -33,8 +33,8 @@ from status.models import ComponentStatus, EventUpdate, ServiceEvent
 class PhaseFilter(DropdownFilter):
     """Phase is a plain column, so its options are assembled here.
 
-    An incident and a maintenance window move through different phases,
-    which is why the field carries no choices of its own.
+    An incident and a maintenance window move through different
+    phases. So the field carries no choices of its own.
     """
 
     title = _("Phase")
@@ -69,9 +69,9 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         "component__service__name",
         "component__service__slug",
     ]
-    # Also what makes ?component__service__id__exact and
-    # ?poll_run__id__exact permitted lookups, which is how the services
-    # table and a poll run reach the readings they own.
+    # This is also what permits ?component__service__id__exact and
+    # ?poll_run__id__exact. The services table and a poll run reach
+    # their own readings that way.
     list_filter = [
         ("component__service", AutocompleteSelectFilter),
         ("component", AutocompleteSelectFilter),

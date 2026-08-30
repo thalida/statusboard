@@ -45,8 +45,8 @@ def test_every_url_is_absolute_and_https(pages):
 def test_every_recorded_adapter_still_exists(pages):
     """A renamed adapter would otherwise show as every page breaking.
 
-    The baseline stores class names, so deleting or renaming one has to
-    fail here rather than in a probe run against the live internet.
+    The baseline stores class names. Deleting or renaming one has to
+    fail here, not in a probe against the live internet.
     """
     for page in pages:
         if page["adapter"] is not None:

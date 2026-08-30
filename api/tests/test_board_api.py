@@ -254,8 +254,8 @@ def test_untracking_the_last_component_drops_the_watcher(client, board):
 def test_tracking_through_the_admin_also_counts(board):
     """The count decides what gets polled, so the door must not matter.
 
-    Adding an item in the admin used to leave the service uncounted, and
-    therefore unpolled, because only the board endpoints recounted.
+    Only the board endpoints recounted. Adding an item in the admin
+    left the service uncounted, and so unpolled.
     """
     service = ServiceFactory()
     StatusPageFactory(service=service)

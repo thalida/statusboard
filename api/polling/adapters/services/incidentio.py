@@ -10,9 +10,9 @@ class IncidentIoAdapter(StatuspageAdapter):
     already treats as "no maintenance to report".
 
     Only pages on an incident.io domain are named here. A page on a
-    company's own domain is wire-identical to Statuspage, so the URL
-    cannot tell them apart and it is recorded as statuspage. It still
-    polls correctly, which is what matters.
+    company's own domain is wire-identical to Statuspage. The URL cannot
+    tell them apart, so it is recorded as statuspage. It still polls
+    correctly.
     """
 
     provider = StatusPageProvider.INCIDENT_IO

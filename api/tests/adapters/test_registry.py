@@ -104,7 +104,7 @@ def test_no_adapter_answers_for_a_page_that_is_not_its_own():
     """Probing punishes an adapter that ignores its URL.
 
     One that answered regardless would claim every page nothing else
-    could read, and report its own provider's events under another
+    could read. Its own provider's events would land under another
     service's name.
     """
     from polling.adapters.registry import ADAPTERS
@@ -128,10 +128,11 @@ def test_no_adapter_answers_for_a_page_that_is_not_its_own():
 def test_probing_never_offers_a_company_adapter_someone_elses_page():
     """The bug this guards against was live, twice.
 
-    Several company adapters read a path other platforms also serve —
-    Oracle's api/v2/status.json is one Statuspage answers — so being
-    tried against a foreign page meant claiming it and reporting the
-    wrong company's status under that service's name.
+    Several company adapters read a path other platforms also serve.
+    Statuspage answers Oracle's api/v2/status.json.
+
+    Tried against a foreign page, one claimed it. The wrong company's
+    status was reported under that service's name.
     """
     from polling.adapters.registry import ADAPTERS, RSSAdapter, detect
 

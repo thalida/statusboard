@@ -20,11 +20,12 @@ SIZES = re.compile(r'sizes=["\'](\d+)x\d+["\']', re.IGNORECASE)
 def find_logo(page_url: str, session=None) -> str:
     """The product's icon from its status page, or "" if there is none.
 
-    Returns the largest icon offered, because a favicon is often 16px and
-    a row wants better. An icon served from a parent domain is discarded:
-    Google's mark on a Google Slides page names the wrong product, and a
-    wrong logo misidentifies a row while a missing one merely falls back
-    to an initial.
+    Returns the largest icon offered. A favicon is often 16px and a row
+    wants better.
+
+    An icon from a parent domain is discarded. Google's mark on a Google
+    Slides page names the wrong product. A wrong logo misidentifies a
+    row; a missing one falls back to an initial.
     """
     try:
         response = (session or requests).get(page_url, timeout=10)

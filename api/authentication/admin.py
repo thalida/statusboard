@@ -36,10 +36,11 @@ from dashboards.models import Dashboard
 class UserForm(forms.ModelForm):
     """The user form, with the password left where it is.
 
-    A plain field renders the stored hash in an editable box. Anybody
-    typing a new password there writes it in as the hash: the account
-    can never sign in again, and the password sits in the column in the
-    clear. This shows it and does not take a new one.
+    A plain field renders the stored hash in an editable box. Typing a
+    new password there writes it in as the hash. The account can never
+    sign in again, and the password sits in the column in the clear.
+
+    This shows the hash and takes nothing.
 
     There is no change-password screen to link to. Signing in is a magic
     link, and the only password is the seeded admin's.
@@ -65,9 +66,9 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     # A person can have many boards, and a plain dropdown would list
     # every board of every owner.
     autocomplete_fields = ["default_dashboard"]
-    # Django orders the form by the model's fields, and PermissionsMixin
-    # declares its own first, so `is_superuser` sat above the address
-    # and away from the other two flags it belongs with.
+    # Django orders the form by the model's fields, and
+    # PermissionsMixin declares its own first. So `is_superuser` sat
+    # above the address, away from the two flags it belongs with.
     fieldsets = [
         (None, {"fields": ["email", "password"]}),
         (_("Default board"), {"fields": ["default_dashboard"]}),
@@ -128,9 +129,9 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """The system account stays. It signs rows it did not sign twice.
 
-        Removing it blanks the author on everything the importer and the
-        signals made, and the next migrate makes a new one that is not
-        the same account.
+        Removing it blanks the author on everything the importer and
+        the signals made. The next migrate makes a new one, and it is
+        not the same account.
         """
         if obj is not None and obj.email == SYSTEM_EMAIL:
             return False

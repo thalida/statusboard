@@ -145,8 +145,8 @@ def test_an_owner_is_never_left_without_a_default():
 
 @pytest.mark.django_db
 def test_closing_an_account_still_takes_its_boards():
-    # The rule is on the model. Deleting a user is a bulk path that does
-    # not reach it, which is what lets the account close at all.
+    # The rule is on the model. Deleting a user is a bulk path and
+    # never reaches it, which is what lets the account close.
     user = User.objects.create(email="a@b.com")
 
     user.delete()

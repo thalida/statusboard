@@ -10,6 +10,10 @@ Comments, docstrings, commit messages and documentation follow ASD-STE100.
 - A standalone `—` is allowed as an empty-cell marker. It is a placeholder,
   not a separator.
 
+Three of these are checked, by `just prose` and by a pre-commit hook:
+sentence length, dashes, and the length of one comment paragraph. The
+rest is judgement.
+
 A comment says **why**, never what the line already says.
 
 - Do not narrate the edit that produced the code.

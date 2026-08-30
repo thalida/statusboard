@@ -12,9 +12,10 @@ class Dashboard(BaseModel):
     )
     name = models.CharField(max_length=200, default="My board")
 
-    # Which board is the default is on the user, as `default_dashboard`.
-    # A column here would be one flag per board with a rule saying only
-    # one may be set, and a rule can be broken. One pointer cannot.
+    # Which board is the default sits on the user, as
+    # `default_dashboard`. A column here would be a flag per board with
+    # a rule saying only one may be set. A rule breaks. A pointer does
+    # not.
 
     @property
     def is_default(self):
@@ -23,9 +24,8 @@ class Dashboard(BaseModel):
     def delete(self, *args, **kwargs):
         """The default moves on. The last board does not go at all.
 
-        Deleting a user takes their boards with it, and that path is a
-        bulk one that never reaches this method, so an account can still
-        be closed.
+        Deleting a user takes their boards with it. That path is a bulk
+        one and never reaches this method, so an account still closes.
         """
         owner = self.owner
         heir = (
@@ -69,10 +69,10 @@ class DashboardItem(BaseModel):
     def save(self, *args, **kwargs):
         """Keep the service's watcher count true.
 
-        It is derived from these rows and it decides what gets polled, so
-        it cannot depend on which door the row came through. Doing this
-        in the board endpoints alone left anything added in the admin
-        uncounted, and therefore unpolled.
+        It is derived from these rows and decides what gets polled. So
+        it cannot depend on which door the row came through. In the
+        board endpoints alone, an admin edit went uncounted, and so
+        unpolled.
         """
         super().save(*args, **kwargs)
         self.component.service.refresh_watcher_count()

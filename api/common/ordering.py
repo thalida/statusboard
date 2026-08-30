@@ -58,8 +58,8 @@ NEXT_TRANSITION = Coalesce(
 )
 
 
-# A service's own status: the open row of its overall component, which is
-# the provider's page-level reading rather than the worst of its parts.
+# A service's own status is the open row of its overall component. That
+# is the provider's page-level reading, not the worst of its parts.
 OVERALL_SEVERITY = Subquery(
     ComponentStatus.objects.filter(
         component__service=OuterRef("pk"),

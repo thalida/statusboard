@@ -9,8 +9,8 @@ from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
 
 API = "https://api.status.io/1.0/status/{page_id}"
 
-# The page embeds its own id. There is no way to reach the API without it,
-# and no way to tell a status.io page from any other by its URL.
+# The page embeds its own id. The API cannot be reached without it, and
+# no URL tells a status.io page from any other.
 PAGE_ID = re.compile(
     r"statuspage_id[\"']?\s*[:=]\s*[\"']([0-9a-f]{16,})", re.IGNORECASE
 )

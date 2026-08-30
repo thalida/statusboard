@@ -17,12 +17,12 @@ def apply_fetch(service, components, events, source, run=None):
     `run` is the PollRun that produced this data. Stamping it makes a
     reading traceable back to the fetch that wrote it.
 
-    Nobody types any of this, so every row is signed by the system
-    account. A blank author reads the same as one that was lost, and a
-    component carries no run to say where it came from instead.
+    Nobody types any of this, so the system account signs every row. A
+    blank author reads the same as one that was lost, and a component
+    carries no run to say otherwise.
     """
     # A poll writes to the service it read. Nothing in the arguments
-    # ties them together, so a run from another poller would file one
+    # ties them together. A run from another poller would file one
     # service's readings under another.
     if run is not None and run.poller.service_id != service.pk:
         raise ValueError(
@@ -39,8 +39,8 @@ def apply_fetch(service, components, events, source, run=None):
 def _signed(author, **fields):
     """The same fields, for an update and for a create.
 
-    `update_or_create` cannot tell the two apart on its own, and a row
-    records who made it once, not again on every poll.
+    `update_or_create` cannot tell the two apart. A row records who
+    made it once, not again on every poll.
     """
     return {
         "defaults": {**fields, "updated_by": author},
@@ -116,15 +116,15 @@ def _write_statuses(components, rows, source, author, run=None):
 def _affected(service, rows, external_ids):
     """The components an event names, as rows of this service.
 
-    Read from `rows` alone, an event lost its link to any component the
-    provider stopped listing, because `rows` holds only what this fetch
-    described. So anything missing is looked up among the service's own
-    components, archived ones included.
+    `rows` holds only what this fetch described. Read from it alone, an
+    event lost its link to any component the provider stopped listing.
+    So anything missing is looked up among the service's own components,
+    archived ones included.
 
-    Nothing is created. A component the provider never described would
-    be one we invented, and it would show on the catalog and on boards
-    as though the provider published it. An id that matches nothing is
-    dropped: the event is still recorded, against the service.
+    Nothing is created. A component the provider never described is one
+    we invented. It would show on the catalog and on boards as though
+    the provider published it. An id that matches nothing is dropped,
+    and the event is still recorded against the service.
     """
     named = [rows[e] for e in external_ids if e in rows]
     unknown = [e for e in external_ids if e not in rows]

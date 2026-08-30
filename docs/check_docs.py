@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Cross-check the API schema against the data model.
 
-Every field an endpoint returns must be produced by a ModelSerializer: either a
-column on the mapped model, or a declared derivation. Anything else is a field
-that cannot be built.
+Every field an endpoint returns must come from a ModelSerializer. It is a
+column on the mapped model, or a declared derivation. Anything else is a
+field that cannot be built.
 """
 
 import pathlib
@@ -106,9 +106,9 @@ for schema in api["components"]["schemas"]:
     if schema not in BACKED and schema not in PLAIN:
         fail.append(f"{schema} is neither model-backed nor declared plain")
 
-# ── every declared derivation is still in use ───────────────────────────────
-# A derivation left behind after its field is renamed or deleted is a claim the
-# API no longer makes, and nothing else here would notice it.
+# Every declared derivation is still in use. One left behind after its
+# field is renamed is a claim the API no longer makes. Nothing else here
+# would notice it.
 used = {
     f"{schema}.{f}" for schema in api["components"]["schemas"] for f in props(schema)
 }

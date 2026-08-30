@@ -19,10 +19,11 @@ def _parse(value):
 class SalesforceAdapter(Adapter):
     """Salesforce Trust, whose obvious list is the wrong one.
 
-    The API offers nearly four thousand instances — every pod and sandbox
-    a customer might sit on. Those are not components anyone reads. The
-    twenty-one products are, and each carries a live count of the
-    incidents open against it.
+    The API offers nearly four thousand instances. That is every pod
+    and sandbox a customer might sit on, and nobody reads them.
+
+    The twenty-one products are the components. Each carries a live
+    count of the incidents open against it.
     """
 
     provider = StatusPageProvider.SALESFORCE

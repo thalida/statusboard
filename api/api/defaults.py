@@ -1,9 +1,9 @@
 """The numbers this project chose, in one place.
 
 Django's settings and every third-party block stay in `settings.py`.
-These are ours, and several of them are read twice: the API publishes the
-page sizes at `/meta`, DRF needs the same page size, and a Poller row
-overrides the poll intervals for one service.
+These are ours, and several are read twice. `/meta` publishes the page
+sizes. DRF needs the same page size. A Poller row overrides the poll
+intervals for one service.
 
 No environment is read here. `settings.py` loads `.env.local` before it
 reads any variable, so anything from the environment belongs there.
@@ -16,9 +16,9 @@ from enum import StrEnum
 class Environment(StrEnum):
     """Which deployment this is.
 
-    The admin banner is coloured by it and the seeding commands refuse to
-    run outside DEVELOPMENT, so a typo must not read as an unknown
-    environment. `settings.py` normalises it and rejects anything else.
+    The banner is coloured by it. The seeding commands refuse to run
+    outside DEVELOPMENT. So a typo must not read as a fourth
+    environment. `settings.py` normalises it and rejects the rest.
     """
 
     DEVELOPMENT = "development"
@@ -49,8 +49,8 @@ DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 
 # How often a tracked service is polled, when its Poller says nothing.
-# The cooldown is the floor: nothing is polled more often than this, and
-# a poller past due by more than one is late rather than waiting.
+# The cooldown is the floor. Nothing is polled more often. A poller past
+# due by more than one is late, not waiting.
 POLL_INTERVAL_SECONDS = 300
 POLL_COOLDOWN_SECONDS = 60
 
@@ -59,8 +59,8 @@ POLL_COOLDOWN_SECONDS = 60
 POLL_MAX_INTERVAL_SECONDS = 3600
 
 
-# Who the system writes as. The domain is reserved by RFC 2606, so no
-# mail can leave for it and no person can ever hold the address.
+# Who the system writes as. RFC 2606 reserves the domain. No mail leaves
+# for it, and nobody can hold the address.
 SYSTEM_EMAIL = "system@statusboard.invalid"
 
 # How long a sign-in link works for. Long enough to walk to a phone,

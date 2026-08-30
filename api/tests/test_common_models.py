@@ -22,8 +22,8 @@ def test_primary_key_is_a_uuid_not_an_integer():
 
 
 def test_keys_sort_by_the_order_they_were_made():
-    # Version 7 leads with a millisecond timestamp, so a key lands at the
-    # end of the index rather than in the middle of it.
+    # Version 7 leads with a millisecond timestamp. A key lands at the
+    # end of the index, not in the middle.
     keys = [uuid.uuid7() for _ in range(50)]
     assert all(key.version == 7 for key in keys)
     assert keys == sorted(keys)

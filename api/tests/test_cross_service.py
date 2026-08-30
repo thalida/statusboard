@@ -1,10 +1,11 @@
 """Nothing of one service may point at another service's rows.
 
 Every one of these was allowed before. A foreign key names a row, never
-whose row it is, so the database cannot refuse any of them: the service
-is one join away and Postgres has no way to compare across that without
-a trigger. So the rules live on the models, the pickers in the admin
-offer only what is allowed, and these hold both in place.
+whose row it is. The service is one join away, and Postgres cannot
+compare across that without a trigger.
+
+So the rules live on the models. The admin pickers offer only what is
+allowed, and these tests hold both in place.
 """
 
 from datetime import timedelta
@@ -144,7 +145,7 @@ def test_an_event_keeps_a_component_the_provider_stopped_listing(two_services):
     """`rows` holds only what this fetch described.
 
     Read from that alone, an event lost its link to any component that
-    dropped off the page, and the incident then affected nothing.
+    dropped off the page. The incident then affected nothing.
     """
     mine, _ = two_services
     ComponentFactory(service=mine, external_id="sms", name="SMS")
@@ -214,8 +215,8 @@ def test_a_reading_cannot_end_before_it_starts(two_services):
 
 @pytest.mark.django_db
 def test_the_database_refuses_a_backwards_reading_too(two_services):
-    # Both ends are written by the poller, so this one is a constraint
-    # and not only a rule a form obeys.
+    # Both ends are written by the poller. So this is a constraint, not
+    # only a rule a form obeys.
     from django.db import IntegrityError, transaction
 
     mine, _ = two_services
@@ -303,8 +304,8 @@ def test_a_poller_cannot_poll_every_no_seconds(two_services):
 
 @pytest.mark.django_db
 def test_the_longest_interval_cannot_be_shorter_than_the_interval(two_services):
-    # Backoff is min(interval * 2 ** failures, ceiling), so a ceiling
-    # under the interval applies with no failures and speeds it up.
+    # Backoff is min(interval * 2 ** failures, ceiling). A ceiling
+    # under the interval applies with no failures, and speeds it up.
     mine, _ = two_services
     mine.poller.interval_seconds = 600
     mine.poller.max_interval_seconds = 60

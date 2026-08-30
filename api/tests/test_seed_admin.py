@@ -36,8 +36,8 @@ def test_running_it_twice_does_not_create_a_second_admin(credentials):
 def made_anybody():
     """Whether the command created a person.
 
-    A bot account is put in every database as migrate finishes, so an
-    empty table is no longer what "created nobody" looks like.
+    A migration puts a bot account in every database. An empty table is
+    no longer what "created nobody" looks like.
     """
     return User.objects.filter(is_bot=False).exists()
 

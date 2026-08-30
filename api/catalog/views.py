@@ -73,8 +73,8 @@ class ServiceFilter(filters.FilterSet):
 
 
 class ComponentFilter(filters.FilterSet):
-    # `status` is not a relation — a component has a history of statuses and
-    # the open one is current. Same contract name, same annotation.
+    # `status` is not a relation. A component has a history of statuses
+    # and the open one is current. Same contract name, same annotation.
     status__severity = filters.NumberFilter(field_name="severity_now")
     status__severity__lte = filters.NumberFilter(
         field_name="severity_now", lookup_expr="lte"
@@ -100,13 +100,12 @@ class ServiceEventFilter(filters.FilterSet):
 class ServiceViewSet(ReadOnlyModelViewSet):
     """Every read of a service, in one place.
 
-    The list and the detail are the same resource, and a component list
-    and an event list belong to a service rather than standing alone, so
-    they are detail actions rather than separate views.
+    The list and the detail are the same resource. A component list and
+    an event list belong to a service, so they are detail actions.
 
     Each action overrides the serializer, filters and ordering it needs.
-    Those names all exist on the class because DRF refuses an initkwarg
-    that is not already an attribute.
+    Those names exist on the class because DRF refuses an initkwarg that
+    is not already an attribute.
     """
 
     permission_classes = [AllowAny]
@@ -119,11 +118,11 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     ordering_fields = ["name", "updated_at"]
     # `suggested` is not a field. Severity sits behind a related path.
     #
-    # Severity ahead of popularity is deliberate: a mid-popularity service
-    # that is broken right now is worth surfacing over a more popular one
-    # that is fine. Lower severity is worse, so ascending puts the broken
-    # first, and a service with no reading yet sorts last rather than
-    # posing as healthy.
+    # Severity ahead of popularity is deliberate. A middling service
+    # that is broken now beats a popular one that is fine.
+    #
+    # Lower severity is worse, so ascending puts the broken first. A
+    # service with no reading sorts last, not as healthy.
     SUGGESTED = ["-is_featured", "severity_now", "-watcher_count", "name"]
     ordering_map = {
         "suggested": SUGGESTED,

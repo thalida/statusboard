@@ -142,11 +142,12 @@ class StatuspageAdapter(Adapter):
     def _maintenances(self):
         """Statuspage keeps maintenance on its own endpoint.
 
-        incidents.json never carries a scheduled_maintenances key, unlike
-        summary.json. Some Statuspage-compatible pages — incident.io on a
-        custom domain, for one — serve everything else and answer 404
-        here. A provider with no maintenance to report is not a failed
-        poll, so that is an empty list rather than an error.
+        incidents.json never carries a scheduled_maintenances key,
+        unlike summary.json. Some compatible pages answer 404 here, such
+        as incident.io on a custom domain.
+
+        A provider with no maintenance to report is not a failed poll.
+        That is an empty list, not an error.
         """
         try:
             return self._get("api/v2/scheduled-maintenances.json").get(

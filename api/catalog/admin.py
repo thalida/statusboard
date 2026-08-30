@@ -50,10 +50,11 @@ class ImportServiceForm(BaseDialogForm):
 class ComponentStatusInline(TabularInline):
     """The component's status history, read only.
 
-    The table is append-only: a poll closes the open row and opens a new
-    one, and a partial unique constraint allows exactly one open row. Hand
-    editing it would either rewrite history the API serves or trip that
-    constraint, so this shows the spans and offers no way to change them.
+    The table is append-only. A poll closes the open row and opens a
+    new one, and a constraint allows exactly one open row.
+
+    Editing it by hand rewrites history the API serves, or trips that
+    constraint. So this shows the spans and changes nothing.
     """
 
     model = ComponentStatus
@@ -79,9 +80,9 @@ class ComponentStatusInline(TabularInline):
 class StatusPageInline(StackedInline):
     """The one thing a service cannot be given automatically.
 
-    A Poller is created by a signal because every field has a default. A
-    status page needs a URL, so it is asked for here instead of leaving a
-    service that can never be polled.
+    A Poller is created by a signal, because every field has a default.
+    A status page needs a URL. It is asked for here, rather than leaving
+    a service that can never be polled.
     """
 
     model = StatusPage
@@ -240,8 +241,8 @@ class ServiceSeverityFilter(DropdownFilter):
     """Filter services by the status they are actually showing.
 
     A service has no severity column. It is the open status of its
-    overall component, which is the provider's own page-level reading,
-    so this filters through that rather than on the service.
+    overall component, the provider's own page-level reading. So this
+    filters through that.
     """
 
     title = _("Status")
@@ -318,8 +319,8 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     actions_row = ["poll_now"]
     actions_detail = ["poll_now"]
     actions_list = ["import_from_status_page"]
-    # What the service is, then what is happening to it, then how it is
-    # configured, then the log of us reading it.
+    # What the service is, then what is happening to it. Then how it
+    # is configured, then the log of us reading it.
     inlines = [
         ServiceComponentInline,
         ServiceEventInline,
@@ -345,10 +346,10 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):
-        # Two lines and the product's own mark, so a long catalog stays
-        # scannable. Unfold ignores the initials when there is an image,
-        # which is the fallback the spec asks for: a missing logo looks
-        # incomplete, a wrong one names the wrong product.
+        # Two lines and the product's own mark, so a long catalog
+        # stays scannable. Unfold ignores the initials when there is an
+        # image. That is the fallback the spec asks for: a missing logo
+        # looks incomplete, a wrong one names the wrong product.
         return [
             obj.name,
             obj.slug,
@@ -460,8 +461,8 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         return request.user.has_perm("catalog.change_service")
 
 
-# StatusPage has no admin of its own. A service has exactly one and it is
-# edited on the service form, so a separate list is a second route to the
+# StatusPage has no admin of its own. A service has exactly one, edited
+# on the service form. A separate list would be a second route to the
 # same field. The model still filters the service list by provider.
 
 
@@ -558,9 +559,9 @@ class ServiceComponentAdmin(
 
     @display(description=_("Component"), header=True, ordering="name")
     def display_component(self, obj):
-        # The second line is where the component sits, not the provider's
-        # key. The key is on the record for anyone who needs it, and it
-        # says nothing to a reader scanning the list.
+        # The second line is where the component sits, not the
+        # provider's key. The key is on the record for anyone who needs
+        # it, and says nothing to a reader scanning a list.
         return [
             obj.name,
             " / ".join([obj.service.name, *(a.name for a in obj.ancestors)]),

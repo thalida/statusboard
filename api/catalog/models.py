@@ -56,15 +56,15 @@ class ServiceManager(models.Manager):
             updated_by=author,
             url=key,
             provider=adapter_class.provider,
-            # Set when the page's own address is not what we read: a
-            # page whose feed lives at a path of its own, for one.
+            # Set when the page's own address is not what we read.
+            # A page whose feed lives at its own path, for one.
             api_url_override="" if fetch_url == key else fetch_url,
         )
         # The Poller comes from the Service signal; one here would duplicate it.
 
-        # An import is a fetch, so it is recorded as one. Without this the
-        # first reading of every service has no provenance, and the poll
-        # log is missing the request that created the rows.
+        # An import is a fetch, so it is recorded as one. Without it
+        # the first reading has no provenance, and the log is missing
+        # the request that made the rows.
         started = timezone.now()
         components = adapter.fetch_status()
         events = adapter.fetch_incidents()
@@ -121,8 +121,8 @@ class Service(BaseModel):
     def refresh_watcher_count(self):
         """Recount the distinct users tracking any part of this service.
 
-        Distinct users, not items. Someone tracking five Twilio components
-        is one watcher, and a counter incremented per item would let one
+        Distinct users, not items. Someone tracking five Twilio
+        components is one watcher. Counting per item would let one
         person outrank a crowd in the suggestion order.
         """
         from django.contrib.auth import get_user_model
@@ -164,11 +164,12 @@ class StatusPage(BaseModel):
     )
     url = models.URLField(unique=True)
     provider = models.CharField(max_length=32, choices=StatusPageProvider.choices)
-    # An override, not a derived value. Each adapter works out its own API
-    # path from `url` — Statuspage joins "api/v2/summary.json" onto it — so
-    # nothing is stored for the normal case. Set this only when that join
-    # lands somewhere wrong, such as a page served on one domain whose API
-    # lives on another.
+    # An override, not a derived value. Each adapter works out its own
+    # API path from `url`. Statuspage joins "api/v2/summary.json" onto
+    # it, so nothing is stored for the normal case.
+    #
+    # Set this only when that join lands somewhere wrong. A page served
+    # on one domain whose API lives on another, for one.
     api_url_override = models.URLField(
         null=True,
         blank=True,
@@ -183,13 +184,13 @@ class StatusPage(BaseModel):
         """The dedupe key, and the URL every poll is built from.
 
         It is both, which is why `www.` is kept. Stripping it made a
-        tidier key and an unfetchable address: githubstatus.com redirects
-        to the www root page, so joining "api/v2/summary.json" onto the
-        stripped host returned the HTML homepage instead of the summary.
+        tidier key and an unfetchable address. githubstatus.com
+        redirects to the www root, so the joined path returned the HTML
+        homepage.
 
-        The cost is that www.example.com and example.com import as two
-        services. That is a duplicate row. Dropping the prefix was a
-        service that could never be polled at all.
+        The cost is that www.example.com and example.com import twice.
+        That is a duplicate row. Dropping the prefix was a service that
+        could never be polled.
         """
         parts = urlparse(url.strip())
         return urlunparse(
@@ -219,14 +220,13 @@ class ServiceComponent(BaseModel):
     )
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
     is_overall = models.BooleanField(verbose_name="Overall", default=False)
-    # Archiving is the flag. The date is kept because `updated_at` cannot
-    # answer "when did the provider drop this": it moves on every save,
-    # so a later rename would erase it. `save` sets and clears the date
-    # from the flag, and a constraint keeps the two from disagreeing, so
-    # there is one fact here rather than two.
-    # `db_default` as well as `default`: the column is NOT NULL, and a
-    # writer that predates it — an old worker mid-deploy — omits it
-    # and the insert fails. The database supplies it instead.
+    # Archiving is the flag. The date is kept because `updated_at`
+    # moves on every save, so a later rename would erase it. `save` sets
+    # the date from the flag, and a constraint holds them together.
+    #
+    # `db_default` as well as `default`. The column is NOT NULL. A
+    # writer that predates it, such as an old worker mid-deploy, omits
+    # it and the insert fails. The database supplies it instead.
     is_archived = models.BooleanField(
         verbose_name="Archived", default=False, db_default=False
     )
@@ -272,9 +272,9 @@ class ServiceComponent(BaseModel):
     def clean(self):
         """A component sits under one of its own service's components.
 
-        Nothing in the column says whose component the parent is, so
-        without this a service's tree can reach into another service's
-        and a page would show one product's components under another.
+        Nothing in the column says whose component the parent is.
+        Without this a service's tree reaches into another service's,
+        and a page shows one product's components under another.
         """
         super().clean()
         if self.parent_id is None:

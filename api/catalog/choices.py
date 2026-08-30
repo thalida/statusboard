@@ -2,8 +2,11 @@ from django.db import models
 
 
 class StatusPageProvider(models.TextChoices):
-    """The product whose page is read. A label goes in a column, so
-    each one is the name the product is known by, not its full one."""
+    """The product whose page is read.
+
+    A label goes in a column. Each is the name the product is known by,
+    not its full one.
+    """
 
     STATUSPAGE = "statuspage", "Statuspage"
     INSTATUS = "instatus", "Instatus"

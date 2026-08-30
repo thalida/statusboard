@@ -99,9 +99,10 @@ class ServiceEvent(BaseModel):
     title = models.CharField(max_length=500)
     phase = models.CharField(max_length=32)
     # No rule that the end follows the start. Providers back-date a
-    # resolution below the recorded start, so GitHub and OpenAI both
-    # publish incidents that read as ending before they began. This
-    # mirrors the page; a rule here would fail the poll instead.
+    # resolution below the recorded start. GitHub and OpenAI both
+    # publish incidents that end before they began.
+    #
+    # This mirrors the page. A rule here would fail the poll.
     starts_at = models.DateTimeField(verbose_name="Starts")
     ends_at = models.DateTimeField(verbose_name="Ends", null=True, blank=True)
     # No component is a valid case. A provider can publish an event
@@ -146,9 +147,9 @@ class ServiceEvent(BaseModel):
     def components_of_another_service(self):
         """Any affected component that is not this event's own.
 
-        The relation is many to many, so it is not set until after the
-        row is saved and `clean` cannot see it. The callers that can
-        check it use this.
+        The relation is many to many. It is not set until the row is
+        saved, and `clean` cannot see it. The callers that can check it
+        use this.
         """
         return self.affected_components.exclude(service_id=self.service_id)
 

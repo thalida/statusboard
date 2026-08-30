@@ -73,6 +73,10 @@ test-cov:
 lint:
     cd api && uv run ruff check --fix . && uv run ruff format .
 
+# Check comments and docstrings against AGENTS.md.
+prose *args:
+    @python3 bin/check_prose.py {{args}}
+
 # Run the app: server and poller together. Ctrl-C stops both.
 dev:
     @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \

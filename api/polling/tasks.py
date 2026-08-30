@@ -84,8 +84,8 @@ def poll_service(service_id):
         # Nothing to read and nowhere to record it. A PollRun needs the
         # page's url and provider, so there is not even a row to write.
         return
-    # A run is the top of the trail, so it is the one row with nothing
-    # above it to say where it came from. It signs itself.
+    # A run is the top of the trail. Nothing above it says where it
+    # came from, so it signs itself.
     author = get_user_model().objects.system()
     run = PollRun.objects.create(
         poller=poller,
@@ -132,9 +132,9 @@ def poll_service(service_id):
 def _refresh_metadata(service, metadata, adapter=None):
     """A rename upstream must not leave a stale name on someone's board.
 
-    The logo is fetched only when missing. It is a second request against
-    the provider, and doing it every poll would double the traffic to
-    read something that almost never changes.
+    The logo is fetched only when missing. It is a second request
+    against the provider. Doing it every poll would double the traffic,
+    to read something that almost never changes.
     """
     changed = []
     if adapter is not None and not service.logo:

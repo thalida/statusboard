@@ -46,9 +46,9 @@ def environment_prefix_callback(request):
 def dashboard_callback(request, context):
     """Answer one question: is polling healthy?
 
-    We are the thing that tells you when services break. A stalled poller
-    shows every board a stale green, which is worse than showing nothing,
-    so the landing page leads with the poller and not with row counts.
+    We are the thing that tells you when services break. A stalled
+    poller shows every board a stale green. That is worse than showing
+    nothing, so this page leads with the poller.
     """
     from catalog.models import Service
     from polling.models import Poller, PollRun
@@ -57,9 +57,9 @@ def dashboard_callback(request, context):
     now = timezone.now()
     day_ago = now - timezone.timedelta(hours=24)
 
-    # Not every Poller row is run: an untracked service, or one with no
-    # status page, is never dispatched, so it can be neither late nor
-    # stale. `active_pollers` is the poller's own definition of the set.
+    # Not every Poller row is run. An untracked service is never
+    # dispatched, nor is one with no status page. So neither can be late
+    # or stale. `active_pollers` is the scheduler's own definition.
     late_after = now - timezone.timedelta(seconds=settings.POLL_COOLDOWN_SECONDS)
     active = active_pollers()
     pollers = {
@@ -84,10 +84,11 @@ def dashboard_callback(request, context):
             "detail": f"{Service.objects.count()} in the catalog",
         },
         {
-            # Backoff was the headline and overdue the footnote, so the
-            # card read 0 while a poller had stopped running. Both answer
-            # "is anything not being polled on time", and late is worse.
-            # Late means past due by more than a cooldown, so a poller
+            # Backoff was the headline and overdue the footnote. So
+            # the card read 0 while a poller had stopped. Both answer
+            # one question, and late is the worse answer.
+            #
+            # Late means past due by more than a cooldown. A poller
             # waiting on the next beat is not an alarm.
             "title": "Behind schedule",
             "value": pollers["late"],
@@ -125,9 +126,9 @@ CHART_TRACKED = "#66B5EC"
 def _stalest_card(active, now):
     """The tracked service whose data is oldest, named.
 
-    A `min()` across every poller only moved when the worst one
-    recovered, did not say which one that was, and counted services
-    nobody tracks — which are stale because nothing polls them.
+    A `min()` across every poller moved only when the worst recovered.
+    It did not say which one that was. It also counted services nobody
+    tracks, which are stale because nothing polls them.
     """
     worst = (
         active.select_related("service")
@@ -335,9 +336,9 @@ class BaseModelAdmin:
 class PollerWrittenAdmin(BaseModelAdmin):
     """A record the poller writes. Readable here, never editable.
 
-    `apply_fetch` and `poll_service` own these tables. A hand-written row
-    either invents history the API then serves, or trips a constraint the
-    poller relies on, and the next poll overwrites the edit anyway.
+    `apply_fetch` and `poll_service` own these tables. A hand-written
+    row invents history the API then serves. Or it trips a constraint
+    the poller relies on. The next poll overwrites the edit anyway.
 
     Only the three permissions are refused. Django still renders the
     detail page read-only, so a poll error stays readable.
@@ -419,9 +420,8 @@ class ScopedAutocompleteMixin:
 def audit_section():
     """The trail, folded away at the end of every form.
 
-    It is the same four fields on every record and nobody opens a form
-    to read them, so it closes and sits last rather than pushing the
-    fields somebody came for down the page.
+    It is the same four fields on every record. Nobody opens a form to
+    read them. So it closes, and it sits last.
     """
     return (_("Audit"), {"classes": ["collapse"], "fields": list(AUDIT_FIELDS)})
 
@@ -447,9 +447,9 @@ def record_column(description):
     """The record's own name, for the first column of a changelist.
 
     Django wraps the first column in the link to the record. A foreign
-    key sitting there reads as the related thing but opens this one, so
-    the related thing is left with no link at all. Naming the record
-    instead frees the key to go where it says it goes.
+    key there reads as the related thing but opens this one. The related
+    thing is then left with no link. Naming the record frees the key to
+    go where it says.
     """
 
     @display(description=description)
@@ -462,8 +462,8 @@ def record_column(description):
 def change_link(obj, label=None):
     """A link to another record's own page.
 
-    Every table is a place you arrive from somewhere else, so a related
-    column should carry you on rather than print a name and stop.
+    Every table is a place you arrive from somewhere else. A related
+    column should carry you on, not print a name and stop.
     """
     if obj is None:
         return "—"
@@ -478,8 +478,8 @@ def change_link(obj, label=None):
 def filtered_list(model_admin_path, label, count=None, **filters):
     """One entry for a `View` dropdown: a changelist, already filtered.
 
-    The count goes on the label because a link to nothing reads exactly
-    like a link to something until you have opened it.
+    The count goes on the label. A link to nothing reads like a link to
+    something until you open it.
     """
     query = "&".join(f"{k}={v}" for k, v in filters.items())
     title = label if count is None else f"{label} ({count})"
@@ -489,9 +489,9 @@ def filtered_list(model_admin_path, label, count=None, **filters):
 def related_count(queryset, group_by, ref="pk"):
     """How many rows are on the other end, without joining to fetch them.
 
-    Several counts on one row, each done as a join, multiply into one
-    another: every service is read once per component per event. So each
-    count asks its own question instead of riding the same query.
+    Several counts on one row multiply into one another. Each is a
+    join, so a service is read once per component per event. Each count
+    asks its own question instead.
     """
     counted = (
         queryset.filter(**{group_by: OuterRef(ref)})
@@ -515,10 +515,10 @@ def poll_run_link(obj):
 def phase_label(event):
     """The phase's own label, read through the event's kind.
 
-    `phase` carries no choices: an incident and a maintenance window move
-    through different ones, and a flat enum would claim `scheduled` is
+    `phase` carries no choices. An incident and a maintenance window
+    move through different ones. A flat enum would claim `scheduled` is
     valid on an incident. So the label comes from the enum that kind
-    names, not from reformatting the stored string.
+    names.
     """
     phases = EVENT_PHASES_BY_KIND.get(event.kind)
     if phases is None:
@@ -533,10 +533,11 @@ def phase_label(event):
 class InheritedDefaultsMixin:
     """Say what a blank tuning field will actually do.
 
-    The three Poller intervals fall back to a deployment setting, and the
-    form showed three empty boxes with nothing to say so. The text is
-    built here rather than as model help_text: a settings change would
-    otherwise want a migration to restate a number the database never
+    The three Poller intervals fall back to a deployment setting. The
+    form showed three empty boxes and did not say so.
+
+    The text is built here, not as model help_text. Otherwise a settings
+    change wants a migration, to restate a number the database never
     stores.
     """
 

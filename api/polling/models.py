@@ -1,9 +1,10 @@
 """What to poll, and what happened when we did.
 
-The seam is deliberate. `catalog` holds what exists, `status` holds what we
-observed, and this app holds the machinery between them. Poller is the
-tuning and PollRun is the log, so both belong beside the task that reads
-them rather than split across two other apps.
+The seam is deliberate. `catalog` holds what exists. `status` holds what
+we observed. This app holds the machinery between them.
+
+Poller is the tuning and PollRun is the log. Both belong beside the task
+that reads them.
 """
 
 from django.conf import settings
@@ -24,8 +25,8 @@ class Poller(BaseModel):
     )
 
     # Admin-tunable. Null inherits the deployment default.
-    # At least a second. Zero is not an interval, and it would ask the
-    # provider for the page again the moment the last answer arrived.
+    # At least a second. Zero is not an interval. It would ask the
+    # provider again the moment the last answer arrived.
     interval_seconds = models.PositiveIntegerField(
         verbose_name="Interval",
         null=True,
@@ -64,9 +65,9 @@ class Poller(BaseModel):
         """The ceiling is a ceiling, so it cannot sit below the interval.
 
         Backoff is `min(interval * 2 ** failures, ceiling)`. A ceiling
-        under the interval takes effect with no failures at all, so the
-        longest interval would quietly make the poller faster than the
-        interval it was given.
+        under the interval takes effect with no failures at all. The
+        longest interval would then make the poller faster than the one
+        it was given.
         """
         super().clean()
         interval = self.interval_seconds

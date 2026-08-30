@@ -10,10 +10,12 @@ from status.choices import Severity
 class OracleAdapter(Adapter):
     """Oracle Cloud, which serves half of Statuspage's API and its own half.
 
-    status.json is Statuspage-shaped and carries the page-level reading.
-    components.json is not: it is ninety regions, each with its own
-    service health. The regions are the components — a service-by-region
-    matrix would be thousands of rows nobody reads.
+    status.json is Statuspage-shaped and carries the page-level
+    reading. components.json is not. It is ninety regions, each with its
+    own service health.
+
+    The regions are the components. A service-by-region matrix would be
+    thousands of rows nobody reads.
     """
 
     provider = StatusPageProvider.ORACLE

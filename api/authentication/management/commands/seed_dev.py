@@ -7,9 +7,9 @@ from api.defaults import Environment
 from catalog.models import Service
 from dashboards.models import Dashboard, DashboardItem
 
-# Three real status pages, one of each shape worth having locally: a big
-# tree to navigate, a small one to read whole, and one whose components
-# nest. All Statuspage, because that is the adapter most services use.
+# Three real status pages, one of each shape worth having. A big tree to
+# navigate, a small one to read whole, and one whose components nest.
+# All Statuspage, the adapter most services use.
 SERVICES = [
     "https://www.githubstatus.com",
     "https://status.twilio.com",
@@ -25,7 +25,7 @@ class Command(BaseCommand):
     """Fill an empty local database with something to look at.
 
     `seed_admin` makes the account. This makes the data: a catalog, a
-    board, and one tracked service so the poller has work and the admin
+    board, one tracked service. The poller then has work and the
     dashboard has numbers. Safe to re-run.
 
     It fetches the three status pages, so it needs the network.
@@ -64,7 +64,7 @@ class Command(BaseCommand):
             service = imported.get(url)
             if service is None:
                 raise CommandError(f"{url} is in TRACKED but not in SERVICES.")
-            # The rollup, not a leaf: it is the row a new user would add
+            # The rollup, not a leaf. It is the row a new user adds
             # first, and tracking it is what makes the service polled.
             overall = service.components.filter(is_overall=True).first()
             _, added = DashboardItem.objects.get_or_create(

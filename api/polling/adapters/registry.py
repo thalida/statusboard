@@ -45,10 +45,9 @@ ADAPTERS: tuple[type[Adapter], ...] = (
 BY_PROVIDER = {adapter.provider: adapter for adapter in ADAPTERS}
 BY_PROVIDER[RSSAdapter.provider] = RSSAdapter
 
-# Where a page says its own feed is. Status pages that publish no API
-# almost always advertise one of these, and often on another domain:
-# status.notion.so points at notion-status.com, status.slack.com at
-# slack-status.com.
+# Where a page says its own feed is. A status page with no API almost
+# always advertises one, and often on another domain. status.notion.so
+# points at notion-status.com.
 FEED_LINK = re.compile(
     r"<link\b[^>]*?rel=[\"']alternate[\"'][^>]*>|<link\b[^>]*?type=[\"']application/"
     r"(?:rss|atom)\+xml[\"'][^>]*>",
@@ -56,9 +55,9 @@ FEED_LINK = re.compile(
 )
 FEED_TYPE = re.compile(r"application/(?:rss|atom)\+xml", re.IGNORECASE)
 
-# Where status pages put a feed when they do not advertise one. Trying
-# these is only safe because the RSS adapter refuses anything that is not
-# a feed: several of these pages answer 200 with HTML for any path.
+# Where status pages put a feed when they advertise none. Trying these
+# is safe only because the RSS adapter refuses anything that is not a
+# feed. Several of these pages answer 200 with HTML for any path.
 FEED_PATHS = (
     "history.rss",
     "feed.rss",
@@ -104,21 +103,21 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
     compatible API for some tenants.
 
     Raises if nothing can read the page. A status page we cannot parse
-    has to fail loudly — the alternative is a service that shows green
-    because nothing ever read it.
+    has to fail loudly. The alternative is a service showing green
+    because nothing read it.
     """
     guess = detect(url)
     # Everything else offered to a page is a general platform. A
-    # company-specific adapter is only tried when the URL is that
-    # company's, because several read a path other platforms also serve.
+    # company adapter is tried only on that company's URL. Several read
+    # a path other platforms also serve.
     general = [
         a for a in (*ADAPTERS, RSSAdapter) if a is not guess and not a.host_specific
     ]
     candidates = [guess, *general]
 
-    # An adapter written for this exact host knows why it cannot read the
-    # page, and that reason is worth more than "nothing worked" — Auth0's
-    # is that only the person adding it knows their tenant.
+    # An adapter written for this host knows why it cannot read the
+    # page. That reason beats "nothing worked". Auth0's is that only the
+    # person adding it knows their tenant.
     explanation = ""
     for adapter_class in candidates:
         try:
@@ -151,9 +150,8 @@ def identify(url: str, session=None) -> tuple[type[Adapter], str]:
             logger.debug("no feed at %s: %s", guess_url, error)
 
     # A page that points at another host has usually moved there.
-    # intercomstatus.com links finstatus.com, whose own feed 404s while
-    # its API answers, so the host is worth a proper look and not just
-    # the file it named.
+    # intercomstatus.com links finstatus.com, whose feed 404s while its
+    # API answers. So the host is worth a proper look.
     for origin in _other_origins(url, feeds):
         for adapter_class in candidates:
             try:

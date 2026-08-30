@@ -141,8 +141,8 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
 
 @pytest.mark.django_db
 def test_every_service_gets_a_poller():
-    # A service added anywhere but the import endpoint used to have none,
-    # so it was never polled and never appeared as due.
+    # A service added outside the import endpoint used to have none.
+    # It was never polled and never appeared as due.
     service = ServiceFactory()
     assert Poller.objects.filter(service=service).exists()
 
@@ -169,8 +169,8 @@ def test_polling_a_service_with_no_status_page_does_nothing(monkeypatch):
 
 @pytest.mark.django_db
 def test_an_api_url_override_replaces_the_page_url(monkeypatch):
-    # The escape hatch for a page whose API lives somewhere the adapter
-    # would not reach by joining a path onto the page URL.
+    # The escape hatch for a page whose API sits where a joined path
+    # would not reach it.
     poller = PollerFactory(service=ServiceFactory(watcher_count=1))
     StatusPageFactory(service=poller.service, api_url_override="https://api.elsewhere/")
     seen = {}
@@ -207,8 +207,8 @@ def test_a_poller_nobody_added_is_signed_by_the_system():
 
 
 def test_a_failure_is_named_by_the_deepest_library_exception():
-    # Wrappers stack. The outermost says "the network" and the innermost
-    # says "errno"; the one in between is the only one worth grouping by.
+    # Wrappers stack. The outermost says "the network" and the
+    # innermost says "errno". The one between is worth grouping by.
     class NameResolutionError(Exception):
         pass
 
@@ -232,7 +232,7 @@ def test_a_failure_with_no_library_in_the_chain_keeps_its_own_name():
 
 @pytest.mark.django_db
 def test_a_finished_failure_must_name_its_error():
-    # An unnamed failure cannot be grouped, filtered or counted, so the
+    # An unnamed failure cannot be grouped, filtered or counted. The
     # database refuses it rather than leaving one on the dashboard.
     from django.db import IntegrityError, transaction
 

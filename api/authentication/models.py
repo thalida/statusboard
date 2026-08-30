@@ -23,18 +23,21 @@ class UserManager(BaseUserManager):
     def system(self):
         """The account the system writes as.
 
-        Rows the importer and the signals create have an author too, and
-        a blank one reads the same as one that was lost. This gives them
-        a name and a time. The account cannot sign in: it is not active,
-        the password is unusable, and no link can reach the address.
+        Rows the importer and the signals create have an author too. A
+        blank one reads the same as one that was lost, so this gives
+        them a name and a time.
+
+        The account cannot sign in. It is not active, the password is
+        unusable, and no link reaches the address.
 
         A row written by a poll carries its run instead. The run says
         which request read the page, which is more than a name.
 
-        A fetch, not a get_or_create. The account is made by a migration,
-        so every database has it before anything writes. Creating it here
-        as well would mean two makers of one row, and a database that had
-        lost it would carry on quietly instead of saying so.
+        A fetch, not a get_or_create. A migration makes the account, so
+        every database has it before anything writes.
+
+        Creating it here too would be two makers of one row. A database
+        that had lost it would carry on quietly.
         """
         return self.get(email=SYSTEM_EMAIL)
 
@@ -109,9 +112,9 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     def save(self, *args, **kwargs):
         """Give a new user their board, and open it by default.
 
-        Imported here rather than at module scope: authentication is the
-        lower layer, and a top-level import would tie it to dashboards for
-        every reader of this file.
+        Imported here, not at module scope. Authentication is the lower
+        layer. A top-level import would tie it to dashboards for every
+        reader of this file.
         """
         creating = self._state.adding
         super().save(*args, **kwargs)

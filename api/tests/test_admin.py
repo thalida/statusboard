@@ -17,9 +17,9 @@ def staff_client(client):
 def service_form_data(staff_client, **fields):
     """The service add form, with a management form per inline.
 
-    The prefixes are read off the rendered page rather than derived. One
-    of the inlines is a nonrelated one with no foreign key to work back
-    from, and a browser posts exactly what the page asks for.
+    The prefixes are read off the rendered page, not derived. One
+    inline is nonrelated and has no foreign key to work back from. A
+    browser posts what the page asks for.
     """
     import re
 
@@ -282,7 +282,7 @@ def test_events_can_be_filtered_by_phase(staff_client):
 def test_every_table_links_somewhere(staff_client, url_name):
     """A table is a place you arrive from somewhere else.
 
-    Each row carries a link to the record it belongs to, so reaching a
+    Each row carries a link to the record it belongs to. Reaching a
     service's components no longer means filtering a list by hand.
     """
     import re
@@ -351,8 +351,8 @@ def test_a_service_shows_its_logo_and_falls_back_to_an_initial(staff_client):
 def test_a_blank_interval_says_what_it_will_do(staff_client, settings):
     """Three empty boxes said nothing about inheriting a default.
 
-    The number comes from settings at render time, so changing it does
-    not want a migration to restate something the database never stores.
+    The number comes from settings at render time. Changing it needs no
+    migration to restate what the database never stores.
     """
     settings.POLL_INTERVAL_SECONDS = 900
     from tests.factories import ServiceFactory
@@ -368,8 +368,8 @@ def test_a_blank_interval_says_what_it_will_do(staff_client, settings):
 def test_a_poller_cannot_be_added_by_hand(staff_client):
     """One per service, made with the service.
 
-    The column is one-to-one and a signal fills it, so an add form could
-    only ever offer a duplicate the database refuses.
+    The column is one-to-one and a signal fills it. An add form could
+    only offer a duplicate the database refuses.
     """
     from polling.models import Poller
 
@@ -403,8 +403,8 @@ def test_only_the_pause_is_open_on_the_polling_schedule():
     assert "enabled" not in readonly
     for name in ["task", "args", "kwargs", "interval", "queue"]:
         assert name in readonly
-    # `regtask` is not readonly, it is gone: a readonly form-only field
-    # cannot be rendered and took the change page down with it.
+    # `regtask` is not readonly, it is gone. A readonly form-only field
+    # cannot be rendered, and took the change page down with it.
     fields = [f for _, o in schedule_admin.get_fieldsets(None) for f in o["fields"]]
     assert "regtask" not in fields
 
@@ -476,9 +476,9 @@ PROJECT_ADMINS = [
 def test_every_filter_names_a_real_path(model):
     """A filter naming a path that does not exist fails only when used.
 
-    Django answers an unrecognised lookup with a redirect, so a broken
-    one reads as an empty page rather than as an error. A typo in a path
-    is invisible until somebody picks that filter and gets nothing.
+    Django answers an unrecognised lookup with a redirect. A broken one
+    reads as an empty page, not an error. A typo stays invisible until
+    somebody picks that filter.
     """
     for entry in admin.site._registry[model].list_filter or []:
         path = entry[0] if isinstance(entry, tuple) else entry
@@ -549,9 +549,8 @@ def test_every_table_can_be_searched(staff_client, model):
 def test_the_system_account_is_in_every_database():
     """It is made as migrate finishes, next to the content types.
 
-    Made on first use instead, it was absent from a database until
-    something happened to write a row, and the admin showed an author
-    nobody could look up.
+    Made on first use instead, it was absent until something wrote a
+    row. The admin then showed an author nobody could look up.
     """
     from api.defaults import SYSTEM_EMAIL
 
@@ -579,9 +578,9 @@ def test_the_system_account_cannot_be_deleted(staff_client):
 def test_the_admin_cannot_overwrite_a_password_with_plain_text(staff_client):
     """The field shows the hash. It must not take one.
 
-    A plain field writes whatever is typed straight into the column, so
-    a new password there is stored as the hash: the account can never
-    sign in again, and the password is readable in the database.
+    A plain field writes whatever is typed into the column. A new
+    password there is stored as the hash. The account can never sign in
+    again, and the password is readable in the database.
     """
     from django.contrib import admin as django_admin
 

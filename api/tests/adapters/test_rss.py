@@ -87,9 +87,11 @@ def test_it_returns_events_from_the_feed(adapter):
 
 
 # The next four pin the resolution rule to the recorded payload. A feed
-# entry's title never announces resolution — GitHub titles the entry for
-# the fault ("Incident with Actions"). The phase marker is the first
-# <strong> in the description, which is the newest update.
+# entry's title never announces resolution. GitHub titles the entry for
+# the fault ("Incident with Actions").
+#
+# The phase marker is the first <strong> in the description, which is
+# the newest update.
 
 
 def test_no_entry_title_announces_resolution(adapter):
@@ -136,9 +138,8 @@ def test_a_page_that_is_not_a_feed_is_refused():
     """The fallback must not invent a reading it did not make.
 
     Anything unrecognised reaches this adapter, HTML pages included.
-    feedparser returns an empty feed for those, which became one
-    component reading OPERATIONAL — a service showing green forever
-    because nothing could read it.
+    feedparser returns an empty feed for those. That became one
+    component reading OPERATIONAL, so a service showed green forever.
     """
     import pytest
 

@@ -84,8 +84,8 @@ def test_there_is_no_refresh_endpoint(generated):
 def test_the_schema_generates_without_a_single_warning():
     """A warning means the schema is guessing.
 
-    Every one of them was a field typed `string` that is really an object
-    or an integer, or a view dropped from the schema entirely. A client is
+    Each was a field typed `string` that is really an object or an
+    integer. Or a view dropped from the schema entirely. A client is
     generated from this file, so a guess ships as a bug.
     """
     reset_generator_stats()

@@ -6,9 +6,9 @@ from status.choices import CLOSED_PHASES, EventKind
 class AggregateSet:
     """Fills the `aggregates` key of a list response.
 
-    Computed over the whole filtered collection, not the page. That is
-    the point: a screen can show "3 down, 12 operational" from the one
-    request that drew the rows, instead of a request per count.
+    Computed over the whole filtered collection, not the page. A screen
+    shows "3 down, 12 operational" from the request that drew the rows,
+    instead of a request per count.
 
     A view names its class in `aggregate_set` and the paginator builds it.
     Put every collection-wide value here, never at the top level.
@@ -22,7 +22,7 @@ class AggregateSet:
 
 
 class StatusAggregateSet(AggregateSet):
-    """For any list of things carrying a status — services, components, a board."""
+    """For any list of things carrying a status. Services, or a board."""
 
     def build(self):
         data = super().build()

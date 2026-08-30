@@ -254,8 +254,8 @@ paths:
       tags: [catalog]
       summary: Service detail
       security: [{}, { bearer: [] }]
-      parameters: [{ $ref: '#/components/parameters/Slug' }]
       parameters:
+        - { $ref: '#/components/parameters/Slug' }
         - { $ref: '#/components/parameters/Fields' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
@@ -379,14 +379,14 @@ paths:
       tags: [board]
       summary: Track a component
       description: One component per call. Add-all is the client repeating it; there is no bulk variant to choose between.
-      parameters: [{ $ref: '#/components/parameters/Uuid' }]
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { $ref: '#/components/parameters/Fields' }
       requestBody:
         required: true
         content:
           application/json:
             schema: { type: object, required: [component_id], properties: { component_id: { type: string, format: uuid } } }
-      parameters:
-        - { $ref: '#/components/parameters/Fields' }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Component' } } } }
         '409': { description: Already tracked }
@@ -429,10 +429,6 @@ components:
       description: Rate limited
       headers: { Retry-After: { schema: { type: integer } } }
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
-    Error:
-      description: Error
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
-  schemas:
     Error:
       description: Error
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

@@ -113,7 +113,7 @@ def test_a_superuser_given_a_password_can_sign_in_to_the_admin():
 
 @pytest.mark.django_db
 def test_a_superuser_created_without_a_password_stays_locked_out():
-    # Not a bug to fix by guessing a password — it is the honest outcome
-    # of `createsuperuser --noinput` with no DJANGO_SUPERUSER_PASSWORD.
+    # Not a bug to fix by guessing a password. It is the outcome of
+    # `createsuperuser --noinput` with no DJANGO_SUPERUSER_PASSWORD.
     User.objects.create_superuser("noauth@example.com")
     assert User.objects.get(email="noauth@example.com").has_usable_password() is False

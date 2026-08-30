@@ -23,9 +23,9 @@ class AwsAdapter(RSSAdapter):
     def _feed(self):
         """Read AWS's feed, but only for an AWS URL.
 
-        Probing tries every adapter against every page, so one that
+        Probing tries every adapter against every page. One that
         answered regardless of its URL would claim any page nothing else
-        could read and report AWS's events under that service's name.
+        could read. AWS's events would land under that service's name.
         """
         if self.matches(self.url):
             self.url = FEED

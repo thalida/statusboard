@@ -11,8 +11,11 @@ class Severity(models.IntegerChoices):
 
 
 class StatusSource(models.TextChoices):
-    """Where a severity came from. The field's help text says what each
-    one means; a label is read in a column and has to fit one."""
+    """Where a severity came from.
+
+    The field's help text says what each one means. A label is read in a
+    column and has to fit one.
+    """
 
     PROVIDER = "provider", "Provider"
     COMPONENTS = "components", "Components"
