@@ -8,7 +8,7 @@ from api.defaults import Environment
 
 
 class Command(BaseCommand):
-    """Create the local development admin, idempotently.
+    """Create the development admin, idempotently.
 
     This writes the database row. `just env` writes the .env.local that
     supplies the credentials. Each worktree has its own database, so this
@@ -19,15 +19,16 @@ class Command(BaseCommand):
 
     Not a data migration. Migrations run everywhere the app is deployed.
     A superuser created in one is a known account in production. Its
-    password would sit in git. This runs only where ENVIRONMENT is local.
+    password would sit in git. This runs in development only.
     """
 
-    help = "Create the local dev admin from DJANGO_SUPERUSER_EMAIL and _PASSWORD."
+    help = "Create the development admin from DJANGO_SUPERUSER_EMAIL and _PASSWORD."
 
     def handle(self, *args, **options):
-        if settings.ENVIRONMENT is not Environment.LOCAL:
+        if settings.ENVIRONMENT is not Environment.DEVELOPMENT:
             raise CommandError(
-                f"seed_admin is local-only; ENVIRONMENT is {settings.ENVIRONMENT!r}."
+                f"seed_admin runs in development only; ENVIRONMENT is "
+                f"{settings.ENVIRONMENT!r}."
             )
 
         user_model = get_user_model()

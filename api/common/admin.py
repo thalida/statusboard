@@ -23,14 +23,14 @@ from status.choices import EVENT_PHASES_BY_KIND, Severity
 def environment_callback(request):
     """Colour the banner by database.
 
-    Acting on production while believing it is local is the mistake worth
-    making loud.
+    Acting on production while believing it is development is the mistake
+    worth making loud.
     """
-    # `default` is the neutral label. Local is not a warning, and a blue
-    # badge would read as the maintenance colour. Settings validates the
-    # variable, so there is no unknown value to fall back for.
+    # `default` is the neutral label. Development is not a warning, and a
+    # blue badge would read as the maintenance colour. Settings validates
+    # the variable, so there is no unknown value to fall back for.
     return {
-        Environment.LOCAL: ["Local", "default"],
+        Environment.DEVELOPMENT: ["Development", "default"],
         Environment.STAGING: ["Staging", "warning"],
         Environment.PRODUCTION: ["Production", "danger"],
     }[settings.ENVIRONMENT]

@@ -17,11 +17,11 @@ class Environment(StrEnum):
     """Which deployment this is.
 
     The admin banner is coloured by it and the seeding commands refuse to
-    run outside LOCAL, so a typo must not read as an unknown environment.
-    `settings.py` normalises the variable and rejects anything else.
+    run outside DEVELOPMENT, so a typo must not read as an unknown
+    environment. `settings.py` normalises it and rejects anything else.
     """
 
-    LOCAL = "local"
+    DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
 
@@ -34,7 +34,7 @@ class Environment(StrEnum):
         must not read as a fourth environment.
         """
         if not value:
-            return cls.LOCAL
+            return cls.DEVELOPMENT
         try:
             return cls(value.strip().lower())
         except ValueError as error:

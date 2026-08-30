@@ -29,8 +29,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env.local")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
-# The banner colour and the local-only commands both branch on this, so a
-# value nobody recognises stops the process here.
+# The banner colour and the development-only commands both branch on this,
+# so a value nobody recognises stops the process here.
 try:
     ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 except ValueError as error:
@@ -184,7 +184,7 @@ UNFOLD = {
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "SHOW_BACK_BUTTON": True,
-    # Which database this is. Acting on production believing it is local
+    # Which database this is. Acting on production believing it is development
     # is the mistake worth making loud.
     "ENVIRONMENT": "common.admin.environment_callback",
     "ENVIRONMENT_TITLE_PREFIX": "common.admin.environment_prefix_callback",

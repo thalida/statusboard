@@ -28,17 +28,18 @@ class Command(BaseCommand):
     board, and one tracked service so the poller has work and the admin
     dashboard has numbers. Safe to re-run.
 
-    It fetches the three status pages, so it needs the network. Local
-    only, for the same reason `seed_admin` is: a deployment must never
-    grow rows because a command ran.
+    It fetches the three status pages, so it needs the network.
+    Development only, for the same reason `seed_admin` is: a deployment
+    must never grow rows because a command ran.
     """
 
-    help = "Import a few real status pages and track one, for local development."
+    help = "Import a few real status pages and track one, for development."
 
     def handle(self, *args, **options):
-        if settings.ENVIRONMENT is not Environment.LOCAL:
+        if settings.ENVIRONMENT is not Environment.DEVELOPMENT:
             raise CommandError(
-                f"seed_dev is local-only; ENVIRONMENT is {settings.ENVIRONMENT!r}."
+                f"seed_dev runs in development only; ENVIRONMENT is "
+                f"{settings.ENVIRONMENT!r}."
             )
 
         call_command("seed_admin")

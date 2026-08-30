@@ -60,9 +60,9 @@ def test_the_dashboard_leads_with_poller_health(staff_client):
 
 @pytest.mark.django_db
 def test_the_environment_is_named_on_every_page(staff_client):
-    # Acting on production believing it is local is the mistake worth
+    # Acting on production believing it is development is the mistake worth
     # making loud.
-    assert "Local" in staff_client.get(reverse("admin:index")).content.decode()
+    assert "Development" in staff_client.get(reverse("admin:index")).content.decode()
 
 
 @pytest.mark.django_db

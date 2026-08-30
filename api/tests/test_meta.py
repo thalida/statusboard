@@ -109,11 +109,11 @@ def test_the_environment_is_one_of_a_known_set():
 @pytest.mark.parametrize(
     ("given", "expected"),
     [
-        ("local", "local"),
+        ("development", "development"),
         ("  Production  ", "production"),
         ("STAGING", "staging"),
-        ("", "local"),
-        (None, "local"),
+        ("", "development"),
+        (None, "development"),
     ],
 )
 def test_the_environment_is_normalised(given, expected):
