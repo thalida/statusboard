@@ -4,7 +4,12 @@ import pytest
 from django.utils import timezone
 
 from polling.models import Poller, PollRun
-from polling.tasks import due_pollers, next_interval_seconds, poll_service
+from polling.tasks import (
+    due_pollers,
+    exception_name,
+    next_interval_seconds,
+    poll_service,
+)
 from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 
@@ -71,6 +76,7 @@ def test_a_failed_poll_records_the_run_and_increments_the_counter(monkeypatch):
     run = PollRun.objects.get(poller=poller)
     assert run.ok is False
     assert "upstream is down" in run.error
+    assert run.error_type == "RuntimeError"
 
 
 @pytest.mark.django_db
@@ -198,3 +204,62 @@ def test_a_poller_nobody_added_is_signed_by_the_system():
     service = ServiceFactory()
 
     assert service.poller.created_by == get_user_model().objects.system()
+
+
+def test_a_failure_is_named_by_the_deepest_library_exception():
+    # Wrappers stack. The outermost says "the network" and the innermost
+    # says "errno"; the one in between is the only one worth grouping by.
+    class NameResolutionError(Exception):
+        pass
+
+    NameResolutionError.__module__ = "urllib3.exceptions"
+
+    try:
+        try:
+            try:
+                raise OSError("gaierror")
+            except OSError as inner:
+                raise NameResolutionError("no such host") from inner
+        except NameResolutionError as middle:
+            raise ConnectionError("max retries") from middle
+    except ConnectionError as outer:
+        assert exception_name(outer) == "NameResolutionError"
+
+
+def test_a_failure_with_no_library_in_the_chain_keeps_its_own_name():
+    assert exception_name(ValueError("plain")) == "ValueError"
+
+
+@pytest.mark.django_db
+def test_a_finished_failure_must_name_its_error():
+    # An unnamed failure cannot be grouped, filtered or counted, so the
+    # database refuses it rather than leaving one on the dashboard.
+    from django.db import IntegrityError, transaction
+
+    poller = PollerFactory(service=ServiceFactory(watcher_count=1))
+    page = StatusPageFactory(service=poller.service)
+    now = timezone.now()
+    with pytest.raises(IntegrityError), transaction.atomic():
+        PollRun.objects.create(
+            poller=poller,
+            url=page.url,
+            provider=page.provider,
+            started_at=now,
+            finished_at=now,
+            ok=False,
+            error="something went wrong",
+        )
+
+
+@pytest.mark.django_db
+def test_a_run_still_in_flight_has_nothing_to_name_yet():
+    poller = PollerFactory(service=ServiceFactory(watcher_count=1))
+    page = StatusPageFactory(service=poller.service)
+    run = PollRun.objects.create(
+        poller=poller,
+        url=page.url,
+        provider=page.provider,
+        started_at=timezone.now(),
+    )
+    assert run.finished_at is None
+    assert run.error_type == ""

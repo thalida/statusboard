@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q
 from simple_history.models import HistoricalRecords
 
 from catalog.choices import StatusPageProvider
@@ -114,6 +115,24 @@ class PollRun(BaseModel):
 
     ok = models.BooleanField(default=False)
     error = models.TextField(blank=True, default="")
+    error_type = models.CharField(
+        verbose_name="Error type",
+        max_length=100,
+        blank=True,
+        default="",
+    )
+
+    class Meta(BaseModel.Meta):
+        constraints = [
+            # A run is created before it is attempted, so an unfinished
+            # row has nothing to say yet. Once it has finished, a failure
+            # that cannot name its cause is a failure nobody can group,
+            # filter or count.
+            models.CheckConstraint(
+                condition=Q(finished_at__isnull=True) | Q(ok=True) | ~Q(error_type=""),
+                name="a_failed_run_names_its_error",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.poller.service} — {self.started_at:%Y-%m-%d %H:%M}"
+        return f"{self.poller.service} ({self.started_at:%Y-%m-%d %H:%M})"

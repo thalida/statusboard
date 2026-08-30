@@ -1,4 +1,5 @@
 import random
+import sys
 from datetime import timedelta
 
 from celery import shared_task
@@ -24,15 +25,25 @@ def next_interval_seconds(base, failures, ceiling):
     return min(base * (2**failures), ceiling)
 
 
+def active_pollers():
+    """The pollers this deployment actually runs.
+
+    Nothing else is ever dispatched, so nothing else can be late or
+    stale. Anything reporting on polling reads this, or it reports on
+    pollers that were never going to run.
+    """
+    return Poller.objects.filter(
+        service__watcher_count__gt=0,
+        service__status_page__isnull=False,
+        is_paused=False,
+    )
+
+
 def due_pollers():
-    """Only services someone tracks, not paused, and past next_at."""
+    """Active pollers past next_at."""
     now = timezone.now()
     return (
-        Poller.objects.filter(
-            service__watcher_count__gt=0,
-            service__status_page__isnull=False,
-            is_paused=False,
-        )
+        active_pollers()
         .filter(Q(next_at__isnull=True) | Q(next_at__lte=now))
         .select_related("service")
         .order_by("next_at")
@@ -43,6 +54,25 @@ def due_pollers():
 def enqueue_due_polls():
     for poller in due_pollers():
         poll_service.delay(str(poller.service_id))
+
+
+def exception_name(error):
+    """The name that identifies a failure.
+
+    Wrappers stack: `requests.ConnectionError` over urllib3's
+    `MaxRetryError` over `NameResolutionError` over `socket.gaierror`.
+    The outermost says "the network", the innermost says "errno". The
+    deepest one a library defines is the one that names the cause.
+    """
+    name = type(error).__name__
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        module = type(error).__module__.partition(".")[0]
+        if module != "builtins" and module not in sys.stdlib_module_names:
+            name = type(error).__name__
+        error = error.__cause__ or error.__context__
+    return name
 
 
 @shared_task
@@ -78,13 +108,14 @@ def poll_service(service_id):
         # `apply_fetch` does not run, so the open rows stand.
         poller.consecutive_failure_count += 1
         run.ok, run.error = False, str(error)
+        run.error_type = exception_name(error)
     else:
         poller.consecutive_failure_count = 0
         poller.last_success_at = timezone.now()
         run.ok = True
     finally:
         run.finished_at = timezone.now()
-        run.save(update_fields=["ok", "error", "finished_at"])
+        run.save(update_fields=["ok", "error", "error_type", "finished_at"])
         seconds = next_interval_seconds(
             poller.effective_interval_seconds,
             poller.consecutive_failure_count,

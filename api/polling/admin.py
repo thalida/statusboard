@@ -41,6 +41,21 @@ from polling.models import Poller, PollRun
 from status.models import ComponentStatus, ServiceEvent
 
 
+def humanise_seconds(seconds):
+    """A duration at the scale it happened.
+
+    A poll is usually under a second and a stuck one runs for half an
+    hour. Reporting both in seconds makes the second one unreadable.
+    """
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, seconds = divmod(int(seconds), 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m"
+
+
 class PollRunColumns:
     """How a run reads. The same on its own table and under a poller."""
 
@@ -52,17 +67,25 @@ class PollRunColumns:
     def display_ok(self, obj):
         return "OK" if obj.ok else "Failed"
 
+    @display(
+        description=_("Error type"),
+        ordering="error_type",
+        label={"Unrecorded": "warning"},
+    )
+    def display_error_type(self, obj):
+        return obj.error_type or "—"
+
     @display(description=_("Error"))
     def display_error(self, obj):
         return (obj.error or "—")[:90]
 
-    @display(description=_("Took"), ordering="finished_at")
-    def display_took(self, obj):
+    @display(description=_("Duration"), ordering="finished_at")
+    def display_duration(self, obj):
         # A provider that has become slow shows here first. A run that
         # never finished has no answer, which is itself the answer.
         if obj.finished_at is None or obj.started_at is None:
             return "—"
-        return f"{(obj.finished_at - obj.started_at).total_seconds():.1f}s"
+        return humanise_seconds((obj.finished_at - obj.started_at).total_seconds())
 
 
 class PollRunInline(PollRunColumns, TabularInline):
@@ -81,7 +104,14 @@ class PollRunInline(PollRunColumns, TabularInline):
     can_delete = False
     show_change_link = True
     per_page = 20
-    fields = ["display_ok", "provider", "started_at", "finished_at", "display_error"]
+    fields = [
+        "display_ok",
+        "provider",
+        "started_at",
+        "finished_at",
+        "display_error_type",
+        "display_error",
+    ]
     readonly_fields = fields
     ordering = ["-started_at"]
 
@@ -257,8 +287,8 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
         "display_ok",
         "provider",
         "started_at",
-        "display_took",
-        "display_error",
+        "display_duration",
+        "display_error_type",
         "display_related",
     ]
     date_hierarchy = "started_at"
@@ -267,20 +297,22 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
         "poller__service__slug",
         "url",
         "error",
+        "error_type",
     ]
     list_filter = [
         ("poller__service", AutocompleteSelectFilter),
         ("poller", AutocompleteSelectFilter),
         "ok",
+        "error_type",
         ("provider", ChoicesDropdownFilter),
         ("started_at", RangeDateTimeFilter),
         ("finished_at", RangeDateTimeFilter),
     ]
     ordering = ["-started_at"]
-    readonly_fields = ["error"]
+    readonly_fields = ["error", "error_type"]
     fieldsets = [
         (None, {"fields": ["poller", "url", "provider"]}),
-        (_("Result"), {"fields": ["ok", "error"]}),
+        (_("Result"), {"fields": ["ok", "error_type", "error"]}),
         (_("Timing"), {"fields": ["started_at", "finished_at"]}),
         audit_section(),
     ]
