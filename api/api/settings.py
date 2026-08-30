@@ -17,7 +17,22 @@ load_dotenv(BASE_DIR.parent / ".env.local")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "local")
-ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",")
+# A wildcard accepts any Host header, and a laptop running the dev server
+# is usually also on a network. Debug adds the loopback names the server
+# is actually reached by, and nothing else. `0.0.0.0` is one of them
+# because that is what runserver binds to and what gets typed. Anything
+# further, a phone on the same wifi hitting the machine's LAN address,
+# goes in ALLOWED_HOSTS in .env.local.
+#
+# `"".split(",")` is `[""]`, not `[]`: a deployment with the variable
+# unset would have looked configured and matched nothing. Empty entries
+# are dropped so it stays empty, which Django refuses out loud.
+LOCAL_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", ".localhost"]
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
+]
+if DEBUG:
+    ALLOWED_HOSTS += LOCAL_HOSTS
 
 INSTALLED_APPS = [
     "unfold",

@@ -52,3 +52,20 @@ def test_meta_publishes_the_deployment_defaults():
     assert body["poll_cooldown_seconds"] == 60
     assert body["default_page_size"] == 50
     assert body["max_page_size"] == 200
+
+
+def test_debug_allows_local_hosts_and_nothing_else():
+    # A wildcard accepts any Host header, and the machine running the dev
+    # server is usually also on a network.
+    from django.conf import settings
+
+    assert "*" not in settings.ALLOWED_HOSTS
+    assert set(settings.LOCAL_HOSTS) <= set(settings.ALLOWED_HOSTS)
+
+
+def test_an_unset_allowed_hosts_leaves_no_blank_entry():
+    # `"".split(",")` is `[""]`, which looks configured and matches
+    # nothing. Django refuses an empty list out loud instead.
+    from django.conf import settings
+
+    assert "" not in settings.ALLOWED_HOSTS
