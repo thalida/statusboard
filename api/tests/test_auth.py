@@ -179,3 +179,23 @@ def test_the_link_escapes_a_token_that_needs_it():
     from authentication.emails import magic_link_url
 
     assert magic_link_url("a b&c=d").endswith("?token=a+b%26c%3Dd")
+
+
+def test_the_sign_in_page_is_not_one_of_ours():
+    # The link opens a page the client serves. If this project ever
+    # routes the same path, they are two different pages. One of them is
+    # then wrong.
+    from django.conf import settings
+    from django.urls import Resolver404, resolve
+
+    with pytest.raises(Resolver404):
+        resolve(settings.MAGIC_LINK_PATH)
+
+
+def test_the_sign_in_page_is_not_the_endpoint_it_calls():
+    # `POST /auth/verify/` answers JSON. A browser opening it sends a
+    # GET, and would get 405 rather than a page.
+    from django.conf import settings
+    from django.urls import reverse
+
+    assert settings.MAGIC_LINK_PATH != reverse("verify")
