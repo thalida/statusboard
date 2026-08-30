@@ -171,3 +171,11 @@ def test_a_site_url_loses_its_trailing_slash():
     from api.defaults import site_url
 
     assert site_url("https://statusboard.app/", "8000") == "https://statusboard.app"
+
+
+def test_the_link_escapes_a_token_that_needs_it():
+    # `secrets.token_urlsafe` never produces one, but building a query
+    # string by hand is how that stops being true.
+    from authentication.emails import magic_link_url
+
+    assert magic_link_url("a b&c=d").endswith("?token=a+b%26c%3Dd")

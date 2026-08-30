@@ -9,6 +9,8 @@ a broken placeholder is a broken sign-in. A file is reviewed and tested
 with the code that renders it.
 """
 
+from urllib.parse import urlencode
+
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
@@ -27,17 +29,25 @@ def _render(name, context):
     )
 
 
-def send_magic_link(link):
-    """The one email that signs somebody in.
+def magic_link_url(token):
+    """Where the person clicking the link lands.
 
-    The address is built from SITE_URL, so a development link opens the
-    development site. Hardcoding the production host sent every tester a
-    link to somewhere they were not working.
+    Not `reverse("verify")`. That names this project's own endpoint, a
+    POST that answers JSON, and a browser opening it sends a GET. The
+    page is the client's, on its own origin, so SITE_URL says where.
+
+    Not `request.build_absolute_uri` either. That reads the Host header
+    of the request being served, which is the caller's to set.
     """
-    minutes = int(settings.MAGIC_LINK_TTL.total_seconds() // 60)
+    query = urlencode({"token": token})
+    return f"{settings.SITE_URL}{settings.MAGIC_LINK_PATH}?{query}"
+
+
+def send_magic_link(link):
+    """The one email that signs somebody in."""
     context = {
-        "url": f"{settings.SITE_URL}{settings.MAGIC_LINK_PATH}?token={link.token}",
-        "minutes": minutes,
+        "url": magic_link_url(link.token),
+        "minutes": int(settings.MAGIC_LINK_TTL.total_seconds() // 60),
         "site": settings.SITE_URL,
     }
     subject, text, html = _render("magic_link", context)
