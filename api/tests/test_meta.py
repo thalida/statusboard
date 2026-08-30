@@ -69,3 +69,30 @@ def test_an_unset_allowed_hosts_leaves_no_blank_entry():
     from django.conf import settings
 
     assert "" not in settings.ALLOWED_HOSTS
+
+
+def test_one_page_size_serves_the_paginator_the_api_and_meta():
+    # DRF held its own 50 next to DEFAULT_PAGE_SIZE. `/meta` publishes
+    # the second one, so the two could disagree and nothing would say so.
+    from django.conf import settings
+
+    from common.pagination import EnvelopePagination
+
+    assert settings.REST_FRAMEWORK["PAGE_SIZE"] == settings.DEFAULT_PAGE_SIZE
+    assert EnvelopePagination.page_size == settings.DEFAULT_PAGE_SIZE
+    assert EnvelopePagination.max_page_size == settings.MAX_PAGE_SIZE
+
+
+def test_the_project_tunables_come_from_one_module():
+    from django.conf import settings
+
+    from api import defaults
+
+    for name in (
+        "DEFAULT_PAGE_SIZE",
+        "MAX_PAGE_SIZE",
+        "POLL_INTERVAL_SECONDS",
+        "POLL_COOLDOWN_SECONDS",
+        "POLL_MAX_INTERVAL_SECONDS",
+    ):
+        assert getattr(settings, name) == getattr(defaults, name)

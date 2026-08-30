@@ -8,6 +8,15 @@ from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 from dotenv import load_dotenv
 
+# Re-exported so `django.conf.settings` carries them. See api/defaults.py.
+from api.defaults import (  # noqa: F401
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    POLL_COOLDOWN_SECONDS,
+    POLL_INTERVAL_SECONDS,
+    POLL_MAX_INTERVAL_SECONDS,
+)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Local development only. The file sits at the repository root and is
@@ -116,7 +125,8 @@ REST_FRAMEWORK = {
         "common.filters.FieldsBackend",
     ],
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
-    "PAGE_SIZE": 50,
+    # The same number `/meta` publishes and the paginator reads.
+    "PAGE_SIZE": DEFAULT_PAGE_SIZE,
 }
 
 SIMPLE_JWT = {
@@ -174,20 +184,13 @@ UNFOLD = {
         {"icon": "api", "title": _("API docs"), "link": "/"},
         {"icon": "schema", "title": _("OpenAPI schema"), "link": "/schema/"},
     ],
-    # Ultramarine. The interface carries no accent hue of its own: the
-    # mark's #00E54D means "operational" and its #E51F00 means "outage",
-    # so any colour the chrome borrows turns a link into a status. So
-    # every colour on a screen belongs to the severity ramp, and
-    # interaction is carried by weight and contrast instead.
+    # Ultramarine, and no accent hue. The mark's green means operational
+    # and its red means outage. A colour the chrome borrows would read as
+    # a state. Weight and contrast carry interaction instead.
     #
-    # `primary` is therefore the ground's own hue at the far ends of its
-    # lightness rather than a new colour. A link is near-white on the
-    # dark page and near-black on the light one, which is bone and ink.
-    #
-    # `base` runs from a blue-violet white down to a deep blue-violet
-    # black, so neither theme is a neutral grey. The dark end goes
-    # further than a neutral would: a saturated hue reads lighter than a
-    # grey of the same value.
+    # `base` runs blue-violet white to blue-violet black, so no step is a
+    # grey. The dark end goes further than a neutral. A saturated hue
+    # reads lighter than a grey of the same value.
     "COLORS": {
         # One theme, so one ramp. `primary` used to hold bone at the
         # steps the dark theme reads and ink at the steps the light one
@@ -371,14 +374,5 @@ SPECTACULAR_SETTINGS = {
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# Deployment defaults. A single service overrides these on its Poller row.
-# Lets the admin edit the tables the poller owns. For seeding a local
-# database by hand. Off by default, and set only in .env.local, so it
-# cannot reach a deployment.
+# For seeding a local database by hand. Only .env.local sets it.
 ADMIN_EDITABLE_POLLER_DATA = os.environ.get("ADMIN_EDITABLE_POLLER_DATA") == "1"
-
-POLL_INTERVAL_SECONDS = 300
-POLL_COOLDOWN_SECONDS = 60
-POLL_MAX_INTERVAL_SECONDS = 3600
-DEFAULT_PAGE_SIZE = 50
-MAX_PAGE_SIZE = 200
