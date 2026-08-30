@@ -45,11 +45,17 @@ def test_the_dashboard_leads_with_poller_health(staff_client):
     body = staff_client.get(reverse("admin:index")).content.decode()
     for card in (
         "Services tracked",
-        "Pollers in backoff",
+        "Behind schedule",
         "Poll success",
-        "Oldest successful poll",
+        "Stalest service",
     ):
         assert card in body, f"{card} missing from the dashboard"
+    for panel in ("Polls, last 24 hours", "Services tracked, last 30 days"):
+        assert panel in body, f"{panel} missing from the dashboard"
+    # Neither the catalog of every model nor a log of admin edits says
+    # anything about whether polling works.
+    assert "app-list" not in body
+    assert "Recent actions" not in body
 
 
 @pytest.mark.django_db

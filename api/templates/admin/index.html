@@ -19,27 +19,40 @@
             {% endcomponent %}
         {% endfor %}
     </div>
+    <div class="grid grid-cols-1 gap-4 mb-8 lg:grid-cols-2">
+        {% component "unfold/components/card.html" with title=_("Polls, last 24 hours") %}
+            <div class="h-48">
+                {% component "unfold/components/chart/bar.html" with data=poll_chart options=poll_chart_options %}{% endcomponent %}
+            </div>
+        {% endcomponent %}
 
-    {% if recent_failures %}
-        <div class="mb-8">
-            {% component "unfold/components/card.html" with title=_("Recent failed polls") %}
-                <div class="flex flex-col gap-2">
-                    {% for run in recent_failures %}
-                        <div class="flex flex-row gap-3 items-baseline text-sm">
-                            <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ run.poller.service.name }}</span>
-                            <span class="text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ run.started_at }}</span>
-                            <span class="grow truncate text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ run.error|default:"—" }}</span>
+        {% component "unfold/components/card.html" with title=_("Services tracked, last 30 days") %}
+            <div class="h-48">
+                {% component "unfold/components/chart/line.html" with data=tracking_chart options=tracking_chart_options %}{% endcomponent %}
+            </div>
+        {% endcomponent %}
+    </div>
+
+    <div class="mb-8">
+        {% component "unfold/components/card.html" with title=_("Why polls failed, last 24 hours") %}
+            {% if failure_causes %}
+                <div class="flex flex-col gap-4">
+                    {% for group in failure_causes %}
+                        <div class="flex flex-col gap-1">
+                            <div class="flex flex-row gap-2 items-baseline">
+                                <span class="font-medium text-font-important-light dark:text-font-important-dark text-sm">{{ group.cause }}</span>
+                                <span class="text-font-subtle-light dark:text-font-subtle-dark text-xs">&times;&nbsp;{{ group.count }}</span>
+                                <span class="text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ group.services|join:", " }}</span>
+                                <span class="grow text-right text-font-subtle-light dark:text-font-subtle-dark text-xs">{{ group.last_at|date:"j M, H:i" }}</span>
+                            </div>
+                            <span class="truncate text-font-subtle-light dark:text-font-subtle-dark text-xs" title="{{ group.message }}">{{ group.message }}</span>
                         </div>
                     {% endfor %}
                 </div>
-            {% endcomponent %}
-        </div>
-    {% endif %}
-
-    <div class="flex flex-col lg:flex-row lg:gap-8">
-        <div class="grow">
-            {% include "unfold/helpers/app_list_default.html" %}
-        </div>
-        {% include "unfold/helpers/history.html" %}
+                <a href="{{ failed_runs_link }}" class="block mt-4 text-primary-600 dark:text-primary-500 text-xs">{% trans "Every failed poll" %} &rarr;</a>
+            {% else %}
+                <span class="text-font-subtle-light dark:text-font-subtle-dark text-sm">{% trans "Nothing failed in the last day." %}</span>
+            {% endif %}
+        {% endcomponent %}
     </div>
 {% endblock %}

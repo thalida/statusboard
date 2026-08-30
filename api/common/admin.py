@@ -1,12 +1,13 @@
 """Admin-wide callbacks: the environment badge and the dashboard."""
 
+import json
 from urllib.parse import urlencode
 from uuid import UUID
 
 from django.conf import settings
 from django.contrib.admin.widgets import AutocompleteSelect
-from django.db.models import Count, IntegerField, Min, OuterRef, Q, Subquery
-from django.db.models.functions import Coalesce
+from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce, TruncHour
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
@@ -47,25 +48,29 @@ def dashboard_callback(request, context):
     """
     from catalog.models import Service
     from polling.models import Poller, PollRun
+    from polling.tasks import active_pollers
 
     now = timezone.now()
     day_ago = now - timezone.timedelta(hours=24)
 
-    pollers = Poller.objects.aggregate(
-        total=Count("id"),
-        failing=Count("id", filter=Q(consecutive_failure_count__gt=0)),
-        paused=Count("id", filter=Q(is_paused=True)),
-        overdue=Count("id", filter=Q(next_at__lt=now, is_paused=False)),
-        oldest_success=Min("last_success_at"),
-    )
+    # Not every Poller row is run: an untracked service, or one with no
+    # status page, is never dispatched, so it can be neither late nor
+    # stale. `active_pollers` is the poller's own definition of the set.
+    late_after = now - timezone.timedelta(seconds=settings.POLL_COOLDOWN_SECONDS)
+    active = active_pollers()
+    pollers = {
+        "failing": active.filter(consecutive_failure_count__gt=0).count(),
+        "paused": Poller.objects.filter(is_paused=True).count(),
+        "late": active.filter(
+            Q(next_at__isnull=True) | Q(next_at__lt=late_after)
+        ).count(),
+    }
+    stalest = _stalest_card(active, now)
     runs = PollRun.objects.filter(started_at__gte=day_ago).aggregate(
         total=Count("id"), failed=Count("id", filter=Q(ok=False))
     )
-    ok_rate = (
-        round(100 * (runs["total"] - runs["failed"]) / runs["total"])
-        if runs["total"]
-        else None
-    )
+    succeeded = runs["total"] - runs["failed"]
+    ok_rate = round(100 * succeeded / runs["total"]) if runs["total"] else None
 
     context["cards"] = [
         {
@@ -75,32 +80,196 @@ def dashboard_callback(request, context):
             "detail": f"{Service.objects.count()} in the catalog",
         },
         {
-            "title": "Pollers in backoff",
-            "value": pollers["failing"],
-            "icon": "error",
-            "danger": pollers["failing"] > 0,
-            "detail": f"{pollers['paused']} paused, {pollers['overdue']} overdue",
+            # Backoff was the headline and overdue the footnote, so the
+            # card read 0 while a poller had stopped running. Both answer
+            # "is anything not being polled on time", and late is worse.
+            # Late means past due by more than a cooldown, so a poller
+            # waiting on the next beat is not an alarm.
+            "title": "Behind schedule",
+            "value": pollers["late"],
+            "icon": "schedule_send",
+            "danger": pollers["late"] > 0,
+            "detail": (f"{pollers['failing']} in backoff, {pollers['paused']} paused"),
         },
         {
             "title": "Poll success, 24h",
             "value": "—" if ok_rate is None else f"{ok_rate}%",
             "icon": "check_circle",
             "danger": ok_rate is not None and ok_rate < 95,
-            "detail": f"{runs['total']} runs, {runs['failed']} failed",
+            # "22 runs, 21 failed" beside "5%" reads as a contradiction.
+            # Say the number the percentage is of.
+            "detail": f"{succeeded} of {runs['total']} runs succeeded",
         },
-        {
-            "title": "Oldest successful poll",
-            "value": _ago(pollers["oldest_success"], now),
-            "icon": "schedule",
-            "detail": "Across every poller",
-        },
+        stalest,
     ]
-    context["recent_failures"] = (
-        PollRun.objects.filter(ok=False)
-        .select_related("poller__service")
-        .order_by("-started_at")[:8]
+    context["poll_chart"] = _hourly_chart(day_ago, now)
+    context["poll_chart_options"] = POLL_CHART_OPTIONS
+    context["tracking_chart"] = _tracking_chart(now)
+    context["tracking_chart_options"] = TRACKING_CHART_OPTIONS
+    context["failure_causes"] = _failure_causes(day_ago)
+    context["failed_runs_link"] = (
+        f"{reverse('admin:polling_pollrun_changelist')}?ok__exact=0"
     )
     return context
+
+
+CHART_OK = "#59CE87"
+CHART_FAILED = "#F27967"
+CHART_TRACKED = "#66B5EC"
+
+
+def _stalest_card(active, now):
+    """The tracked service whose data is oldest, named.
+
+    A `min()` across every poller only moved when the worst one
+    recovered, did not say which one that was, and counted services
+    nobody tracks — which are stale because nothing polls them.
+    """
+    worst = (
+        active.select_related("service")
+        .order_by(F("last_success_at").asc(nulls_first=True))
+        .first()
+    )
+    return {
+        "title": "Stalest service",
+        "value": "—" if worst is None else _ago(worst.last_success_at, now),
+        "icon": "schedule",
+        "danger": worst is not None and worst.last_success_at is None,
+        "detail": "Nothing tracked" if worst is None else str(worst.service),
+    }
+
+
+def _tracking_chart(now):
+    """Thirty days of the board filling up.
+
+    Nothing records untracking, so the line is the currently tracked set
+    placed on the day each service joined it.
+    """
+    from dashboards.models import DashboardItem
+
+    started = {}
+    for service_id, when in DashboardItem.objects.filter(
+        component__service__watcher_count__gt=0
+    ).values_list("component__service_id", "created_at"):
+        day = localtime(when).date()
+        if service_id not in started or day < started[service_id]:
+            started[service_id] = day
+    today = localtime(now).date()
+    days = [today - timezone.timedelta(days=n) for n in range(29, -1, -1)]
+    joined = sorted(started.values())
+    return json.dumps(
+        {
+            "labels": [d.strftime("%-d %b") for d in days],
+            "datasets": [
+                {
+                    "label": "Tracked",
+                    "data": [sum(1 for j in joined if j <= d) for d in days],
+                    "borderColor": CHART_TRACKED,
+                    "backgroundColor": CHART_TRACKED,
+                    "fill": False,
+                }
+            ],
+        }
+    )
+
+
+TRACKING_CHART_OPTIONS = json.dumps(
+    {
+        "animation": False,
+        "responsive": True,
+        "maintainAspectRatio": False,
+        "scales": {
+            "x": {"grid": {"display": False}},
+            "y": {"beginAtZero": True, "ticks": {"precision": 0}},
+        },
+        "plugins": {"legend": {"display": False}},
+    }
+)
+
+
+def _hourly_chart(day_ago, now):
+    """Twenty-four hours of polling, stacked ok over failed, one bar an hour."""
+    from polling.models import PollRun
+
+    counted = {
+        row["hour"]: row
+        for row in PollRun.objects.filter(started_at__gte=day_ago)
+        .annotate(hour=TruncHour("started_at"))
+        .values("hour")
+        # Not `ok`: an annotation named after the field it filters on
+        # makes the filter refer to itself.
+        .annotate(
+            ok_count=Count("id", filter=Q(ok=True)),
+            failed_count=Count("id", filter=Q(ok=False)),
+        )
+    }
+    top = now.replace(minute=0, second=0, microsecond=0)
+    hours = [top - timezone.timedelta(hours=n) for n in range(23, -1, -1)]
+    return json.dumps(
+        {
+            "labels": [localtime(h).strftime("%H:00") for h in hours],
+            "datasets": [
+                {
+                    "label": "Succeeded",
+                    "data": [counted.get(h, {}).get("ok_count", 0) for h in hours],
+                    "backgroundColor": CHART_OK,
+                },
+                {
+                    "label": "Failed",
+                    "data": [counted.get(h, {}).get("failed_count", 0) for h in hours],
+                    "backgroundColor": CHART_FAILED,
+                },
+            ],
+        }
+    )
+
+
+# Unfold's defaults draw 4px bars and no stack. `data-options` replaces
+# them wholesale, so every option the chart needs is here.
+POLL_CHART_OPTIONS = json.dumps(
+    {
+        "animation": False,
+        "responsive": True,
+        "maintainAspectRatio": False,
+        "scales": {
+            "x": {"stacked": True, "grid": {"display": False}},
+            "y": {"stacked": True, "beginAtZero": True, "ticks": {"precision": 0}},
+        },
+        "plugins": {"legend": {"align": "end", "labels": {"boxWidth": 10}}},
+    }
+)
+
+
+def _failure_causes(day_ago):
+    """The last day's failures, grouped by cause.
+
+    Twenty-one identical DNS errors are one fact, not twenty-one.
+    """
+    from polling.models import PollRun
+
+    groups = {}
+    runs = (
+        PollRun.objects.filter(ok=False, started_at__gte=day_ago)
+        .select_related("poller__service")
+        .order_by("-started_at")
+    )
+    for run in runs:
+        cause = run.error_type or "Unrecorded"
+        group = groups.setdefault(
+            cause,
+            {
+                "cause": cause,
+                "count": 0,
+                "services": [],
+                "last_at": run.started_at,
+                "message": run.error,
+            },
+        )
+        group["count"] += 1
+        name = str(run.poller.service)
+        if name not in group["services"]:
+            group["services"].append(name)
+    return sorted(groups.values(), key=lambda g: -g["count"])
 
 
 def _ago(when, now):
