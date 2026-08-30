@@ -117,3 +117,41 @@ def test_a_superuser_created_without_a_password_stays_locked_out():
     # `createsuperuser --noinput` with no DJANGO_SUPERUSER_PASSWORD.
     User.objects.create_superuser("noauth@example.com")
     assert User.objects.get(email="noauth@example.com").has_usable_password() is False
+
+
+@pytest.mark.django_db
+def test_the_sign_in_email_carries_a_working_link_in_both_bodies(settings):
+    # A client that refuses HTML still has to be able to sign in.
+    APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
+
+    token = MagicLinkToken.objects.get(user__email="a@b.com").token
+    sent = mail.outbox[0]
+    html = sent.alternatives[0][0]
+
+    assert sent.alternatives[0][1] == "text/html"
+    assert token in sent.body
+    assert token in html
+    for body in (sent.body, html):
+        assert settings.SITE_URL in body
+        assert "15 minutes" in body
+
+
+@pytest.mark.django_db
+def test_the_sign_in_link_opens_the_site_this_deployment_serves(settings):
+    # A hardcoded production host sent every tester somewhere they were
+    # not working.
+    settings.SITE_URL = "https://example.test"
+    APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
+
+    token = MagicLinkToken.objects.get(user__email="a@b.com").token
+    assert f"https://example.test/verify?token={token}" in mail.outbox[0].body
+
+
+@pytest.mark.django_db
+def test_the_subject_is_one_line():
+    # A header cannot hold a newline, and a template file ends with one.
+    APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
+
+    subject = mail.outbox[0].subject
+    assert "\n" not in subject
+    assert subject == "Your sign-in link for Statusboard"

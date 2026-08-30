@@ -1,0 +1,14 @@
+{% autoescape off %}Sign in to Statusboard
+======================
+
+Open this link to sign in. It works once, and it expires in {{ minutes }} minutes.
+
+{{ url }}
+
+You have no password. Every sign-in is a link like this one.
+
+If you did not ask for this, nothing has happened to your account. You
+can ignore this message.
+
+{{ site }}
+{% endautoescape %}

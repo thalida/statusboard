@@ -1,0 +1,46 @@
+{% autoescape off %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Sign in to Statusboard</title>
+</head>
+{% comment %}
+Table layout and inline styles, because a mail client is not a browser.
+No external stylesheet, no web font, no image: a blocked image would
+leave the button unlabelled.
+{% endcomment %}
+<body style="margin:0;padding:0;background:#F3F3FB;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F3FB;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:16px;">
+<tr><td style="padding:32px 32px 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <p style="margin:0;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#63628F;">Statusboard</p>
+  <h1 style="margin:12px 0 0;font-size:24px;line-height:1.2;font-weight:800;color:#12123A;">Sign in</h1>
+  <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3B3A66;">
+    This link works once, and it expires in {{ minutes }} minutes.
+  </p>
+</td></tr>
+<tr><td style="padding:24px 32px 8px;">
+  <a href="{{ url }}" style="display:block;padding:14px 20px;border-radius:12px;background:#12123A;color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;text-align:center;text-decoration:none;">Sign in to Statusboard</a>
+</td></tr>
+<tr><td style="padding:8px 32px 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#63628F;">
+    Or paste this address into your browser:
+  </p>
+  <p style="margin:6px 0 0;font-size:13px;line-height:1.5;word-break:break-all;">
+    <a href="{{ url }}" style="color:#3B3A66;">{{ url }}</a>
+  </p>
+  <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#63628F;">
+    You have no password. Every sign-in is a link like this one.
+  </p>
+  <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#63628F;">
+    If you did not ask for this, nothing has happened to your account.
+  </p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+{% endautoescape %}

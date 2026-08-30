@@ -360,3 +360,14 @@ SPECTACULAR_SETTINGS = {
 }
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.app>"
+)
+
+# Where a sign-in link opens. The client serves it, not Django, so it is
+# a whole address rather than a reverse. A hardcoded production host sent
+# every tester a link to somewhere they were not working.
+SITE_URL = os.environ.get(
+    "SITE_URL", f"http://localhost:{os.environ.get('DJANGO_PORT', '8000')}"
+).rstrip("/")
+MAGIC_LINK_PATH = "/verify"

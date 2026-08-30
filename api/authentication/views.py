@@ -1,5 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
@@ -8,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from authentication.emails import send_magic_link
 from authentication.models import MagicLinkToken
 from authentication.serializers import (
     MagicLinkRequestSerializer,
@@ -37,12 +37,7 @@ class MagicLinkView(APIView):
             return Response({"detail": "email is required"}, status=400)
         user, _ = User.objects.get_or_create(email=email)
         link = MagicLinkToken.objects.create(user=user)
-        send_mail(
-            subject="Your statusboard sign-in link",
-            message=f"Sign in: https://statusboard.app/verify?token={link.token}",
-            from_email=None,
-            recipient_list=[email],
-        )
+        send_magic_link(link)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
