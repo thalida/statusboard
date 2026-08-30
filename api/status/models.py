@@ -57,7 +57,7 @@ class ComponentStatus(BaseModel):
             raise ValidationError({"poll_run": "That poll read another service."})
 
     def __str__(self):
-        return f"{self.component} — {self.get_severity_display()}"
+        return f"{self.component} ({self.get_severity_display()})"
 
     class Meta(BaseModel.Meta):
         verbose_name = "component status"
@@ -179,7 +179,7 @@ class EventUpdate(BaseModel):
             )
 
     def __str__(self):
-        return f"{self.event} — {self.phase}"
+        return f"{self.event} ({self.phase})"
 
     class Meta(BaseModel.Meta):
         ordering = ["-posted_at"]
