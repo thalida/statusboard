@@ -31,6 +31,7 @@ BACKED = {
     "StatusPage": "StatusPage",
     "Poller": "Poller",
     "Component": "ServiceComponent",
+    "PathNode": "ServiceComponent",
     "Status": "ComponentStatus",
     "ServiceEvent": "ServiceEvent",
     "EventRef": "ServiceEvent",

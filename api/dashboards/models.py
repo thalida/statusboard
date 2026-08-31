@@ -11,6 +11,15 @@ class Dashboard(BaseModel):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="dashboards"
     )
     name = models.CharField(max_length=200, default="My board")
+    # DashboardItem is the through model, so this adds no column and no
+    # SQL. It names the relation, which is what lets a query say
+    # `boards__owner` instead of walking the join by hand.
+    #
+    # Rows are still made through the model. `.add()` would skip the
+    # audit stamp, and every caller here has a user to sign with.
+    components = models.ManyToManyField(
+        ServiceComponent, through="DashboardItem", related_name="boards"
+    )
 
     # Which board is the default sits on the user, as
     # `default_dashboard`. A column here would be a flag per board with

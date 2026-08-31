@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from catalog.models import PATH_SEPARATOR, Service, ServiceComponent, StatusPage
+from catalog.models import Service, ServiceComponent, StatusPage
 from common.mixins import FieldsMixin
 from polling.models import Poller
 from status.choices import EventKind
@@ -36,6 +36,19 @@ class ServiceRefSerializer(FieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Service
         fields = ["id", "slug", "name", "logo"]
+
+
+class PathNodeSerializer(serializers.ModelSerializer):
+    """One step above a component, enough to link to it.
+
+    A joined string named the ancestors and gave a client nothing to
+    click. This is the id, the name, and whether the step is the service
+    rollup. A client draws that step as the service itself.
+    """
+
+    class Meta:
+        model = ServiceComponent
+        fields = ["id", "name", "is_overall"]
 
 
 class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
@@ -81,16 +94,18 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             else None
         )
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
+    @extend_schema_field(PathNodeSerializer(many=True))
     def get_path(self, row):
-        # Null on the overall component: it is not under anything.
+        # Top down, and empty on the overall component: it is under
+        # nothing. Empty rather than null, so a client maps over it
+        # without checking first.
         #
-        # `ancestors` walks the chain, and guards the loop a self
+        # `ancestors` walks the chain and guards the loop a self
         # referencing column allows. This walked it a second time and
         # did not.
-        if row.is_overall or not row.ancestors:
-            return None
-        return PATH_SEPARATOR.join(node.name for node in row.ancestors)
+        if row.is_overall:
+            return []
+        return PathNodeSerializer(row.ancestors, many=True).data
 
     @extend_schema_field(serializers.IntegerField())
     def get_child_count(self, row):
@@ -135,7 +150,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
         user = getattr(self.context.get("request"), "user", None)
         if user is None or not user.is_authenticated:
             return None
-        return row.tracked_by.filter(dashboard__owner=user).exists()
+        return row.boards.filter(owner=user).exists()
 
 
 class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
@@ -187,9 +202,7 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
         if user is None or not user.is_authenticated:
             return 0
         return (
-            ServiceComponent.objects.filter(
-                service=service, tracked_by__dashboard__owner=user
-            )
+            ServiceComponent.objects.filter(service=service, boards__owner=user)
             .distinct()
             .count()
         )

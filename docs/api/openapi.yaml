@@ -749,6 +749,14 @@ components:
 
             It is not when you started tracking. The app has held the service since this date;
             your board is separate.
+    PathNode:
+      type: object
+      description: One step above a component, and enough to link to it.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        is_overall: { type: boolean, description: 'The service rollup. A client draws this step as the service.' }
+
     Component:
       type: object
       properties:
@@ -760,7 +768,13 @@ components:
 
             Use this name on a service screen. On a board row, show the service name instead, with
             `"Overall status"` below it. Select with `is_overall`. The API sends one name only.
-        path: { type: string, nullable: true, example: 'Twilio › Programmable Messaging', description: 'Null on the overall component, which has no ancestry.' }
+        path:
+          type: array
+          description: |
+            Every component above this one, top down. Each step carries its own id, so a client
+            builds a breadcrumb it can click. Empty on the overall component, which is under
+            nothing.
+          items: { $ref: '#/components/schemas/PathNode' }
         parent: { type: string, format: uuid, nullable: true }
         child_count:
           type: integer

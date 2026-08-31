@@ -10,10 +10,6 @@ from simple_history.models import HistoricalRecords
 from catalog.choices import StatusPageProvider
 from common.models import BaseModel
 
-# What separates the names in a component's path. The API publishes the
-# string, so this is the contract and not a style choice.
-PATH_SEPARATOR = " \u203a "
-
 
 class ServiceManager(models.Manager):
     @transaction.atomic

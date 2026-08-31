@@ -74,7 +74,7 @@ OVERALL_SEVERITY = Subquery(
 #
 # Two readers, two shapes. Only the suggestion order needs the number, so
 # only it pays for a distinct count over three joins.
-WATCHER_COUNT = Count("components__tracked_by__dashboard__owner", distinct=True)
+WATCHER_COUNT = Count("components__boards__owner", distinct=True)
 
 
 def is_tracked(field="pk"):

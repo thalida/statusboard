@@ -40,8 +40,8 @@ class ServiceFilter(filters.FilterSet):
             return queryset.none()
         return queryset.annotate(
             n=Count(
-                "components__tracked_by",
-                filter=Q(components__tracked_by__dashboard__owner=user),
+                "components",
+                filter=Q(components__boards__owner=user),
                 distinct=True,
             )
         ).filter(n__gt=value)

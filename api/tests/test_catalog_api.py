@@ -283,19 +283,26 @@ def test_a_service_with_no_reading_sorts_last_not_first():
 
 
 @pytest.mark.django_db
-def test_a_path_names_every_component_above_it():
-    # `ancestors` guards the loop a self referencing column allows. The
-    # serializer walked the chain a second time and did not.
-    from catalog.models import PATH_SEPARATOR
+def test_a_path_carries_enough_to_link_to_each_step():
+    # A joined string named the ancestors and gave a client nothing to
+    # click. Each step is a row with its own id.
     from catalog.serializers import ComponentSerializer
 
     service = ServiceFactory(name="Twilio")
-    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
+    parent = ComponentFactory(
+        service=service, name="Programmable Messaging", parent=overall
+    )
     child = ComponentFactory(service=service, name="SMS", parent=parent)
 
-    assert ComponentSerializer(child).data["path"] == "Programmable Messaging"
-    assert ComponentSerializer(parent).data["path"] is None
-    assert PATH_SEPARATOR == " \u203a "
+    path = ComponentSerializer(child).data["path"]
+
+    assert [step["name"] for step in path] == ["Twilio", "Programmable Messaging"]
+    assert path[0]["id"] == str(overall.id)
+    assert path[0]["is_overall"] is True
+    # Empty, not null: the overall component is under nothing, and a
+    # client maps over the list without checking first.
+    assert ComponentSerializer(overall).data["path"] == []
 
 
 @pytest.mark.django_db
