@@ -132,6 +132,9 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
         "common.filters.FieldsBackend",
     ],
+    # The contract calls it `q`, and DRF's SearchFilter calls it
+    # `search`. One name, and the schema documents it.
+    "SEARCH_PARAM": "q",
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
     # The same number `/meta` publishes and the paginator reads.
     "PAGE_SIZE": DEFAULT_PAGE_SIZE,
