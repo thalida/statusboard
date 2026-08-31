@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Make sure this checkout has a .env.local with the local admin in it.
+"""Make sure this checkout has an api/.env.local with the local admin in it.
 
-The canonical .env.local lives in the main checkout. A worktree copies
-it. So
-the credentials are entered once, not once per branch.
+The file sits beside the service that reads it. An app will have its own,
+and none of these variables mean anything to it.
+
+The canonical one lives in the main checkout. A worktree copies it, so
+the credentials are entered once and not once per branch.
 
 Blank values are filled by asking. A missing file is not the trigger: the
 file can exist and still have nothing in it. Asking only happens on a
@@ -30,7 +32,7 @@ ROOT = pathlib.Path(
         check=True,
     ).stdout.strip()
 )
-TEMPLATE = ROOT / ".env.local.example"
+TEMPLATE = ROOT / "api" / ".env.local.example"
 
 
 def main_checkout() -> pathlib.Path:
@@ -67,9 +69,23 @@ def fill(text: str, key: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def starting_text(path: pathlib.Path) -> str:
+    """What to build from.
+
+    The file itself, then the one this used to live at, then the
+    template. Reading the old path means nobody enters their credentials
+    a second time because the file moved.
+    """
+    legacy = path.parent.parent / ".env.local"
+    for candidate in (path, legacy):
+        if candidate.exists():
+            return candidate.read_text()
+    return TEMPLATE.read_text()
+
+
 def ensure(path: pathlib.Path) -> str:
     """Create the file if needed. Ask for anything still blank."""
-    text = path.read_text() if path.exists() else TEMPLATE.read_text()
+    text = starting_text(path)
     missing = blanks(text)
     if missing and sys.stdin.isatty():
         print(f"Setting the local admin in {path}. Press Enter to skip.")
@@ -78,13 +94,15 @@ def ensure(path: pathlib.Path) -> str:
             answer = reader(prompt).strip()
             if answer:
                 text = fill(text, key, answer)
+    # The main checkout may not have this branch, so no api/ either.
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return text
 
 
 def main() -> None:
-    shared = main_checkout() / ".env.local"
-    local = (ROOT / ".env.local").resolve()
+    shared = main_checkout() / "api" / ".env.local"
+    local = (ROOT / "api" / ".env.local").resolve()
 
     text = ensure(shared)
     if shared.resolve() == local:
@@ -94,7 +112,7 @@ def main() -> None:
     if local.exists() and not blanks(local.read_text()):
         return
     local.write_text(text)
-    print(f"copied .env.local from {shared.parent}")
+    print(f"copied api/.env.local from {shared.parent.parent}")
 
 
 if __name__ == "__main__":

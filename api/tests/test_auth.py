@@ -132,7 +132,7 @@ def test_the_sign_in_email_carries_a_working_link_in_both_bodies(settings):
     assert token in sent.body
     assert token in html
     for body in (sent.body, html):
-        assert settings.SITE_URL in body
+        assert settings.APP_URL in body
         assert "15 minutes" in body
 
 
@@ -140,7 +140,7 @@ def test_the_sign_in_email_carries_a_working_link_in_both_bodies(settings):
 def test_the_sign_in_link_opens_the_site_this_deployment_serves(settings):
     # A hardcoded production host sent every tester somewhere they were
     # not working.
-    settings.SITE_URL = "https://example.test"
+    settings.APP_URL = "https://example.test"
     APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
 
     token = MagicLinkToken.objects.get(user__email="a@b.com").token
@@ -157,28 +157,17 @@ def test_the_subject_is_one_line():
     assert subject == "Your sign-in link for Statusboard"
 
 
-@pytest.mark.parametrize("given", ["", "   ", None])
-def test_a_blank_site_url_falls_back_to_this_worktree(given):
-    # .env.local is shared by every worktree, and each serves on its own
-    # port. A value written there would be wrong in all the others.
-    from api.defaults import site_url
+def test_no_app_means_no_link_rather_than_a_link_to_nowhere(settings):
+    # A guess would mail an address nothing serves, and the person
+    # clicking it would have no idea why it failed.
+    from django.core.exceptions import ImproperlyConfigured
 
-    assert site_url(given, "54999") == "http://localhost:54999"
-
-
-def test_a_site_url_loses_its_trailing_slash():
-    # The path is joined onto it, so two slashes would reach nothing.
-    from api.defaults import site_url
-
-    assert site_url("https://statusboard.app/", "8000") == "https://statusboard.app"
-
-
-def test_the_link_escapes_a_token_that_needs_it():
-    # `secrets.token_urlsafe` never produces one, but building a query
-    # string by hand is how that stops being true.
     from authentication.emails import magic_link_url
 
-    assert magic_link_url("a b&c=d").endswith("?token=a+b%26c%3Dd")
+    settings.APP_URL = ""
+
+    with pytest.raises(ImproperlyConfigured, match="APP_URL"):
+        magic_link_url("abc")
 
 
 def test_the_sign_in_page_is_not_one_of_ours():
@@ -189,7 +178,7 @@ def test_the_sign_in_page_is_not_one_of_ours():
     from django.urls import Resolver404, resolve
 
     with pytest.raises(Resolver404):
-        resolve(settings.MAGIC_LINK_PATH)
+        resolve(settings.APP_MAGIC_LINK_PATH)
 
 
 def test_the_sign_in_page_is_not_the_endpoint_it_calls():
@@ -198,4 +187,4 @@ def test_the_sign_in_page_is_not_the_endpoint_it_calls():
     from django.conf import settings
     from django.urls import reverse
 
-    assert settings.MAGIC_LINK_PATH != reverse("verify")
+    assert settings.APP_MAGIC_LINK_PATH != reverse("verify")

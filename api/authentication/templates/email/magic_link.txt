@@ -10,5 +10,5 @@ You have no password. Every sign-in is a link like this one.
 If you did not ask for this, nothing has happened to your account. You
 can ignore this message.
 
-{{ site }}
+{{ app }}
 {% endautoescape %}

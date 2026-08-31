@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 # Re-exported so `django.conf.settings` carries them. See api/defaults.py.
 from api.defaults import (  # noqa: F401
     DEFAULT_PAGE_SIZE,
-    MAGIC_LINK_PATH,
     MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,
@@ -20,15 +19,15 @@ from api.defaults import (  # noqa: F401
     POLL_MAX_INTERVAL_SECONDS,
     SYSTEM_EMAIL,
     Environment,
-    site_url,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Local development only. The file sits at the repository root and is
-# never committed. A deployment has no .env.local, so load_dotenv does
-# nothing and the real environment is used.
-load_dotenv(BASE_DIR.parent / ".env.local")
+# Development only, and never committed. It sits beside this service,
+# not at the repository root. An app alongside will have its own, and
+# none of these variables mean anything to it. A deployment has no file,
+# so load_dotenv does nothing and the real environment is used.
+load_dotenv(BASE_DIR / ".env.local")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 # The banner colour and the development-only commands both branch on this,
@@ -366,6 +365,9 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.app>"
 )
 
-# A hardcoded production host sent every tester a link to somewhere they
-# were not working. See `site_url` for what blank means.
-SITE_URL = site_url(os.environ.get("SITE_URL"), os.environ.get("DJANGO_PORT", "8000"))
+# The client app, not this service. A sign-in email links to a page the
+# client serves. This project is the API on its own subdomain, so it
+# cannot work either of these out. There is no default for the same
+# reason: a guess would point somewhere nothing is served.
+APP_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
+APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/verify"

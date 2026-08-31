@@ -12,6 +12,7 @@ with the code that renders it.
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
@@ -34,13 +35,18 @@ def magic_link_url(token):
 
     Not `reverse("verify")`. That names this project's own endpoint, a
     POST that answers JSON, and a browser opening it sends a GET. The
-    page is the client's, on its own origin, so SITE_URL says where.
+    page is the client's, on its own origin, so APP_URL says where.
 
     Not `request.build_absolute_uri` either. That reads the Host header
     of the request being served, which is the caller's to set.
     """
+    if not settings.APP_URL:
+        raise ImproperlyConfigured(
+            "APP_URL is unset, so a sign-in link would go nowhere. "
+            "Set it to the address the client app is served from."
+        )
     query = urlencode({"token": token})
-    return f"{settings.SITE_URL}{settings.MAGIC_LINK_PATH}?{query}"
+    return f"{settings.APP_URL}{settings.APP_MAGIC_LINK_PATH}?{query}"
 
 
 def send_magic_link(link):
@@ -48,7 +54,7 @@ def send_magic_link(link):
     context = {
         "url": magic_link_url(link.token),
         "minutes": int(settings.MAGIC_LINK_TTL.total_seconds() // 60),
-        "site": settings.SITE_URL,
+        "app": settings.APP_URL,
     }
     subject, text, html = _render("magic_link", context)
     message = EmailMultiAlternatives(

@@ -9,10 +9,12 @@ __pycache__/
 .venv/
 venv/
 
-# Local-only settings and credentials, seeded from .env.local.example.
+# Local-only settings and credentials, seeded from api/.env.local.example.
 .env
 .env.*
-!.env.local.example
+**/.env
+**/.env.*
+!**/.env.local.example
 
 # Django
 api/staticfiles/

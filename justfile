@@ -1,5 +1,5 @@
 set dotenv-load
-set dotenv-filename := ".env.local"
+set dotenv-path := "api/.env.local"
 
 # Per-worktree ports, compose project name and DATABASE_URL. Every recipe
 # touching Postgres, Redis or the server evaluates this first. Two worktrees

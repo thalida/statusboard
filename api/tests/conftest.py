@@ -16,3 +16,14 @@ def no_network(monkeypatch):
         )
 
     monkeypatch.setattr("socket.socket.connect", blocked)
+
+
+@pytest.fixture(autouse=True)
+def app_url(settings):
+    """The client this deployment serves, for tests that mail a link.
+
+    There is no default in settings, because a guess would mail an
+    address nothing serves. Anything asserting on the absence sets it
+    back.
+    """
+    settings.APP_URL = "https://statusboard.app"
