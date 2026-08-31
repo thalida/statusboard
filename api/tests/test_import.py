@@ -3,14 +3,22 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from catalog.models import Service, StatusPage
+from polling.adapters.base import Adapter
 from polling.models import Poller
 
 
-class FakeAdapter:
+class FakeAdapter(Adapter):
+    """A stand-in that has to satisfy the real interface.
+
+    Not a bare class. One drifted from the base and kept passing, so a
+    method every adapter inherits was missing here and nowhere else.
+    """
+
     provider = "statuspage"
 
-    def __init__(self, url, session=None):
-        self.url = url
+    @classmethod
+    def matches(cls, url):
+        return True
 
     def fetch_status(self):
         from polling.adapters.base import NormalisedComponent
@@ -135,3 +143,51 @@ def test_normalising_still_ignores_case_query_and_trailing_slash():
         StatusPage.normalise_url("HTTPS://Status.Twilio.com/?utm=x#top")
         == "https://status.twilio.com"
     )
+
+
+@pytest.mark.django_db
+def test_a_provider_that_names_nothing_still_gets_a_service_name(monkeypatch):
+    # Half the providers publish no name, and one that does publishes it
+    # empty. A service has to be called something to be imported.
+    class Nameless(Adapter):
+        provider = "rss"
+
+        @classmethod
+        def matches(cls, url):
+            return True
+
+        def fetch_status(self):
+            return []
+
+        def fetch_incidents(self):
+            return []
+
+        def fetch_service_metadata(self):
+            return {"name": ""}
+
+        def fetch_logo(self):
+            return ""
+
+    monkeypatch.setattr(
+        "polling.adapters.registry.identify",
+        lambda url: (Nameless, url),
+    )
+    service, created = Service.objects.import_from_url("https://status.nameless.test/")
+
+    assert created
+    assert service.name == "status.nameless.test"
+
+
+@pytest.mark.django_db
+def test_a_poll_keeps_the_old_name_when_a_provider_stops_publishing_one():
+    # `named_metadata` is the importer's. A poll must not overwrite a
+    # real name with a host every time the provider answers without one.
+    from polling.tasks import _refresh_metadata
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+
+    _refresh_metadata(service, {"name": ""})
+
+    service.refresh_from_db()
+    assert service.name == "Twilio"

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,28 @@ class Adapter(ABC):
     def fetch_incidents(self) -> list[NormalisedEvent]: ...
 
     @abstractmethod
-    def fetch_service_metadata(self) -> dict: ...
+    def fetch_service_metadata(self) -> dict:
+        """What the provider says the service is called, and where it is.
+
+        Every key is optional. Half the providers publish no name, and
+        one of those that does publishes it empty. `named_metadata` is
+        what an importer wants.
+        """
+
+    def named_metadata(self) -> dict:
+        """The same, with a name that is never blank.
+
+        A service has to be called something the moment it is imported.
+        The host is what somebody typed to get here.
+
+        A poll reads `fetch_service_metadata` instead. There the old name
+        is the better fallback. A host would overwrite a real name every
+        time a provider answered without one.
+        """
+        metadata = dict(self.fetch_service_metadata())
+        if not metadata.get("name"):
+            metadata["name"] = urlparse(self.url).netloc
+        return metadata
 
     def fetch_logo(self) -> str:
         """The product's own mark, scraped from the status page.

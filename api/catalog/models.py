@@ -37,13 +37,13 @@ class ServiceManager(models.Manager):
 
         adapter_class, fetch_url = identify(key)
         adapter = adapter_class(fetch_url)
-        metadata = adapter.fetch_service_metadata()
+        metadata = adapter.named_metadata()
 
         # Nobody typed these in, so they are signed by the system account
         # rather than left blank.
         author = get_user_model().objects.system()
         service = self.create(
-            name=metadata.get("name") or urlparse(key).netloc,
+            name=metadata["name"],
             description=metadata.get("description", ""),
             homepage_url=metadata.get("homepage_url", ""),
             logo=adapter.fetch_logo(),
