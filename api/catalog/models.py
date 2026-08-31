@@ -60,8 +60,6 @@ class ServiceManager(models.Manager):
             # A page whose feed lives at its own path, for one.
             api_url_override="" if fetch_url == key else fetch_url,
         )
-        # The Poller comes from the Service signal; one here would duplicate it.
-
         # An import is a fetch, so it is recorded as one. Without it
         # the first reading has no provenance, and the log is missing
         # the request that made the rows.
@@ -69,6 +67,9 @@ class ServiceManager(models.Manager):
         components = adapter.fetch_status()
         events = adapter.fetch_incidents()
         run = PollRun.objects.create(
+            # Nothing above makes this. `create_poller` in polling.signals
+            # does, on the Service save. Making one here would trip the
+            # one-to-one column.
             poller=service.poller,
             url=key,
             provider=adapter_class.provider,
