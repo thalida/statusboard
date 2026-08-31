@@ -1,8 +1,7 @@
 from urllib.parse import urljoin
 
-import requests
-
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent
 from status.choices import Severity
 
@@ -35,7 +34,7 @@ class OracleAdapter(Adapter):
 
     def _get(self, path):
         base = self.url if self.url.endswith("/") else self.url + "/"
-        response = (self.session or requests).get(urljoin(base, path), timeout=15)
+        response = (self.session or fetch.session).get(urljoin(base, path), timeout=15)
         response.raise_for_status()
         return response.json()
 

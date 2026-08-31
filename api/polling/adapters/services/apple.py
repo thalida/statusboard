@@ -1,8 +1,7 @@
 from urllib.parse import urljoin
 
-import requests
-
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
@@ -27,7 +26,9 @@ class AppleAdapter(Adapter):
     def _payload(self):
         if not hasattr(self, "_cached"):
             base = self.url if self.url.endswith("/") else self.url + "/"
-            response = (self.session or requests).get(urljoin(base, DATA), timeout=15)
+            response = (self.session or fetch.session).get(
+                urljoin(base, DATA), timeout=15
+            )
             response.raise_for_status()
             self._cached = response.json()
         return self._cached

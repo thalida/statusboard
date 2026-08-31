@@ -70,3 +70,37 @@ SYSTEM_EMAIL = "system@statusboard.invalid"
 # How long a sign-in link works for. Long enough to walk to a phone,
 # short enough that a link left in an inbox is not a key.
 MAGIC_LINK_TTL = timedelta(minutes=15)
+
+
+# The key this repository publishes. Development runs on it; nothing
+# else may.
+DEV_SECRET_KEY = "dev-only-not-for-deploy"
+
+
+def secret_key(configured, environment):
+    """The signing key, or a refusal.
+
+    It used to fall back to the development key everywhere. A
+    deployment that forgot the variable signed every cookie and token
+    with a string anybody can read here.
+    """
+    configured = (configured or "").strip()
+    if configured:
+        return configured
+    if environment is not Environment.DEVELOPMENT:
+        raise ValueError(
+            f"SECRET_KEY is unset, and ENVIRONMENT is {environment}. Every "
+            "signature this process makes would use a key in the repository."
+        )
+    return DEV_SECRET_KEY
+
+
+def debug(configured, environment):
+    """Whether to serve tracebacks.
+
+    It used to default on, so a deployment that forgot the variable
+    showed its stack traces to callers.
+    """
+    if configured is not None and configured.strip():
+        return configured.strip() == "1"
+    return environment is Environment.DEVELOPMENT

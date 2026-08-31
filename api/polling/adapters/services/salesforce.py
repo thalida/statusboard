@@ -1,8 +1,7 @@
 from datetime import datetime
 
-import requests
-
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity
 
@@ -34,7 +33,7 @@ class SalesforceAdapter(Adapter):
         return "status.salesforce.com" in url
 
     def _get(self, path):
-        response = (self.session or requests).get(f"{API}/{path}", timeout=20)
+        response = (self.session or fetch.session).get(f"{API}/{path}", timeout=20)
         response.raise_for_status()
         return response.json()
 

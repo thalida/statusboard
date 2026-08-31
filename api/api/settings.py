@@ -19,6 +19,8 @@ from api.defaults import (  # noqa: F401
     POLL_MAX_INTERVAL_SECONDS,
     SYSTEM_EMAIL,
     Environment,
+    debug,
+    secret_key,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,14 +30,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # none of these variables mean anything to it. A deployment has no file,
 # so load_dotenv does nothing and the real environment is used.
 load_dotenv(BASE_DIR / ".env.local")
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-not-for-deploy")
-DEBUG = os.environ.get("DEBUG", "1") == "1"
-# The banner colour and the development-only commands both branch on this,
-# so a value nobody recognises stops the process here.
+# The banner colour, the development-only commands and the two settings
+# below all branch on this. A value nobody recognises stops here.
 try:
     ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 except ValueError as error:
     raise ImproperlyConfigured(str(error)) from error
+DEVELOPING = ENVIRONMENT is Environment.DEVELOPMENT
+
+# These two used to default toward development. A deployment that
+# forgot either ran with tracebacks on, and with a key published in this
+# repository. See `secret_key` and `debug` for what each refuses.
+DEBUG = debug(os.environ.get("DEBUG"), ENVIRONMENT)
+try:
+    SECRET_KEY = secret_key(os.environ.get("SECRET_KEY"), ENVIRONMENT)
+except ValueError as error:
+    raise ImproperlyConfigured(str(error)) from error
+
 # A wildcard accepts any Host header. The dev machine is usually on a
 # network too. So debug adds the loopback names and nothing else.
 # `0.0.0.0` is one: runserver binds to it. A LAN address goes in
@@ -135,6 +146,24 @@ REST_FRAMEWORK = {
     # The contract calls it `q`, and DRF's SearchFilter calls it
     # `search`. One name, and the schema documents it.
     "SEARCH_PARAM": "q",
+    # The contract has always answered 429, and nothing raised one.
+    # Two endpoints make that expensive rather than untidy. An import
+    # fetches a URL somebody handed us. A magic link mails an address
+    # nobody has proved they own.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        # Reading the catalog is the point, so the plain rates are wide.
+        "anon": "120/min",
+        "user": "600/min",
+        # Each of these costs somebody else something: an outbound fetch
+        # and a delivered email.
+        "import": "6/min",
+        "magic-link": "5/hour",
+    },
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
     # The same number `/meta` publishes and the paginator reads.
     "PAGE_SIZE": DEFAULT_PAGE_SIZE,

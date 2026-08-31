@@ -7,6 +7,9 @@ from polling.models import Poller
 class ServiceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Service
+        # `tracked` makes rows on another table, never on this one, so
+        # there is nothing to save afterwards.
+        skip_postgeneration_save = True
 
     name = factory.Sequence(lambda n: f"Service {n}")
 

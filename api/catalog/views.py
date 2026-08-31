@@ -143,6 +143,8 @@ class CatalogImportView(APIView):
     """
 
     permission_classes = [AllowAny]
+    # Every call makes the server fetch a URL somebody else chose.
+    throttle_scope = "import"
 
     @extend_schema(
         request=ImportRequestSerializer,

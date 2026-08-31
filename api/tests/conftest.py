@@ -27,3 +27,15 @@ def app_url(settings):
     back.
     """
     settings.APP_URL = "https://statusboard.app"
+
+
+@pytest.fixture(autouse=True)
+def forget_throttles():
+    """Throttle counters live in the cache, which outlives a test.
+
+    Without this, the fifth test to ask for a sign-in link is refused
+    for something the fourth one did.
+    """
+    from django.core.cache import cache
+
+    cache.clear()

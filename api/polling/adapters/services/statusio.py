@@ -1,9 +1,8 @@
 import re
 from datetime import datetime
 
-import requests
-
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
 
@@ -52,7 +51,7 @@ class StatusIoAdapter(Adapter):
         return False
 
     def _session(self):
-        return self.session or requests
+        return self.session or fetch.session
 
     def _payload(self):
         if not hasattr(self, "_cached"):

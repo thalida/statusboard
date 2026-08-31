@@ -4,6 +4,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -15,12 +16,18 @@ from authentication.serializers import (
     TokenPairSerializer,
     VerifyRequestSerializer,
 )
+from authentication.throttles import PerAddressThrottle
 
 User = get_user_model()
 
 
 class MagicLinkView(APIView):
     permission_classes = [AllowAny]
+    # Every call creates a user and sends mail, to an address nobody has
+    # proved they own. The scope counts per caller. `PerAddressThrottle`
+    # counts per recipient, so many callers cannot bury one inbox.
+    throttle_scope = "magic-link"
+    throttle_classes = [ScopedRateThrottle, PerAddressThrottle]
 
     @extend_schema(
         request=MagicLinkRequestSerializer,

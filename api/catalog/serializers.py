@@ -216,3 +216,18 @@ class ImportRequestSerializer(serializers.Serializer):
     """
 
     status_page_url = serializers.URLField()
+
+    def validate_status_page_url(self, value):
+        """Refuse an address we will not fetch, here rather than deeper.
+
+        The session guards every hop, so this changes no outcome. It
+        makes the ordinary mistake a 400 with a reason instead of a
+        failure raised out of the adapter probe.
+        """
+        from polling.fetch import BlockedAddress, check
+
+        try:
+            check(value)
+        except BlockedAddress as error:
+            raise serializers.ValidationError(str(error)) from error
+        return value

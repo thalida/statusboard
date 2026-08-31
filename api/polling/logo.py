@@ -9,7 +9,7 @@ import html
 import re
 from urllib.parse import urljoin, urlparse
 
-import requests
+from polling import fetch
 
 ICON_LINK = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
 REL_ICON = re.compile(r'rel=["\'][^"\']*\bicon\b[^"\']*["\']', re.IGNORECASE)
@@ -28,7 +28,7 @@ def find_logo(page_url: str, session=None) -> str:
     row; a missing one falls back to an initial.
     """
     try:
-        response = (session or requests).get(page_url, timeout=10)
+        response = (session or fetch.session).get(page_url, timeout=10)
         response.raise_for_status()
         markup = response.text
     except Exception:  # noqa: BLE001 — a logo is never worth failing a poll

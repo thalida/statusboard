@@ -3,8 +3,7 @@ import logging
 import re
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import requests
-
+from polling import fetch
 from polling.adapters.base import Adapter
 from polling.adapters.services.apple import AppleAdapter
 from polling.adapters.services.auth0 import Auth0Adapter
@@ -183,7 +182,7 @@ def advertised_feeds(url: str, session=None) -> list[str]:
     notion-status.com, status.slack.com at slack-status.com.
     """
     try:
-        markup = (session or requests).get(url, timeout=10).text
+        markup = (session or fetch.session).get(url, timeout=10).text
     except Exception as error:  # noqa: BLE001 — no page, no feeds
         logger.debug("could not read %s for feed links: %s", url, error)
         return []

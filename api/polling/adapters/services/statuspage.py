@@ -4,6 +4,7 @@ from urllib.parse import urljoin
 import requests
 
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import (
     Adapter,
     NormalisedComponent,
@@ -64,7 +65,7 @@ class StatuspageAdapter(Adapter):
         )
 
     def _get(self, path):
-        session = self.session or requests
+        session = self.session or fetch.session
         response = session.get(urljoin(self.url, path), timeout=10)
         response.raise_for_status()
         return response.json()

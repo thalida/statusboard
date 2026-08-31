@@ -2,9 +2,9 @@ import re
 from datetime import UTC, datetime
 
 import feedparser
-import requests
 
 from catalog.choices import StatusPageProvider
+from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 
@@ -50,7 +50,7 @@ class RSSAdapter(Adapter):
         became one synthetic component reading OPERATIONAL. A page we
         cannot read must fail the poll, not invent green.
         """
-        session = self.session or requests
+        session = self.session or fetch.session
         feed = feedparser.parse(session.get(self.url, timeout=10).text)
         if not feed.version:
             raise ValueError(f"{self.url} is not a feed this adapter can read")
