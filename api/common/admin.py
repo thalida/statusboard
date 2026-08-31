@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from unfold.decorators import display
 
 from api.defaults import Environment
+from common.ordering import is_tracked
 from status.choices import EVENT_PHASES_BY_KIND, Severity
 
 
@@ -79,7 +80,7 @@ def dashboard_callback(request, context):
     context["cards"] = [
         {
             "title": "Services tracked",
-            "value": Service.objects.filter(watcher_count__gt=0).count(),
+            "value": Service.objects.filter(is_tracked()).count(),
             "icon": "lan",
             "detail": f"{Service.objects.count()} in the catalog",
         },
@@ -153,9 +154,9 @@ def _tracking_chart(now):
     from dashboards.models import DashboardItem
 
     started = {}
-    for service_id, when in DashboardItem.objects.filter(
-        component__service__watcher_count__gt=0
-    ).values_list("component__service_id", "created_at"):
+    for service_id, when in DashboardItem.objects.values_list(
+        "component__service_id", "created_at"
+    ):
         day = localtime(when).date()
         if service_id not in started or day < started[service_id]:
             started[service_id] = day

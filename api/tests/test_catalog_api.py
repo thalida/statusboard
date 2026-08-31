@@ -233,11 +233,11 @@ def test_suggestions_put_what_is_broken_ahead_of_what_is_popular():
     A middling service that is broken now beats a popular one that is
     fine. That is the premise of the public view.
     """
-    popular = ServiceFactory(name="Popular", watcher_count=500)
+    popular = ServiceFactory(name="Popular", tracked=500)
     StatusPageFactory(service=popular)
     _with_status(popular, Severity.OPERATIONAL, is_overall=True)
 
-    broken = ServiceFactory(name="Broken", watcher_count=1)
+    broken = ServiceFactory(name="Broken", tracked=1)
     StatusPageFactory(service=broken)
     _with_status(broken, Severity.MAJOR_OUTAGE, is_overall=True)
 

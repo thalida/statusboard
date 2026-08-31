@@ -163,9 +163,9 @@ def test_the_admin_stamps_who_created_a_row(staff_client):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("field", ["created_by", "updated_by", "watcher_count"])
+@pytest.mark.parametrize("field", ["created_by", "updated_by"])
 def test_derived_fields_are_not_on_the_form(staff_client, field):
-    # watcher_count decides what gets polled, so a hand edit would
+    # A hand edit would
     # silently start or stop polling a service.
     body = staff_client.get(reverse("admin:catalog_service_add")).content.decode()
     assert f'name="{field}"' not in body

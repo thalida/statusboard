@@ -10,6 +10,19 @@ class ServiceFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Service {n}")
 
+    @factory.post_generation
+    def tracked(service, create, count, **kwargs):
+        """Put the service on somebody's board.
+
+        `tracked=1` is one watcher, `tracked=2` is two. There is no
+        column to set. A watcher is a row, and the count is worked out
+        when it is read.
+        """
+        if not create or not count:
+            return
+        for _ in range(int(count)):
+            track(ComponentFactory(service=service))
+
 
 class StatusPageFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -47,3 +60,24 @@ class ComponentFactory(factory.django.DjangoModelFactory):
     service = factory.SubFactory(ServiceFactory)
     external_id = factory.Sequence(lambda n: f"ext-{n}")
     name = factory.Sequence(lambda n: f"Component {n}")
+
+
+def track(component, user=None):
+    """Track a component, the way somebody using the app would."""
+    from django.contrib.auth import get_user_model
+
+    from dashboards.models import Dashboard, DashboardItem
+
+    if user is None:
+        user = get_user_model().objects.create(
+            email=f"watcher{DashboardItem.objects.count()}@example.test"
+        )
+    board = user.dashboards.first() or Dashboard.objects.create(owner=user)
+    return DashboardItem.objects.create(dashboard=board, component=component)
+
+
+def watchers(service):
+    """How many people track it, counted the way the app counts."""
+    from common.ordering import WATCHER_COUNT
+
+    return Service.objects.annotate(n=WATCHER_COUNT).get(pk=service.pk).n

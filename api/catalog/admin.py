@@ -32,7 +32,7 @@ from common.admin import (
     related_count,
     severity_label,
 )
-from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY
+from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY, WATCHER_COUNT
 from polling.models import Poller, PollRun
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
@@ -237,6 +237,27 @@ class ServiceEventInline(TabularInline):
         return False
 
 
+class TrackedFilter(DropdownFilter):
+    """Whether anybody has this service on a board.
+
+    The count is worked out when the list is read, so there is no column
+    to put a range over. This is the question the poller asks too.
+    """
+
+    title = _("Tracked")
+    parameter_name = "tracked"
+
+    def lookups(self, request, model_admin):
+        return [("1", _("Tracked")), ("0", _("Untracked"))]
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        if self.value() == "1":
+            return queryset.filter(watcher_count__gt=0)
+        return queryset.filter(watcher_count=0)
+
+
 class ServiceSeverityFilter(DropdownFilter):
     """Filter services by the status they are actually showing.
 
@@ -288,7 +309,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "is_featured",
-        "watcher_count",
+        "display_watchers",
         "provider",
         "display_related",
     ]
@@ -306,11 +327,13 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         ServiceSeverityFilter,
         "is_featured",
         ("status_page__provider", ChoicesDropdownFilter),
-        ("watcher_count", RangeNumericFilter),
+        TrackedFilter,
         ("created_at", RangeDateTimeFilter),
         ("updated_at", RangeDateTimeFilter),
     ]
-    ordering = ["-watcher_count", "name"]
+    # Not `ordering`: the checks want a real column there, and this one
+    # is counted when the list is read. `get_queryset` sorts instead.
+    ordering = ["name"]
     fieldsets = [
         (None, {"fields": ["name", "slug", "description", "is_featured"]}),
         (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
@@ -336,13 +359,19 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             .select_related("status_page", "poller")
             .annotate(
                 severity_now=OVERALL_SEVERITY,
+                watcher_count=WATCHER_COUNT,
                 component_count=related_count(ServiceComponent.objects, "service"),
                 event_count=related_count(ServiceEvent.objects, "service"),
                 status_count=related_count(
                     ComponentStatus.objects, "component__service"
                 ),
             )
+            .order_by("-watcher_count", "name")
         )
+
+    @display(description=_("Watchers"), ordering="watcher_count")
+    def display_watchers(self, obj):
+        return obj.watcher_count
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):

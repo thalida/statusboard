@@ -17,7 +17,7 @@ from catalog.serializers import (
 )
 from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.filters import FieldsBackend
-from common.ordering import CURRENT_SEVERITY, MappedOrderingFilter
+from common.ordering import CURRENT_SEVERITY, WATCHER_COUNT, MappedOrderingFilter
 from status.models import ComponentStatus, ServiceEvent
 from status.serializers import ServiceEventSerializer
 
@@ -135,13 +135,14 @@ class ServiceViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = Service.objects.select_related("status_page", "poller").annotate(
+            watcher_count=WATCHER_COUNT,
             severity_now=Subquery(
                 ComponentStatus.objects.filter(
                     component__service=OuterRef("pk"),
                     component__is_overall=True,
                     ended_at__isnull=True,
                 ).values("severity")[:1]
-            )
+            ),
         )
         q = self.request.query_params.get("q")
         return queryset.filter(name__icontains=q) if q else queryset

@@ -13,7 +13,12 @@ from status.choices import (
     StatusSource,
 )
 from status.models import ComponentStatus, ServiceEvent
-from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
+from tests.factories import (
+    ComponentFactory,
+    ServiceFactory,
+    StatusPageFactory,
+    watchers,
+)
 
 
 @pytest.fixture
@@ -169,13 +174,12 @@ def test_all_sorts_worst_first_by_default(client, board):
 
 @pytest.mark.django_db
 def test_tracking_a_component_adds_it_and_bumps_the_watcher_count(client, board):
-    component = ComponentFactory(service=ServiceFactory(watcher_count=0))
+    component = ComponentFactory(service=ServiceFactory())
     url = reverse("board-components", kwargs={"uuid": board.id})
     response = client.post(url, {"component_id": str(component.id)}, format="json")
     assert response.status_code == 201
     assert DashboardItem.objects.filter(dashboard=board, component=component).exists()
-    component.service.refresh_from_db()
-    assert component.service.watcher_count == 1
+    assert watchers(component.service) == 1
 
 
 @pytest.mark.django_db
@@ -216,8 +220,7 @@ def test_watcher_count_is_distinct_users_not_tracked_items(client, board):
     for external_id in ("a", "b", "c"):
         component = ComponentFactory(service=service, external_id=external_id)
         client.post(url, {"component_id": str(component.id)}, format="json")
-    service.refresh_from_db()
-    assert service.watcher_count == 1
+    assert watchers(service) == 1
 
 
 @pytest.mark.django_db
@@ -230,67 +233,49 @@ def test_two_people_tracking_one_service_count_twice(client, board):
     other = Dashboard.objects.get(owner=User.objects.create(email="second@b.com"))
     DashboardItem.objects.create(dashboard=other, component=component)
 
-    service.refresh_watcher_count()
-    service.refresh_from_db()
-    assert service.watcher_count == 2
+    assert watchers(service) == 2
 
 
 @pytest.mark.django_db
 def test_untracking_the_last_component_drops_the_watcher(client, board):
     component = _track(board)
     service = component.service
-    service.refresh_watcher_count()
+    assert watchers(service) == 1
     client.delete(
         reverse(
             "board-component-detail",
             kwargs={"uuid": board.id, "component_id": component.id},
         )
     )
-    service.refresh_from_db()
-    assert service.watcher_count == 0
-
-
-@pytest.mark.django_db
-def test_tracking_through_the_admin_also_counts(board):
-    """The count decides what gets polled, so the door must not matter.
-
-    Only the board endpoints recounted. Adding an item in the admin
-    left the service uncounted, and so unpolled.
-    """
-    service = ServiceFactory()
-    StatusPageFactory(service=service)
-    component = ComponentFactory(service=service)
-
-    DashboardItem.objects.create(dashboard=board, component=component)
-    service.refresh_from_db()
-    assert service.watcher_count == 1
-
-    DashboardItem.objects.get(dashboard=board, component=component).delete()
-    service.refresh_from_db()
-    assert service.watcher_count == 0
+    assert watchers(service) == 0
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "how", ["closing the account", "deleting the board", "a bulk delete"]
+    "how",
+    ["the admin", "closing the account", "deleting the board", "a bulk delete"],
 )
-def test_the_watcher_count_survives_every_way_a_row_goes(how):
-    # All three cascade in SQL, and overriding save and delete on the
-    # model caught none of them. A service kept a watcher who was gone,
-    # and the poller kept polling it.
+def test_the_watcher_count_is_right_however_a_row_arrives_or_goes(how):
+    """It decides what gets polled, so the door must not matter.
+
+    It used to be a column, kept true by overriding save and delete.
+    Three of these cascade in SQL and reached neither. A service kept a
+    watcher who was gone, and the poller kept polling it.
+    """
     from django.contrib.auth import get_user_model
 
-    from catalog.models import Service
     from dashboards.models import Dashboard, DashboardItem
 
-    service = ServiceFactory(watcher_count=0)
+    service = ServiceFactory()
     component = ComponentFactory(service=service)
     user = get_user_model().objects.create(email="watcher@b.com")
     board = Dashboard.objects.create(owner=user, name="B")
     DashboardItem.objects.create(dashboard=board, component=component)
-    assert Service.objects.get(pk=service.pk).watcher_count == 1
+    assert watchers(service) == 1
 
-    if how == "closing the account":
+    if how == "the admin":
+        DashboardItem.objects.get(dashboard=board, component=component).delete()
+    elif how == "closing the account":
         user.delete()
     elif how == "deleting the board":
         Dashboard.objects.create(owner=user, name="Other")
@@ -298,4 +283,4 @@ def test_the_watcher_count_survives_every_way_a_row_goes(how):
     else:
         DashboardItem.objects.all().delete()
 
-    assert Service.objects.get(pk=service.pk).watcher_count == 0
+    assert watchers(service) == 0

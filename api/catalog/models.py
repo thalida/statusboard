@@ -110,39 +110,9 @@ class Service(BaseModel):
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
     is_featured = models.BooleanField(verbose_name="Featured", default=False)
-    # Derived, and never set by hand. It decides what gets polled. A
-    # wrong number polls a service nobody tracks, or stops polling one
-    # somebody does.
-    #
-    # A column, not a count at read time. `due_pollers` filters on it
-    # every beat and the catalog orders by it. Neither can index a
-    # distinct count across three joins. Postgres cannot generate it
-    # either, because a generated column reads only its own row.
-    #
-    # A signal on DashboardItem keeps it true. See dashboards.signals.
-    watcher_count = models.PositiveIntegerField(
-        verbose_name="Watchers", default=0, editable=False
-    )
-
     objects = ServiceManager()
 
     history = HistoricalRecords()
-
-    def refresh_watcher_count(self):
-        """Recount the distinct users tracking any part of this service.
-
-        Distinct users, not items. Someone tracking five Twilio
-        components is one watcher. Counting per item would let one
-        person outrank a crowd in the suggestion order.
-        """
-        from django.contrib.auth import get_user_model
-
-        Service.objects.filter(pk=self.pk).update(
-            watcher_count=get_user_model()
-            .objects.filter(dashboards__items__component__service=self)
-            .distinct()
-            .count()
-        )
 
     def save(self, *args, **kwargs):
         # Only on the way in. The slug is the public URL of a service, so

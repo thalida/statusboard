@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from catalog.models import Service
+from common.ordering import is_tracked
 from polling.adapters.registry import for_provider
 from polling.models import Poller, PollRun
 from polling.reconcile import apply_fetch
@@ -33,7 +34,7 @@ def active_pollers():
     pollers that were never going to run.
     """
     return Poller.objects.filter(
-        service__watcher_count__gt=0,
+        is_tracked("service_id"),
         service__status_page__isnull=False,
         is_paused=False,
     )
