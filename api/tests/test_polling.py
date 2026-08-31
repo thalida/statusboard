@@ -3,13 +3,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from polling.models import Poller, PollRun
-from polling.tasks import (
-    due_pollers,
-    exception_name,
-    next_interval_seconds,
-    poll_service,
-)
+from polling.models import Poller, PollRun, next_interval_seconds
+from polling.tasks import due_pollers, exception_name, poll_service
 from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 
@@ -263,3 +258,37 @@ def test_a_run_still_in_flight_has_nothing_to_name_yet():
     )
     assert run.finished_at is None
     assert run.error_type == ""
+
+
+@pytest.mark.django_db
+def test_an_import_schedules_the_same_way_a_poll_does():
+    # Two callers wrote this. The import set a bare interval, with no
+    # backoff and no jitter. A hundred imported at once came due on the
+    # same second.
+    from polling.models import JITTER
+
+    poller = PollerFactory(service=ServiceFactory(tracked=1))
+    at = timezone.now()
+
+    poller.record(ok=True, at=at)
+
+    assert poller.last_success_at == at
+    assert poller.consecutive_failure_count == 0
+    interval = poller.effective_interval_seconds
+    gap = (poller.next_at - at).total_seconds()
+    assert interval * (1 - JITTER) <= gap <= interval * (1 + JITTER)
+
+
+@pytest.mark.django_db
+def test_a_recorded_failure_backs_the_schedule_off():
+    poller = PollerFactory(service=ServiceFactory(tracked=1))
+    at = timezone.now()
+
+    poller.record(ok=False, at=at)
+    poller.record(ok=False, at=at)
+
+    assert poller.consecutive_failure_count == 2
+    assert poller.last_success_at is None
+    # Two failures double it twice.
+    gap = (poller.next_at - at).total_seconds()
+    assert gap > poller.effective_interval_seconds * 3

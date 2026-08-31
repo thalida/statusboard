@@ -7,16 +7,33 @@ Poller is the tuning and PollRun is the log. Both belong beside the task
 that reads them.
 """
 
+import random
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
 from catalog.choices import StatusPageProvider
 from catalog.models import Service
 from common.models import BaseModel
+
+# A tenth either side of the interval. A hundred services imported at
+# once would otherwise all come due on the same second.
+JITTER = 0.1
+
+
+def next_interval_seconds(base, failures, ceiling):
+    """Exponential backoff.
+
+    A service in backoff is not checked every five minutes.
+    The service screen shows this interval, not the deployment default.
+    """
+    return min(base * (2**failures), ceiling)
 
 
 class Poller(BaseModel):
@@ -79,6 +96,34 @@ class Poller(BaseModel):
 
     def __str__(self):
         return str(self.service)
+
+    def record(self, ok, at=None):
+        """Move the schedule on, from the outcome of one poll.
+
+        Two callers write this. A scheduled poll, and an import, which is
+        a poll somebody asked for. They wrote it two ways: the import
+        skipped the backoff and the jitter, and set a bare interval.
+
+        Success clears the failure count. A failure backs off, doubling
+        to the ceiling. Jitter keeps a hundred services from stampeding
+        one provider on the minute.
+        """
+        at = at or timezone.now()
+        if ok:
+            self.consecutive_failure_count = 0
+            self.last_success_at = at
+        else:
+            self.consecutive_failure_count += 1
+        seconds = next_interval_seconds(
+            self.effective_interval_seconds,
+            self.consecutive_failure_count,
+            self.effective_max_interval_seconds,
+        )
+        seconds *= 1 + random.uniform(-JITTER, JITTER)
+        self.next_at = at + timedelta(seconds=seconds)
+        self.save(
+            update_fields=["consecutive_failure_count", "last_success_at", "next_at"]
+        )
 
     @property
     def effective_interval_seconds(self):

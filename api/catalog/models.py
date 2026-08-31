@@ -1,4 +1,3 @@
-from datetime import timedelta
 from urllib.parse import urlparse, urlunparse
 
 from django.core.exceptions import ValidationError
@@ -87,15 +86,10 @@ class ServiceManager(models.Manager):
             run,
         )
 
-        # An import is a successful poll, so the poller records one. Left
-        # alone, a freshly imported service read "never polled" on every
-        # screen until the first scheduled tick.
-        poller = service.poller
-        poller.last_success_at = run.finished_at
-        poller.next_at = run.finished_at + timedelta(
-            seconds=poller.effective_interval_seconds
-        )
-        poller.save(update_fields=["last_success_at", "next_at"])
+        # An import is a successful poll, so the poller records one, the
+        # same way a scheduled poll does. Left alone, a freshly imported
+        # service read "never polled" until the first tick.
+        service.poller.record(ok=True, at=run.finished_at)
         return service, True
 
 

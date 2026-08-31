@@ -1,6 +1,4 @@
-import random
 import sys
-from datetime import timedelta
 
 from celery import shared_task
 from django.contrib.auth import get_user_model
@@ -13,17 +11,6 @@ from polling.adapters.registry import for_provider
 from polling.models import Poller, PollRun
 from polling.reconcile import apply_fetch
 from status.choices import StatusSource
-
-JITTER = 0.1
-
-
-def next_interval_seconds(base, failures, ceiling):
-    """Exponential backoff.
-
-    A service in backoff is not checked every five minutes.
-    The service screen shows this interval, not the deployment default.
-    """
-    return min(base * (2**failures), ceiling)
 
 
 def active_pollers():
@@ -107,27 +94,14 @@ def poll_service(service_id):
     except Exception as error:  # noqa: BLE001 — every failure is recorded, never raised away
         # A failed fetch keeps the last known value.
         # `apply_fetch` does not run, so the open rows stand.
-        poller.consecutive_failure_count += 1
         run.ok, run.error = False, str(error)
         run.error_type = exception_name(error)
     else:
-        poller.consecutive_failure_count = 0
-        poller.last_success_at = timezone.now()
         run.ok = True
     finally:
         run.finished_at = timezone.now()
         run.save(update_fields=["ok", "error", "error_type", "finished_at"])
-        seconds = next_interval_seconds(
-            poller.effective_interval_seconds,
-            poller.consecutive_failure_count,
-            poller.effective_max_interval_seconds,
-        )
-        # Jitter so a hundred services do not stampede one provider on the minute.
-        seconds *= 1 + random.uniform(-JITTER, JITTER)
-        poller.next_at = timezone.now() + timedelta(seconds=seconds)
-        poller.save(
-            update_fields=["consecutive_failure_count", "last_success_at", "next_at"]
-        )
+        poller.record(ok=run.ok, at=run.finished_at)
 
 
 def _refresh_metadata(service, metadata, adapter=None):
