@@ -1,9 +1,17 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 
 from catalog.models import Service, ServiceComponent
 from common.models import BaseModel
-from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSource
+from status.choices import (
+    CLOSED_PHASES,
+    EVENT_PHASES_BY_KIND,
+    EventKind,
+    Severity,
+    StatusSource,
+)
 
 
 class ComponentStatus(BaseModel):
@@ -85,11 +93,33 @@ class ComponentStatus(BaseModel):
         ]
 
 
+class ServiceEventQuerySet(models.QuerySet):
+    def live(self, kind=None):
+        """Still worth showing.
+
+        An open phase for either kind. A maintenance window is also over
+        once it ends, and a provider often leaves the phase behind.
+
+        Counts and the item beside them read this. A wider count shows
+        "+3 more" for nothing.
+        """
+        events = self.exclude(phase__in=CLOSED_PHASES)
+        if kind is not None:
+            events = events.filter(kind=kind)
+        if kind == EventKind.MAINTENANCE:
+            events = events.filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gte=timezone.now())
+            )
+        return events
+
+
 class ServiceEvent(BaseModel):
     """A provider's record of an incident or a maintenance window.
 
     Providers publish both as one object. This is one model with a `kind`.
     """
+
+    objects = ServiceEventQuerySet.as_manager()
 
     service = models.ForeignKey(
         Service, on_delete=models.CASCADE, related_name="events"

@@ -1,11 +1,10 @@
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from catalog.models import Service, ServiceComponent, StatusPage
+from catalog.models import PATH_SEPARATOR, Service, ServiceComponent, StatusPage
 from common.mixins import FieldsMixin
 from polling.models import Poller
-from status.choices import CLOSED_PHASES, EventKind
+from status.choices import EventKind
 from status.serializers import EventRefSerializer, StatusSerializer
 
 
@@ -69,18 +68,6 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
             "is_tracked",
         ]
 
-    def _events(self, row, kind):
-        """Scope to what is still live.
-
-        A wider count than the item beside it shows "+3 more" for nothing.
-        """
-        queryset = row.events.filter(kind=kind).exclude(phase__in=CLOSED_PHASES)
-        if kind == EventKind.MAINTENANCE:
-            queryset = queryset.filter(ends_at__isnull=True) | queryset.filter(
-                ends_at__gte=timezone.now()
-            )
-        return queryset
-
     @extend_schema_field(StatusSerializer(allow_null=True))
     def get_status(self, row):
         current = row.statuses.filter(ended_at__isnull=True).first()
@@ -97,13 +84,13 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_path(self, row):
         # Null on the overall component: it is not under anything.
-        if row.is_overall or row.parent is None:
+        #
+        # `ancestors` walks the chain, and guards the loop a self
+        # referencing column allows. This walked it a second time and
+        # did not.
+        if row.is_overall or not row.ancestors:
             return None
-        names, node = [], row.parent
-        while node is not None:
-            names.append(node.name)
-            node = node.parent
-        return " › ".join(reversed(names))
+        return PATH_SEPARATOR.join(node.name for node in row.ancestors)
 
     @extend_schema_field(serializers.IntegerField())
     def get_child_count(self, row):
@@ -111,7 +98,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):
-        soonest = self._events(row, EventKind.MAINTENANCE).order_by("starts_at").first()
+        soonest = row.events.live(EventKind.MAINTENANCE).order_by("starts_at").first()
         return (
             EventRefSerializer(
                 soonest,
@@ -124,11 +111,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_upcoming_maintenance_count(self, row):
-        return self._events(row, EventKind.MAINTENANCE).count()
+        return row.events.live(EventKind.MAINTENANCE).count()
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_active_incident(self, row):
-        newest = self._events(row, EventKind.INCIDENT).order_by("-starts_at").first()
+        newest = row.events.live(EventKind.INCIDENT).order_by("-starts_at").first()
         return (
             EventRefSerializer(
                 newest,
@@ -141,7 +128,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_active_incident_count(self, row):
-        return self._events(row, EventKind.INCIDENT).count()
+        return row.events.live(EventKind.INCIDENT).count()
 
     @extend_schema_field(serializers.BooleanField(allow_null=True))
     def get_is_tracked(self, row):

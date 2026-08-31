@@ -280,3 +280,50 @@ def test_a_service_with_no_reading_sorts_last_not_first():
         r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
     ]
     assert names.index("Healthy") < names.index("Unread")
+
+
+@pytest.mark.django_db
+def test_a_path_names_every_component_above_it():
+    # `ancestors` guards the loop a self referencing column allows. The
+    # serializer walked the chain a second time and did not.
+    from catalog.models import PATH_SEPARATOR
+    from catalog.serializers import ComponentSerializer
+
+    service = ServiceFactory(name="Twilio")
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS", parent=parent)
+
+    assert ComponentSerializer(child).data["path"] == "Programmable Messaging"
+    assert ComponentSerializer(parent).data["path"] is None
+    assert PATH_SEPARATOR == " \u203a "
+
+
+@pytest.mark.django_db
+def test_a_finished_maintenance_window_is_not_live():
+    # A provider often leaves the phase behind when a window ends, so
+    # the end matters as much as the phase.
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from status.choices import EventKind, MaintenancePhase
+    from status.models import ServiceEvent
+
+    service = ServiceFactory()
+    now = timezone.now()
+    common = {
+        "service": service,
+        "kind": EventKind.MAINTENANCE,
+        "phase": MaintenancePhase.IN_PROGRESS,
+        "starts_at": now - timedelta(hours=2),
+    }
+    ServiceEvent.objects.create(
+        title="Over", external_id="over", ends_at=now - timedelta(hours=1), **common
+    )
+    running = ServiceEvent.objects.create(
+        title="Running", external_id="running", ends_at=None, **common
+    )
+
+    live = ServiceEvent.objects.live(EventKind.MAINTENANCE)
+
+    assert list(live) == [running]

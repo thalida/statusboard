@@ -1,6 +1,6 @@
-from django.db.models import Count, Min
+from django.db.models import Count, Exists, Min, OuterRef
 
-from status.choices import CLOSED_PHASES, EventKind
+from status.choices import EventKind
 
 
 class AggregateSet:
@@ -52,14 +52,22 @@ class StatusAggregateSet(AggregateSet):
         return {str(r["statuses__severity"]): r["n"] for r in rows}
 
     def _by_event_kind(self):
+        """How many components have a live event of each kind.
+
+        Through `ServiceEvent.objects.live`, the same rule the component
+        beside it counts by. This had its own copy, and it left out the
+        end of a maintenance window. A chip and a row could disagree
+        about one that was over.
+        """
+        from status.models import ServiceEvent
+
         counts = {}
         for kind in EventKind:
+            live = ServiceEvent.objects.live(kind).filter(
+                affected_components=OuterRef("pk")
+            )
             counts[str(kind)] = (
-                self.components()
-                .filter(events__kind=kind)
-                .exclude(events__phase__in=CLOSED_PHASES)
-                .distinct()
-                .count()
+                self.components().filter(Exists(live)).distinct().count()
             )
         return counts
 
