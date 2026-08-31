@@ -131,7 +131,36 @@ class Service(BaseModel):
         # a later rename must not move it.
         if not self.slug:
             self.slug = unique_slug(self.name)
+        new = self._state.adding
         super().save(*args, **kwargs)
+        if new:
+            self.ensure_poller()
+
+    def ensure_poller(self):
+        """Every service is polled, so every service has one.
+
+        The Poller carries tuning only, and every field has a deployment
+        default. There is nothing to ask for at creation time. A
+        StatusPage cannot be made this way: it needs a URL, and there is
+        no sensible default for one.
+
+        A one-to-one is only a promise from the side that holds the
+        column. Nothing in the database stops a service without one, so
+        this is what keeps it true. A migration backfilled the rows that
+        predate it.
+        """
+        from django.contrib.auth import get_user_model
+
+        from polling.models import Poller
+
+        # Nobody adds this one, so the system account signs it. A blank
+        # author would read as one that was lost.
+        author = get_user_model().objects.system()
+        poller, _ = Poller.objects.get_or_create(
+            service=self,
+            defaults={"created_by": author, "updated_by": author},
+        )
+        return poller
 
     def __str__(self):
         return self.name

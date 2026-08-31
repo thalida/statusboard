@@ -10,7 +10,7 @@ from polling.models import (
     exception_name,
     next_interval_seconds,
 )
-from polling.tasks import due_pollers, poll_service
+from polling.tasks import poll_service
 from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 
@@ -21,14 +21,14 @@ def test_only_watched_services_are_due():
     StatusPageFactory(service=watched.service)
     unwatched = PollerFactory(service=ServiceFactory())
     StatusPageFactory(service=unwatched.service)
-    assert list(due_pollers()) == [watched]
+    assert list(Poller.objects.due()) == [watched]
 
 
 @pytest.mark.django_db
 def test_a_paused_poller_is_never_due():
     paused = PollerFactory(service=ServiceFactory(tracked=1), is_paused=True)
     StatusPageFactory(service=paused.service)
-    assert list(due_pollers()) == []
+    assert list(Poller.objects.due()) == []
 
 
 @pytest.mark.django_db
@@ -38,7 +38,7 @@ def test_a_poller_inside_its_cooldown_is_not_due():
         next_at=timezone.now() + timedelta(minutes=5),
     )
     StatusPageFactory(service=cooling.service)
-    assert list(due_pollers()) == []
+    assert list(Poller.objects.due()) == []
 
 
 @pytest.mark.django_db
@@ -48,7 +48,7 @@ def test_two_boards_tracking_one_service_produce_one_poller():
     StatusPageFactory(service=service)
     PollerFactory(service=service)
     assert Poller.objects.filter(service=service).count() == 1
-    assert len(list(due_pollers())) == 1
+    assert len(list(Poller.objects.due())) == 1
 
 
 def test_backoff_doubles_and_stops_at_the_ceiling():
@@ -159,6 +159,33 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_a_service_makes_its_own_poller_and_keeps_it():
+    # It was a post_save signal, so anything writing a Service without
+    # sending one left a service nothing polls. `save` makes it, and
+    # saving again does not make a second: the column is one-to-one.
+    service = ServiceFactory()
+    first = service.poller
+
+    service.name = "Renamed"
+    service.save()
+
+    assert Poller.objects.filter(service=service).count() == 1
+    assert service.ensure_poller().pk == first.pk
+
+
+@pytest.mark.django_db
+def test_every_service_in_the_database_has_a_poller():
+    # A one-to-one is only a promise from the side holding the column.
+    # Nothing in the database refuses a service without one.
+    ServiceFactory()
+    ServiceFactory()
+
+    from catalog.models import Service
+
+    assert not Service.objects.filter(poller__isnull=True).exists()
+
+
+@pytest.mark.django_db
 def test_every_service_gets_a_poller():
     # A service added outside the import endpoint used to have none.
     # It was never polled and never appeared as due.
@@ -170,7 +197,7 @@ def test_every_service_gets_a_poller():
 def test_a_service_with_no_status_page_is_not_due():
     # There is nothing to read. Enqueuing it would only fail.
     ServiceFactory(tracked=1)
-    assert list(due_pollers()) == []
+    assert list(Poller.objects.due()) == []
 
 
 @pytest.mark.django_db

@@ -37,10 +37,39 @@ def next_interval_seconds(base, failures, ceiling):
     return min(base * (2**failures), ceiling)
 
 
+class PollerQuerySet(models.QuerySet):
+    def active(self):
+        """The pollers this deployment actually runs.
+
+        Nothing else is ever dispatched, so nothing else can be late or
+        stale. Anything reporting on polling reads this, or it reports
+        on pollers that were never going to run.
+        """
+        from common.ordering import is_tracked
+
+        return self.filter(
+            is_tracked("service_id"),
+            service__status_page__isnull=False,
+            is_paused=False,
+        )
+
+    def due(self, now=None):
+        """Active pollers past next_at."""
+        now = now or timezone.now()
+        return (
+            self.active()
+            .filter(Q(next_at__isnull=True) | Q(next_at__lte=now))
+            .select_related("service")
+            .order_by("next_at")
+        )
+
+
 class Poller(BaseModel):
     service = models.OneToOneField(
         Service, on_delete=models.CASCADE, related_name="poller"
     )
+
+    objects = PollerQuerySet.as_manager()
 
     # Admin-tunable. Null inherits the deployment default.
     # At least a second. Zero is not an interval. It would ask the

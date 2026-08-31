@@ -1,42 +1,14 @@
 from celery import shared_task
-from django.db.models import Q
-from django.utils import timezone
 
 from catalog.models import Service
-from common.ordering import is_tracked
 from polling.adapters.registry import for_provider
 from polling.models import Poller, PollRun
 from polling.reconcile import apply_fetch
 
 
-def active_pollers():
-    """The pollers this deployment actually runs.
-
-    Nothing else is ever dispatched, so nothing else can be late or
-    stale. Anything reporting on polling reads this, or it reports on
-    pollers that were never going to run.
-    """
-    return Poller.objects.filter(
-        is_tracked("service_id"),
-        service__status_page__isnull=False,
-        is_paused=False,
-    )
-
-
-def due_pollers():
-    """Active pollers past next_at."""
-    now = timezone.now()
-    return (
-        active_pollers()
-        .filter(Q(next_at__isnull=True) | Q(next_at__lte=now))
-        .select_related("service")
-        .order_by("next_at")
-    )
-
-
 @shared_task
 def enqueue_due_polls():
-    for poller in due_pollers():
+    for poller in Poller.objects.due():
         poll_service.delay(str(poller.service_id))
 
 

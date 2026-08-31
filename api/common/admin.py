@@ -53,7 +53,6 @@ def dashboard_callback(request, context):
     """
     from catalog.models import Service
     from polling.models import Poller, PollRun
-    from polling.tasks import active_pollers
 
     now = timezone.now()
     day_ago = now - timezone.timedelta(hours=24)
@@ -62,7 +61,7 @@ def dashboard_callback(request, context):
     # dispatched, nor is one with no status page. So neither can be late
     # or stale. `active_pollers` is the scheduler's own definition.
     late_after = now - timezone.timedelta(seconds=settings.POLL_COOLDOWN_SECONDS)
-    active = active_pollers()
+    active = Poller.objects.active()
     pollers = {
         "failing": active.filter(consecutive_failure_count__gt=0).count(),
         "paused": Poller.objects.filter(is_paused=True).count(),
