@@ -76,9 +76,8 @@ info:
     The nesting is visible in the URL. Read a field's path in the response body to build its
     filter. This holds for fields added later.
 
-    Four parameters are declared, not generated. They have no ORM path:
-    `tracked_component_count__gt`, `overall_component__is_tracked`, `ordering=suggested`, and
-    `ordering=next_transition`.
+    Three parameters are declared, not generated. They have no ORM path:
+    `overall_component__is_tracked`, `ordering=suggested`, and `ordering=next_transition`.
 
     Model field names are chosen to read well in a URL, because a field name appears in `?fields=`
     and in a filter path.
@@ -199,7 +198,6 @@ paths:
         - { name: q, in: query, schema: { type: string } }
         - { name: overall_component__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'A service''s severity is its overall component''s, so the path runs through it.' }
         - { name: overall_component__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
-        - { name: tracked_component_count__gt, in: query, schema: { type: integer }, description: 'Authenticated only. `__gt=0` is "on my board at all" — the Tracked filter on Discover.' }
         - { name: overall_component__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
         - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall_component__status__severity, -overall_component__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
         - { $ref: '#/components/parameters/PageSize' }

@@ -969,8 +969,9 @@ One FK, one nested serializer. The response path and the filter path become iden
 **Tracking is two questions, not one.** Whether the *overall* component is tracked is what the ＋
 on a service row toggles; whether *anything* from the service is tracked decides if it appears on
 your board. You can track Twilio SMS without tracking Twilio as a whole. The first is
-`overall_component.is_tracked`; the second is `tracked_component_count > 0`, so no second boolean is carried
-for something the count already answers — and the same count renders the "3 tracked" label.
+`overall_component.is_tracked`; the second is `tracked_component_count > 0`, read from the field on a
+row rather than filtered on, so no second boolean is carried for something the count already answers
+— and the same count renders the "3 tracked" label.
 
 The count **includes the overall component**, because overall is a component like any other.
 Excluding it would reintroduce the service-versus-component split this design exists to remove.
@@ -1058,8 +1059,8 @@ an incident, and that row will not appear under Incidents. So the tabs divide as
 All is the one that promises completeness, which is why its default ordering is `status__severity`
 ascending. Incidents is the narrative, not the alarm.
 
-Four parameters cannot follow the rule and are declared: `tracked_component_count__gt` and
-`overall_component__is_tracked` are per-user annotations with no ORM path behind them, and
+Three parameters cannot follow the rule and are declared:
+`overall_component__is_tracked` is a per-user annotation with no ORM path behind it, and
 `ordering=suggested` is a multi-key sort. Everything else is generated.
 
 Because these paths are public, **a model field name is an API decision.** It appears in
@@ -1099,7 +1100,6 @@ caching and rate limits.
 | Header pill | no call — `aggregates.oldest_refreshed_at` and `next_refresh_at`, both already in the list response |
 | Row ⋮ → Stop tracking | `DELETE /dashboards/{uuid}/components/{component_id}/` — the only item left in that menu |
 | Discover, suggested | `GET /catalog/services/` |
-| Discover, Tracked filter | `GET /catalog/services/?tracked_component_count__gt=0` |
 | Discover, typing / no results | `GET /catalog/services/?q=` |
 | Add by URL | `POST /catalog/import/` |
 | Service · Components + filter | `GET /catalog/services/{slug}/components/?is_tracked=` |

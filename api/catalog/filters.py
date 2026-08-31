@@ -5,7 +5,6 @@ filter is the query contract, and it is read on its own more often than
 the view around it.
 """
 
-from django.db.models import Count, Q
 from django_filters import rest_framework as filters
 
 from catalog.models import Service, ServiceComponent
@@ -13,9 +12,6 @@ from status.models import ServiceEvent
 
 
 class ServiceFilter(filters.FilterSet):
-    # Declared: django-filter cannot generate a count comparison off a related set.
-    tracked_component_count__gt = filters.NumberFilter(method="filter_tracked_gt")
-
     # Declared for a second reason. `overall_component` is not a relation
     # on Service. The current severity is not a column either. It is the
     # open row of a component's status history. So the contract's name is
@@ -33,18 +29,6 @@ class ServiceFilter(filters.FilterSet):
             "status_page__provider": ["exact"],
             "is_featured": ["exact"],
         }
-
-    def filter_tracked_gt(self, queryset, name, value):
-        user = self.request.user
-        if not user.is_authenticated:
-            return queryset.none()
-        return queryset.annotate(
-            n=Count(
-                "components",
-                filter=Q(components__boards__owner=user),
-                distinct=True,
-            )
-        ).filter(n__gt=value)
 
 
 class ComponentFilter(filters.FilterSet):
