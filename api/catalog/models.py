@@ -27,7 +27,6 @@ class ServiceManager(models.Manager):
         from polling.adapters.registry import identify
         from polling.models import PollRun
         from polling.reconcile import apply_fetch
-        from status.choices import StatusSource
 
         key = StatusPage.normalise_url(url)
         existing = StatusPage.objects.filter(url=key).select_related("service").first()
@@ -62,34 +61,22 @@ class ServiceManager(models.Manager):
         # An import is a fetch, so it is recorded as one. Without it
         # the first reading has no provenance, and the log is missing
         # the request that made the rows.
-        started = timezone.now()
-        components = adapter.fetch_status()
-        events = adapter.fetch_incidents()
-        run = PollRun.objects.create(
-            # Nothing above makes this. `create_poller` in polling.signals
-            # does, on the Service save. Making one here would trip the
-            # one-to-one column.
-            poller=service.poller,
-            url=key,
-            provider=adapter_class.provider,
-            started_at=started,
-            finished_at=timezone.now(),
-            ok=True,
-            created_by=author,
-            updated_by=author,
-        )
+        #
+        # Nothing above makes the poller. `create_poller` in
+        # polling.signals does, on the Service save. Making one here
+        # would trip the one-to-one column.
+        run = PollRun.open(service.poller, key, adapter_class.provider)
         apply_fetch(
             service,
-            components,
-            events,
-            getattr(adapter, "status_source", StatusSource.PROVIDER),
+            adapter.fetch_status(),
+            adapter.fetch_incidents(),
+            adapter.status_source,
             run,
         )
-
-        # An import is a successful poll, so the poller records one, the
-        # same way a scheduled poll does. Left alone, a freshly imported
-        # service read "never polled" until the first tick.
-        service.poller.record(ok=True, at=run.finished_at)
+        # An import is a successful poll, so the run closes as one and
+        # the poller moves on. Left alone, a freshly imported service
+        # read "never polled" until the first tick.
+        run.finish(ok=True)
         return service, True
 
 

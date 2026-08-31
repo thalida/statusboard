@@ -3,8 +3,14 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from polling.models import Poller, PollRun, next_interval_seconds
-from polling.tasks import due_pollers, exception_name, poll_service
+from polling.adapters.base import Adapter
+from polling.models import (
+    Poller,
+    PollRun,
+    exception_name,
+    next_interval_seconds,
+)
+from polling.tasks import due_pollers, poll_service
 from tests.factories import PollerFactory, ServiceFactory, StatusPageFactory
 
 
@@ -57,11 +63,21 @@ def test_a_failed_poll_records_the_run_and_increments_the_counter(monkeypatch):
     poller = PollerFactory(service=ServiceFactory(tracked=1))
     StatusPageFactory(service=poller.service)
 
-    class Boom:
+    class Boom(Adapter):
+        @classmethod
+        def matches(cls, url):
+            return True
+
         def __init__(self, *a, **kw): ...
 
         def fetch_status(self):
             raise RuntimeError("upstream is down")
+
+        def fetch_incidents(self):
+            return []
+
+        def fetch_service_metadata(self):
+            return {}
 
     monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Boom)
     poll_service(str(poller.service_id))
@@ -90,7 +106,11 @@ def test_a_failed_poll_never_clobbers_the_last_known_value(monkeypatch):
         started_at=timezone.now(),
     )
 
-    class Boom:
+    class Boom(Adapter):
+        @classmethod
+        def matches(cls, url):
+            return True
+
         def __init__(self, *a, **kw): ...
 
         def fetch_status(self):
@@ -110,7 +130,11 @@ def test_a_successful_poll_resets_the_failure_counter(monkeypatch):
     )
     StatusPageFactory(service=poller.service)
 
-    class Fine:
+    class Fine(Adapter):
+        @classmethod
+        def matches(cls, url):
+            return True
+
         def __init__(self, *a, **kw): ...
 
         def fetch_status(self):
@@ -170,7 +194,11 @@ def test_an_api_url_override_replaces_the_page_url(monkeypatch):
     StatusPageFactory(service=poller.service, api_url_override="https://api.elsewhere/")
     seen = {}
 
-    class Recorder:
+    class Recorder(Adapter):
+        @classmethod
+        def matches(cls, url):
+            return True
+
         def __init__(self, url, session=None):
             seen["url"] = url
 

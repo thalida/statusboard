@@ -1,7 +1,4 @@
-import sys
-
 from celery import shared_task
-from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
@@ -10,7 +7,6 @@ from common.ordering import is_tracked
 from polling.adapters.registry import for_provider
 from polling.models import Poller, PollRun
 from polling.reconcile import apply_fetch
-from status.choices import StatusSource
 
 
 def active_pollers():
@@ -44,25 +40,6 @@ def enqueue_due_polls():
         poll_service.delay(str(poller.service_id))
 
 
-def exception_name(error):
-    """The name that identifies a failure.
-
-    Wrappers stack: `requests.ConnectionError` over urllib3's
-    `MaxRetryError` over `NameResolutionError` over `socket.gaierror`.
-    The outermost says "the network", the innermost says "errno". The
-    deepest one a library defines is the one that names the cause.
-    """
-    name = type(error).__name__
-    seen = set()
-    while error is not None and id(error) not in seen:
-        seen.add(id(error))
-        module = type(error).__module__.partition(".")[0]
-        if module != "builtins" and module not in sys.stdlib_module_names:
-            name = type(error).__name__
-        error = error.__cause__ or error.__context__
-    return name
-
-
 @shared_task
 def poll_service(service_id):
     service = Service.objects.select_related("status_page", "poller").get(id=service_id)
@@ -74,34 +51,21 @@ def poll_service(service_id):
         return
     # A run is the top of the trail. Nothing above it says where it
     # came from, so it signs itself.
-    author = get_user_model().objects.system()
-    run = PollRun.objects.create(
-        poller=poller,
-        url=page.url,
-        provider=page.provider,
-        started_at=timezone.now(),
-        created_by=author,
-        updated_by=author,
-    )
+    run = PollRun.open(poller, page.url, page.provider)
+    failure = None
     try:
         adapter = for_provider(page.provider)(page.api_url_override or page.url)
         components = adapter.fetch_status()
         events = adapter.fetch_incidents()
         metadata = adapter.fetch_service_metadata()
-        source = getattr(adapter, "status_source", StatusSource.PROVIDER)
-        apply_fetch(service, components, events, source, run)
+        apply_fetch(service, components, events, adapter.status_source, run)
         _refresh_metadata(service, metadata, adapter)
     except Exception as error:  # noqa: BLE001 — every failure is recorded, never raised away
         # A failed fetch keeps the last known value.
         # `apply_fetch` does not run, so the open rows stand.
-        run.ok, run.error = False, str(error)
-        run.error_type = exception_name(error)
-    else:
-        run.ok = True
+        failure = error
     finally:
-        run.finished_at = timezone.now()
-        run.save(update_fields=["ok", "error", "error_type", "finished_at"])
-        poller.record(ok=run.ok, at=run.finished_at)
+        run.finish(ok=failure is None, error=failure)
 
 
 def _refresh_metadata(service, metadata, adapter=None):

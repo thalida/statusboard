@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import urlparse
 
+from status.choices import StatusSource
+
 
 @dataclass(frozen=True)
 class NormalisedComponent:
@@ -54,6 +56,11 @@ class Adapter(ABC):
     # Several read a path other platforms also serve. One would claim
     # someone else's page and report the wrong company's status.
     host_specific: bool = False
+
+    # Where a severity comes from. Most providers publish a component
+    # list, and a feed-only page has to infer one from its incidents.
+    # Two callers read this, and both used to spell the default out.
+    status_source: str = StatusSource.PROVIDER
 
     def __init__(self, url: str, session=None):
         self.url = url

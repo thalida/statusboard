@@ -8,6 +8,7 @@ that reads them.
 """
 
 import random
+import sys
 from datetime import timedelta
 
 from django.conf import settings
@@ -138,6 +139,25 @@ class Poller(BaseModel):
         return self.max_interval_seconds or settings.POLL_MAX_INTERVAL_SECONDS
 
 
+def exception_name(error):
+    """The name that identifies a failure.
+
+    Wrappers stack: `requests.ConnectionError` over urllib3's
+    `MaxRetryError` over `NameResolutionError` over `socket.gaierror`.
+    The outermost says "the network", the innermost says "errno". The
+    deepest one a library defines is the one that names the cause.
+    """
+    name = type(error).__name__
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        module = type(error).__module__.partition(".")[0]
+        if module != "builtins" and module not in sys.stdlib_module_names:
+            name = type(error).__name__
+        error = error.__cause__ or error.__context__
+    return name
+
+
 class PollRun(BaseModel):
     """One poll attempt against a service's status page.
 
@@ -179,6 +199,40 @@ class PollRun(BaseModel):
                 name="a_failed_run_names_its_error",
             )
         ]
+
+    @classmethod
+    def open(cls, poller, url, provider):
+        """Start the log for one fetch.
+
+        A scheduled poll and an import both make one, and both signed it
+        by hand. Nobody types a poll, so the system account does.
+        """
+        from django.contrib.auth import get_user_model
+
+        author = get_user_model().objects.system()
+        return cls.objects.create(
+            poller=poller,
+            url=url,
+            provider=provider,
+            started_at=timezone.now(),
+            created_by=author,
+            updated_by=author,
+        )
+
+    def finish(self, ok, error=None):
+        """Close the log, and move the poller on.
+
+        The schedule follows the outcome of a poll, so the row that
+        records the outcome is what moves it. Two callers did this apart,
+        and only one of them recorded a failure.
+        """
+        self.ok = ok
+        self.error = str(error) if error is not None else ""
+        self.error_type = exception_name(error) if error is not None else ""
+        self.finished_at = timezone.now()
+        self.save(update_fields=["ok", "error", "error_type", "finished_at"])
+        self.poller.record(ok=ok, at=self.finished_at)
+        return self
 
     def __str__(self):
         return f"{self.poller.service} ({self.started_at:%Y-%m-%d %H:%M})"
