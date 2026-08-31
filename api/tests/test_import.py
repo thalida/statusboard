@@ -191,3 +191,42 @@ def test_a_poll_keeps_the_old_name_when_a_provider_stops_publishing_one():
 
     service.refresh_from_db()
     assert service.name == "Twilio"
+
+
+@pytest.mark.django_db
+def test_the_page_is_read_before_a_transaction_opens(monkeypatch):
+    # A provider takes seconds to answer. A database connection must not
+    # spend them waiting on one.
+    #
+    # The suite runs each test in a transaction, so depth is what can
+    # be measured. The fetch must open none of its own.
+    from django.db import connection
+
+    depth = []
+
+    class Watching(FakeAdapter):
+        def fetch_status(self):
+            depth.append(len(connection.savepoint_ids))
+            return super().fetch_status()
+
+    monkeypatch.setattr(
+        "polling.adapters.registry.identify",
+        lambda url, session=None: (Watching, url),
+    )
+    outer = len(connection.savepoint_ids)
+    Service.objects.import_from_url("https://status.watched.test/")
+
+    assert depth == [outer]
+
+
+@pytest.mark.django_db
+def test_a_second_import_of_the_same_page_returns_the_first_service():
+    # The fetch is outside the transaction, so two callers can read the
+    # same page at once. The second must not make a second service.
+    first, created = Service.objects.import_from_url("https://status.race.test/")
+    second, again = Service.objects.import_from_url("https://status.race.test/")
+
+    assert created is True
+    assert again is False
+    assert second.pk == first.pk
+    assert Service.objects.count() == 1

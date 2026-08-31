@@ -11,7 +11,6 @@ from common.models import BaseModel
 
 
 class ServiceManager(models.Manager):
-    @transaction.atomic
     def import_from_url(self, url: str) -> tuple["Service", bool]:
         """Build a whole service from a status page URL.
 
@@ -19,24 +18,54 @@ class ServiceManager(models.Manager):
         come from the page. Returns (service, created); importing a page
         that is already in the catalog returns the existing service.
 
+        Reading and writing are two steps, and only the write is a
+        transaction. A provider takes seconds to answer, and a database
+        connection must not spend them waiting on one.
+
         The polling imports are local to the method. `polling` imports
         this module, so a top-level import would close the loop.
         """
-        from django.contrib.auth import get_user_model
-
         from polling.adapters.registry import identify
-        from polling.models import PollRun
-        from polling.reconcile import apply_fetch
 
         key = StatusPage.normalise_url(url)
-        existing = StatusPage.objects.filter(url=key).select_related("service").first()
-        if existing is not None:
-            return existing.service, False
+        already = self._imported(key)
+        if already is not None:
+            return already, False
 
         adapter_class, fetch_url = identify(key)
         adapter = adapter_class(fetch_url)
-        metadata = adapter.named_metadata()
+        started = timezone.now()
+        fetched = {
+            "metadata": adapter.named_metadata(),
+            "logo": adapter.fetch_logo(),
+            "components": adapter.fetch_status(),
+            "events": adapter.fetch_incidents(),
+            "source": adapter.status_source,
+            "started": started,
+        }
+        return self._import(key, adapter_class, fetch_url, fetched)
 
+    def _imported(self, key):
+        """The service this page already belongs to, if any."""
+        page = StatusPage.objects.filter(url=key).select_related("service").first()
+        return page.service if page is not None else None
+
+    @transaction.atomic
+    def _import(self, key, adapter_class, fetch_url, fetched):
+        """Write what the page said, in one transaction."""
+        from django.contrib.auth import get_user_model
+
+        from polling.models import PollRun
+        from polling.reconcile import apply_fetch
+
+        # Somebody may have imported the same page while we read it. The
+        # fetch is outside the transaction now, so that window is
+        # seconds wide rather than none.
+        already = self._imported(key)
+        if already is not None:
+            return already, False
+
+        metadata = fetched["metadata"]
         # Nobody typed these in, so they are signed by the system account
         # rather than left blank.
         author = get_user_model().objects.system()
@@ -44,7 +73,7 @@ class ServiceManager(models.Manager):
             name=metadata["name"],
             description=metadata.get("description", ""),
             homepage_url=metadata.get("homepage_url", ""),
-            logo=adapter.fetch_logo(),
+            logo=fetched["logo"],
             created_by=author,
             updated_by=author,
         )
@@ -65,12 +94,14 @@ class ServiceManager(models.Manager):
         # Nothing above makes the poller. `create_poller` in
         # polling.signals does, on the Service save. Making one here
         # would trip the one-to-one column.
-        run = PollRun.open(service.poller, key, adapter_class.provider)
+        run = PollRun.open(
+            service.poller, key, adapter_class.provider, at=fetched["started"]
+        )
         apply_fetch(
             service,
-            adapter.fetch_status(),
-            adapter.fetch_incidents(),
-            adapter.status_source,
+            fetched["components"],
+            fetched["events"],
+            fetched["source"],
             run,
         )
         # An import is a successful poll, so the run closes as one and

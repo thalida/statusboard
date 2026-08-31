@@ -201,11 +201,14 @@ class PollRun(BaseModel):
         ]
 
     @classmethod
-    def open(cls, poller, url, provider):
+    def open(cls, poller, url, provider, at=None):
         """Start the log for one fetch.
 
         A scheduled poll and an import both make one, and both signed it
         by hand. Nobody types a poll, so the system account does.
+
+        `at` is when the fetch began. An import reads the page before it
+        writes anything, so the row is made after the work it times.
         """
         from django.contrib.auth import get_user_model
 
@@ -214,7 +217,7 @@ class PollRun(BaseModel):
             poller=poller,
             url=url,
             provider=provider,
-            started_at=timezone.now(),
+            started_at=at or timezone.now(),
             created_by=author,
             updated_by=author,
         )
