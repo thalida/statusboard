@@ -268,3 +268,34 @@ def test_tracking_through_the_admin_also_counts(board):
     DashboardItem.objects.get(dashboard=board, component=component).delete()
     service.refresh_from_db()
     assert service.watcher_count == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "how", ["closing the account", "deleting the board", "a bulk delete"]
+)
+def test_the_watcher_count_survives_every_way_a_row_goes(how):
+    # All three cascade in SQL, and overriding save and delete on the
+    # model caught none of them. A service kept a watcher who was gone,
+    # and the poller kept polling it.
+    from django.contrib.auth import get_user_model
+
+    from catalog.models import Service
+    from dashboards.models import Dashboard, DashboardItem
+
+    service = ServiceFactory(watcher_count=0)
+    component = ComponentFactory(service=service)
+    user = get_user_model().objects.create(email="watcher@b.com")
+    board = Dashboard.objects.create(owner=user, name="B")
+    DashboardItem.objects.create(dashboard=board, component=component)
+    assert Service.objects.get(pk=service.pk).watcher_count == 1
+
+    if how == "closing the account":
+        user.delete()
+    elif how == "deleting the board":
+        Dashboard.objects.create(owner=user, name="Other")
+        board.delete()
+    else:
+        DashboardItem.objects.all().delete()
+
+    assert Service.objects.get(pk=service.pk).watcher_count == 0

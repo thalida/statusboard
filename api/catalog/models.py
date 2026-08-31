@@ -110,7 +110,16 @@ class Service(BaseModel):
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
     is_featured = models.BooleanField(verbose_name="Featured", default=False)
-    # Derived. Never set by hand: it decides what gets polled.
+    # Derived, and never set by hand. It decides what gets polled. A
+    # wrong number polls a service nobody tracks, or stops polling one
+    # somebody does.
+    #
+    # A column, not a count at read time. `due_pollers` filters on it
+    # every beat and the catalog orders by it. Neither can index a
+    # distinct count across three joins. Postgres cannot generate it
+    # either, because a generated column reads only its own row.
+    #
+    # A signal on DashboardItem keeps it true. See dashboards.signals.
     watcher_count = models.PositiveIntegerField(
         verbose_name="Watchers", default=0, editable=False
     )
