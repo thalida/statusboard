@@ -48,6 +48,19 @@ edit that worked. Open the page. Read the value back.
 template that overrides it. An override patches one instance of a
 problem; the setting fixes the class.
 
+## Settings
+
+The split is by who named the setting.
+
+- Django or a package named it (`DEBUG`, `SECRET_KEY`, `ALLOWED_HOSTS`,
+  `DATABASES`, `REST_FRAMEWORK`, `UNFOLD`, `CELERY_*`) → `api/settings.py`
+- We named it (`POLL_*`, `DEFAULT_PAGE_SIZE`, `SYSTEM_EMAIL`,
+  `MAGIC_LINK_TTL`, `APP_URL`, `ENVIRONMENT`) → `api/defaults.py`
+
+You can apply that by reading a name, which is the point. `defaults.py`
+loads `.env.local`, so nothing reads a variable before the file that
+supplies it.
+
 ## Tests
 
 Every behaviour change carries a test. The suite runs with no network:

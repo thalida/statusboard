@@ -9,7 +9,8 @@ from django.utils.translation import gettext_lazy as _
 
 # Re-exported so `django.conf.settings` carries them. See api/defaults.py.
 from api.defaults import (  # noqa: F401
-    DEBUG,
+    APP_MAGIC_LINK_PATH,
+    APP_URL,
     DEFAULT_PAGE_SIZE,
     ENVIRONMENT,
     MAGIC_LINK_TTL,
@@ -18,11 +19,19 @@ from api.defaults import (  # noqa: F401
     POLL_INTERVAL_SECONDS,
     POLL_MAX_INTERVAL_SECONDS,
     POLL_RUN_RETENTION_DAYS,
-    SECRET_KEY,
     SYSTEM_EMAIL,
+    debug,
+    secret_key,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Both used to default toward development. A deployment that forgot
+# either ran with tracebacks on, and with a key published in this
+# repository. Each refuses a value it cannot use, and reads ENVIRONMENT
+# rather than being handed it. See api/defaults.py.
+DEBUG = debug(os.environ.get("DEBUG"))
+SECRET_KEY = secret_key(os.environ.get("SECRET_KEY"))
 
 # A wildcard accepts any Host header. The dev machine is usually on a
 # network too. So debug adds the loopback names and nothing else.
@@ -216,16 +225,19 @@ UNFOLD = {
     # `base` runs blue-violet white to blue-violet black, so no step is a
     # grey. The dark end goes further than a neutral. A saturated hue
     # reads lighter than a grey of the same value.
+    # Ultramarine, one theme, no accent hue. Unfold names the step it
+    # paints, so a shade is fixed by where it lands rather than by a
+    # ramp. Read the roles off the templates before moving one.
+    #
+    #   primary-500  text on the page      5.7:1
+    #   primary-600  filled, under white   4.8:1
+    #   base-900 page   base-800 cards   base-700 edges
+    #
+    # Neither primary shade moves without failing the other. The dark
+    # base steps are set by contrast, not lightness. A deep blue holds
+    # little luminance, so a step on a ramp is not one on a screen. The
+    # card is 1.22:1. At 1.05:1 it was invisible, at 1.42:1 a slab.
     "COLORS": {
-        # One theme, so one ramp. Unfold writes `bg-primary-600` once,
-        # for both themes. The old ramp held ink there, for the light
-        # theme, and painted it on the dark page.
-        #
-        # Two shades matter, and they pull apart. 500 is read as text,
-        # so it is measured against the page: 5.7:1. 600 is filled and
-        # carries white: 4.8:1. Neither moves without failing the other.
-        #
-        # Still no accent hue. These are ultramarine neutrals.
         "primary": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -239,17 +251,6 @@ UNFOLD = {
             "900": "#12123A",
             "950": "#0D0C2B",
         },
-        # Unfold paints the page with base-900 and cards with base-800.
-        # Borders take base-700. So four steps carry ground, surface and
-        # edge. Read the roles off the templates before moving one.
-        #
-        # The dark steps are set by contrast, not by lightness. A deep
-        # blue holds little luminance. A step on a ramp is not a step on
-        # a screen.
-        #
-        # At 1.05:1 the card was invisible. At 1.42:1 it was a purple
-        # slab, because Unfold fills whole blocks with base-800. The
-        # card is 1.22:1 now, which reads as a lift.
         "base": {
             "50": "#F3F3FB",
             "100": "#E9E9F6",
@@ -381,10 +382,3 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.app>"
 )
-
-# The client app, not this service. A sign-in email links to a page the
-# client serves. This project is the API on its own subdomain, so it
-# cannot work either of these out. There is no default for the same
-# reason: a guess would point somewhere nothing is served.
-APP_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
-APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/verify"

@@ -1,21 +1,22 @@
-"""The numbers this project chose, in one place.
+"""The settings this project named.
 
-Django's settings and every third-party block stay in `settings.py`.
-These are ours, and several are read twice. `/meta` publishes the page
-sizes. DRF needs the same page size. A Poller row overrides the poll
-intervals for one service.
+The split is by who named the setting. Django or a package named it, so
+`settings.py` holds it: DEBUG, SECRET_KEY, ALLOWED_HOSTS, DATABASES,
+every third-party block.
 
-This is also where the environment is read. The three values that decide
-what a deployment is were resolved in `settings.py`. That meant passing
-the same environment into two calls and catching the same error twice.
-They are resolved once here, and `settings.py` imports the answers.
+We named these. The poll intervals, the page sizes, the system address,
+the client's addresses, the environment.
 
-`.env.local` is loaded here for the same reason: nothing may read a
-variable before the file that supplies it. Importing this module is what
-loads it, and `settings.py` imports this module first.
+Several are read twice. `/meta` publishes the page sizes and DRF needs
+the same one. A Poller row overrides the intervals for a service.
 
-A value that cannot be used raises `ImproperlyConfigured`, which is what
-a settings file raises.
+`.env.local` is loaded here, because nothing may read a variable before
+the file that supplies it. Importing this module is what loads it, and
+`settings.py` imports this module first.
+
+`ENVIRONMENT` is resolved here too, so `debug` and `secret_key` read it
+rather than being handed it. A value that cannot be used raises
+`ImproperlyConfigured`, which is what a settings file raises.
 
 A duration is a timedelta unless something else fixes its type. The poll
 values are seconds because they are also `PositiveIntegerField` columns
@@ -102,13 +103,14 @@ MAGIC_LINK_TTL = timedelta(minutes=15)
 DEV_SECRET_KEY = "dev-only-not-for-deploy"
 
 
-def secret_key(configured, environment):
+def secret_key(configured, environment=None):
     """The signing key, or a refusal.
 
     It used to fall back to the development key everywhere. A
     deployment that forgot the variable signed every cookie and token
     with a string anybody can read here.
     """
+    environment = environment or ENVIRONMENT
     configured = (configured or "").strip()
     if configured:
         return configured
@@ -120,20 +122,26 @@ def secret_key(configured, environment):
     return DEV_SECRET_KEY
 
 
-def debug(configured, environment):
+def debug(configured, environment=None):
     """Whether to serve tracebacks.
 
     It used to default on, so a deployment that forgot the variable
     showed its stack traces to callers.
     """
+    environment = environment or ENVIRONMENT
     if configured is not None and configured.strip():
         return configured.strip() == "1"
     return environment is Environment.DEVELOPMENT
 
 
-# What this deployment is, and what follows from it. Each function above
-# refuses a value it cannot use, so a deployment stops here rather than
-# guessing.
+# Which deployment this is. We named it, so it is resolved here, and
+# `debug` and `secret_key` in `settings.py` read it rather than being
+# handed it.
 ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
-DEBUG = debug(os.environ.get("DEBUG"), ENVIRONMENT)
-SECRET_KEY = secret_key(os.environ.get("SECRET_KEY"), ENVIRONMENT)
+
+# The client app, not this service. A sign-in email links to a page the
+# client serves. This project is the API on its own subdomain, so it
+# cannot work either of these out. APP_URL has no default for the same
+# reason: a guess would point where nothing is served.
+APP_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
+APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/verify"
