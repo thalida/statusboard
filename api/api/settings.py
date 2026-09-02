@@ -17,6 +17,7 @@ from api.defaults import (  # noqa: F401
     POLL_COOLDOWN_SECONDS,
     POLL_INTERVAL_SECONDS,
     POLL_MAX_INTERVAL_SECONDS,
+    POLL_RUN_RETENTION_DAYS,
     SYSTEM_EMAIL,
     Environment,
     debug,
@@ -185,7 +186,13 @@ CELERY_BEAT_SCHEDULE = {
     "enqueue-due-polls": {
         "task": "polling.tasks.enqueue_due_polls",
         "schedule": crontab(minute="*"),
-    }
+    },
+    # Nothing removed a poll run, and one is written per service per
+    # poll. Daily is often enough for a thirty day window.
+    "forget-old-poll-runs": {
+        "task": "polling.tasks.forget_old_poll_runs",
+        "schedule": crontab(hour="4", minute="20"),
+    },
 }
 
 UNFOLD = {

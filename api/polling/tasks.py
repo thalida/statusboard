@@ -1,4 +1,8 @@
+from datetime import timedelta
+
 from celery import shared_task
+from django.conf import settings
+from django.utils import timezone
 
 from catalog.models import Service
 from polling.adapters.registry import for_provider
@@ -13,6 +17,21 @@ def enqueue_due_polls():
     # sees as due.
     for poller in Poller.objects.claim():
         poll_service.delay(str(poller.service_id))
+
+
+@shared_task
+def forget_old_poll_runs():
+    """Drop poll runs past the retention window.
+
+    A run is written per service per poll and nothing removed one. The
+    table grew with the clock rather than with what happened.
+
+    The readings outlive it. `poll_run` is SET_NULL, so a status keeps
+    its severity and its span once the log behind it is gone.
+    """
+    cutoff = timezone.now() - timedelta(days=settings.POLL_RUN_RETENTION_DAYS)
+    removed, _ = PollRun.objects.filter(started_at__lt=cutoff).delete()
+    return removed
 
 
 @shared_task

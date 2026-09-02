@@ -63,6 +63,11 @@ POLL_COOLDOWN_SECONDS = 60
 # hourly, not every five minutes.
 POLL_MAX_INTERVAL_SECONDS = 3600
 
+# How long a poll run is kept. One row per service per poll, so at the
+# default interval a hundred services write ten million rows a year.
+# Long enough to read a week of failures, and no longer.
+POLL_RUN_RETENTION_DAYS = 30
+
 # Who the system writes as. RFC 2606 reserves the domain. No mail leaves
 # for it, and nobody can hold the address.
 SYSTEM_EMAIL = "system@statusboard.invalid"

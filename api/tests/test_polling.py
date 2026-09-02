@@ -416,3 +416,62 @@ def test_a_claim_is_released_by_the_poll_that_finishes(monkeypatch):
     poller.refresh_from_db()
     assert poller.next_at != leased
     assert poller.last_success_at is not None
+
+
+@pytest.mark.django_db
+def test_old_poll_runs_are_forgotten():
+    # One row per service per poll, and nothing removed them. At the
+    # default interval a hundred services write ten million a year.
+    from datetime import timedelta
+
+    from django.conf import settings
+
+    from polling.tasks import forget_old_poll_runs
+
+    poller = PollerFactory(service=ServiceFactory(tracked=1))
+    page = StatusPageFactory(service=poller.service)
+    now = timezone.now()
+    old = now - timedelta(days=settings.POLL_RUN_RETENTION_DAYS + 1)
+    for started, external in ((old, "old"), (now, "new")):
+        run = PollRun.open(poller, page.url, page.provider, at=started)
+        run.finish(ok=True)
+        del external
+
+    removed = forget_old_poll_runs()
+
+    assert removed == 1
+    assert PollRun.objects.count() == 1
+    assert PollRun.objects.first().started_at > old
+
+
+@pytest.mark.django_db
+def test_a_reading_outlives_the_run_that_wrote_it():
+    # `poll_run` is SET_NULL, so a status keeps its severity and its
+    # span once the log behind it is gone.
+    from datetime import timedelta
+
+    from django.conf import settings
+
+    from polling.tasks import forget_old_poll_runs
+    from status.choices import Severity, StatusSource
+    from status.models import ComponentStatus
+    from tests.factories import ComponentFactory
+
+    poller = PollerFactory(service=ServiceFactory(tracked=1))
+    page = StatusPageFactory(service=poller.service)
+    old = timezone.now() - timedelta(days=settings.POLL_RUN_RETENTION_DAYS + 1)
+    run = PollRun.open(poller, page.url, page.provider, at=old)
+    run.finish(ok=True)
+    status = ComponentStatus.objects.create(
+        component=ComponentFactory(service=poller.service),
+        severity=Severity.DEGRADED,
+        source=StatusSource.PROVIDER,
+        started_at=old,
+        poll_run=run,
+    )
+
+    forget_old_poll_runs()
+
+    status.refresh_from_db()
+    assert status.severity == Severity.DEGRADED
+    assert status.poll_run is None

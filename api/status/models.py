@@ -158,6 +158,15 @@ class ServiceEvent(BaseModel):
                 fields=["service", "external_id"], name="one_event_per_provider_id"
             )
         ]
+        indexes = [
+            # `live` reads this for every component on a page, and the
+            # only index was the unique key, which serves neither
+            # column. Ordered as the filter narrows: the service first,
+            # then the kind, then the phase it excludes.
+            models.Index(
+                fields=["service", "kind", "phase"], name="events_by_service_and_kind"
+            )
+        ]
 
     def __str__(self):
         return self.title
