@@ -182,3 +182,28 @@ def test_debug_can_still_be_set_by_hand(configured, monkeypatch):
     monkeypatch.setattr(defaults, "ENVIRONMENT", Environment.PRODUCTION)
 
     assert debug(configured) is (configured == "1")
+
+
+def test_the_two_sign_in_throttles_do_not_share_a_counter():
+    # One counts per caller and one per recipient, on the same scope.
+    # A shared key would make either one spend the other's budget.
+    from types import SimpleNamespace
+
+    from rest_framework.throttling import ScopedRateThrottle
+
+    from authentication.throttles import PerAddressThrottle
+
+    per_address = PerAddressThrottle()
+    per_caller = ScopedRateThrottle()
+    per_caller.scope = per_address.scope
+
+    to_someone = per_address.get_cache_key(
+        SimpleNamespace(data={"email": "a@b.com"}), None
+    )
+    from_somewhere = per_caller.cache_format % {
+        "scope": per_caller.scope,
+        "ident": "a@b.com",
+    }
+
+    assert to_someone != from_somewhere
+    assert str(per_address.scope) in to_someone

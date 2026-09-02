@@ -17,4 +17,7 @@ class PerAddressThrottle(ScopedRateThrottle):
         address = (request.data.get("email") or "").strip().lower()
         if not address:
             return None
-        return f"throttle_magic-link_to_{address}"
+        # DRF's own key shape, with its scope and our identity. The
+        # scoped throttle beside this one keys on the caller's address,
+        # so the two never collide.
+        return self.cache_format % {"scope": self.scope, "ident": f"to_{address}"}
