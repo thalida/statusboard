@@ -115,32 +115,30 @@ APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/ver
 DEV_SECRET_KEY = "dev-only-not-for-deploy"
 
 
-def secret_key(configured, environment=None):
+def secret_key(configured):
     """The signing key, or a refusal.
 
     It used to fall back to the development key everywhere. A
     deployment that forgot the variable signed every cookie and token
     with a string anybody can read here.
     """
-    environment = environment or ENVIRONMENT
     configured = (configured or "").strip()
     if configured:
         return configured
-    if environment is not Environment.DEVELOPMENT:
+    if ENVIRONMENT is not Environment.DEVELOPMENT:
         raise ImproperlyConfigured(
-            f"SECRET_KEY is unset, and ENVIRONMENT is {environment}. Every "
+            f"SECRET_KEY is unset, and ENVIRONMENT is {ENVIRONMENT}. Every "
             "signature this process makes would use a key in the repository."
         )
     return DEV_SECRET_KEY
 
 
-def debug(configured, environment=None):
+def debug(configured):
     """Whether to serve tracebacks.
 
     It used to default on, so a deployment that forgot the variable
     showed its stack traces to callers.
     """
-    environment = environment or ENVIRONMENT
     if configured is not None and configured.strip():
         return configured.strip() == "1"
-    return environment is Environment.DEVELOPMENT
+    return ENVIRONMENT is Environment.DEVELOPMENT

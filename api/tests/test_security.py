@@ -126,42 +126,59 @@ def test_reading_the_catalog_is_not_throttled_away(db):
 
 
 @pytest.mark.parametrize("environment", ["staging", "production"])
-def test_a_deployment_will_not_run_on_the_key_in_this_repository(environment):
+def test_a_deployment_will_not_run_on_the_key_in_this_repository(
+    environment, monkeypatch
+):
+    from api import defaults
     from api.defaults import Environment, secret_key
 
+    monkeypatch.setattr(defaults, "ENVIRONMENT", Environment(environment))
+
     with pytest.raises(ImproperlyConfigured, match="SECRET_KEY"):
-        secret_key(None, Environment(environment))
+        secret_key(None)
     with pytest.raises(ImproperlyConfigured, match="SECRET_KEY"):
-        secret_key("   ", Environment(environment))
+        secret_key("   ")
 
 
 @pytest.mark.parametrize("environment", ["development", "staging", "production"])
-def test_a_configured_key_is_used_everywhere(environment):
+def test_a_configured_key_is_used_everywhere(environment, monkeypatch):
+    from api import defaults
     from api.defaults import Environment, secret_key
 
-    assert secret_key("a-real-key", Environment(environment)) == "a-real-key"
+    monkeypatch.setattr(defaults, "ENVIRONMENT", Environment(environment))
+
+    assert secret_key("a-real-key") == "a-real-key"
 
 
-def test_development_may_run_on_the_repository_key():
+def test_development_may_run_on_the_repository_key(monkeypatch):
+    from api import defaults
     from api.defaults import DEV_SECRET_KEY, Environment, secret_key
 
-    assert secret_key(None, Environment.DEVELOPMENT) == DEV_SECRET_KEY
+    monkeypatch.setattr(defaults, "ENVIRONMENT", Environment.DEVELOPMENT)
+
+    assert secret_key(None) == DEV_SECRET_KEY
 
 
 @pytest.mark.parametrize(
     ("environment", "expected"),
     [("development", True), ("staging", False), ("production", False)],
 )
-def test_debug_follows_the_environment(environment, expected):
+def test_debug_follows_the_environment(environment, expected, monkeypatch):
     # It used to default on, so a deployment that forgot the variable
     # served its tracebacks.
+    from api import defaults
     from api.defaults import Environment, debug
 
-    assert debug(None, Environment(environment)) is expected
+    monkeypatch.setattr(defaults, "ENVIRONMENT", Environment(environment))
+
+    assert debug(None) is expected
 
 
 @pytest.mark.parametrize("configured", ["1", "0"])
-def test_debug_can_still_be_set_by_hand(configured):
+def test_debug_can_still_be_set_by_hand(configured, monkeypatch):
+    from api import defaults
     from api.defaults import Environment, debug
 
-    assert debug(configured, Environment.PRODUCTION) is (configured == "1")
+    monkeypatch.setattr(defaults, "ENVIRONMENT", Environment.PRODUCTION)
+
+    assert debug(configured) is (configured == "1")
