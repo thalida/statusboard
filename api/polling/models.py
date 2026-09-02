@@ -14,7 +14,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
@@ -62,6 +62,35 @@ class PollerQuerySet(models.QuerySet):
             .select_related("service")
             .order_by("next_at")
         )
+
+    def claim(self, now=None):
+        """Take what is due, and put it out of reach before returning it.
+
+        `next_at` used to move only when a poll finished. Beat runs every
+        minute, so a poll slower than that was dispatched again on the
+        next tick. Two runs of one service then raced on the open status
+        row. The loser's IntegrityError was recorded as a provider
+        failure.
+
+        The claim schedules the next poll as though this one had already
+        happened. `PollRun.finish` sets the true interval afterwards, so
+        this only decides how long a task that never runs holds its
+        place.
+
+        `skip_locked` because a second beat should find nothing rather
+        than wait for the first.
+        """
+        now = now or timezone.now()
+        with transaction.atomic():
+            taken = list(
+                self.due(now).select_for_update(of=("self",), skip_locked=True)
+            )
+            for poller in taken:
+                poller.next_at = now + timedelta(
+                    seconds=poller.effective_interval_seconds
+                )
+            self.model.objects.bulk_update(taken, ["next_at"])
+        return taken
 
 
 class Poller(BaseModel):

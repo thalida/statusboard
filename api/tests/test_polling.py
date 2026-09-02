@@ -347,3 +347,72 @@ def test_a_recorded_failure_backs_the_schedule_off():
     # Two failures double it twice.
     gap = (poller.next_at - at).total_seconds()
     assert gap > poller.effective_interval_seconds * 3
+
+
+@pytest.mark.django_db
+def test_a_beat_claims_what_it_dispatches():
+    # Beat runs every minute and `next_at` used to move only when a
+    # poll finished. A poll slower than that was dispatched again. Two
+    # runs of one service then raced on the open status row.
+    poller = PollerFactory(service=ServiceFactory(tracked=1), next_at=None)
+    StatusPageFactory(service=poller.service)
+
+    first = Poller.objects.claim()
+    second = Poller.objects.claim()
+
+    assert [p.pk for p in first] == [poller.pk]
+    assert second == []
+
+
+@pytest.mark.django_db
+def test_a_claim_holds_for_the_poller_own_interval():
+    # It schedules the next poll as though this one had happened.
+    # `finish` sets the true interval afterwards.
+    poller = PollerFactory(
+        service=ServiceFactory(tracked=1), next_at=None, interval_seconds=900
+    )
+    StatusPageFactory(service=poller.service)
+    before = timezone.now()
+
+    Poller.objects.claim()
+
+    poller.refresh_from_db()
+    held = (poller.next_at - before).total_seconds()
+    assert 880 <= held <= 920
+
+
+@pytest.mark.django_db
+def test_a_claim_is_released_by_the_poll_that_finishes(monkeypatch):
+    # The lease is a placeholder. A poll that runs replaces it.
+    poller = PollerFactory(service=ServiceFactory(tracked=1), next_at=None)
+    StatusPageFactory(service=poller.service)
+    Poller.objects.claim()
+    poller.refresh_from_db()
+    leased = poller.next_at
+
+    class Fine(Adapter):
+        @classmethod
+        def matches(cls, url):
+            return True
+
+        def __init__(self, *a, **kw): ...
+
+        def fetch_status(self):
+            return []
+
+        def fetch_incidents(self):
+            return []
+
+        def fetch_service_metadata(self):
+            return {}
+
+        def fetch_logo(self):
+            # The base fetches one, and the suite allows no network.
+            return ""
+
+    monkeypatch.setattr("polling.tasks.for_provider", lambda provider: Fine)
+    poll_service(str(poller.service_id))
+
+    poller.refresh_from_db()
+    assert poller.next_at != leased
+    assert poller.last_success_at is not None

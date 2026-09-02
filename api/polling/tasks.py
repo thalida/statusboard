@@ -8,7 +8,10 @@ from polling.reconcile import apply_fetch
 
 @shared_task
 def enqueue_due_polls():
-    for poller in Poller.objects.due():
+    # Claimed first, then dispatched. The claim commits before a task
+    # is queued. So a worker cannot start a poll the next beat still
+    # sees as due.
+    for poller in Poller.objects.claim():
         poll_service.delay(str(poller.service_id))
 
 
