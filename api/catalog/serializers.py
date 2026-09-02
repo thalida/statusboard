@@ -2,7 +2,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from catalog.models import Service, ServiceComponent, StatusPage
-from common.mixins import FieldsMixin
+from common.mixins import FieldsMixin, ViewerMixin
 from polling.models import Poller
 from status.choices import EventKind
 from status.serializers import EventRefSerializer, StatusSerializer
@@ -51,7 +51,7 @@ class PathNodeSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "is_overall"]
 
 
-class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
+class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
     child_count = serializers.SerializerMethodField()
@@ -83,12 +83,7 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(StatusSerializer(allow_null=True))
     def get_status(self, row):
-        # `for_display` prefetches it. A row that skipped that asks.
-        open_statuses = getattr(row, "open_statuses", None)
-        if open_statuses is None:
-            current = row.statuses.filter(ended_at__isnull=True).first()
-        else:
-            current = open_statuses[0] if open_statuses else None
+        current = row.open_status()
         return (
             StatusSerializer(
                 current,
@@ -114,21 +109,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_child_count(self, row):
-        if row.is_overall:
-            return 0
-        counted = getattr(row, "child_count_now", None)
-        return row.children.count() if counted is None else counted
-
-    def _live(self, row, kind):
-        """The live events of one kind, prefetched or asked for."""
-        events = getattr(row, "live_events", None)
-        if events is None:
-            return list(row.events.live(kind))
-        return [event for event in events if event.kind == kind]
+        return row.child_count()
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):
-        windows = self._live(row, EventKind.MAINTENANCE)
+        windows = row.live_events(EventKind.MAINTENANCE)
         soonest = min(windows, key=lambda e: e.starts_at) if windows else None
         return (
             EventRefSerializer(
@@ -142,11 +127,11 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_upcoming_maintenance_count(self, row):
-        return len(self._live(row, EventKind.MAINTENANCE))
+        return len(row.live_events(EventKind.MAINTENANCE))
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_active_incident(self, row):
-        incidents = self._live(row, EventKind.INCIDENT)
+        incidents = row.live_events(EventKind.INCIDENT)
         newest = max(incidents, key=lambda e: e.starts_at) if incidents else None
         return (
             EventRefSerializer(
@@ -160,20 +145,14 @@ class ComponentSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_active_incident_count(self, row):
-        return len(self._live(row, EventKind.INCIDENT))
+        return len(row.live_events(EventKind.INCIDENT))
 
     @extend_schema_field(serializers.BooleanField(allow_null=True))
     def get_is_tracked(self, row):
-        user = getattr(self.context.get("request"), "user", None)
-        if user is None or not user.is_authenticated:
-            return None
-        tracked = getattr(row, "is_tracked_now", None)
-        if tracked is None:
-            return row.boards.filter(owner=user).exists()
-        return tracked
+        return row.is_tracked_by(self.viewer)
 
 
-class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
+class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
     status_page = StatusPageSerializer(read_only=True)
     poller = PollerSerializer(read_only=True)
     overall_component = serializers.SerializerMethodField()
@@ -200,12 +179,7 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(ComponentSerializer(allow_null=True))
     def get_overall_component(self, service):
-        # `for_display` prefetches it. A row that skipped that asks.
-        overall = getattr(service, "overall_components", None)
-        if overall is None:
-            row = service.components.filter(is_overall=True).first()
-        else:
-            row = overall[0] if overall else None
+        row = service.overall_component()
         return (
             ComponentSerializer(
                 row,
@@ -218,25 +192,11 @@ class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_component_count(self, service):
-        # The overall component is excluded: it is the service, not a part of it.
-        counted = getattr(service, "component_count_now", None)
-        if counted is not None:
-            return counted
-        return service.components.filter(is_overall=False, is_archived=False).count()
+        return service.component_count()
 
     @extend_schema_field(serializers.IntegerField())
     def get_tracked_component_count(self, service):
-        user = getattr(self.context.get("request"), "user", None)
-        if user is None or not user.is_authenticated:
-            return 0
-        counted = getattr(service, "tracked_component_count_now", None)
-        if counted is not None:
-            return counted
-        return (
-            ServiceComponent.objects.filter(service=service, boards__owner=user)
-            .distinct()
-            .count()
-        )
+        return service.tracked_component_count(self.viewer)
 
 
 class ImportRequestSerializer(serializers.Serializer):

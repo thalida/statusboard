@@ -28,13 +28,13 @@ class ServiceQuerySet(models.QuerySet):
         return (
             self.select_related("status_page", "poller")
             .annotate(
-                component_count_now=related_count(
+                _component_count=related_count(
                     ServiceComponent.objects.filter(
                         is_overall=False, is_archived=False
                     ),
                     "service",
                 ),
-                tracked_component_count_now=tracked,
+                _tracked_component_count=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -42,7 +42,7 @@ class ServiceQuerySet(models.QuerySet):
                     queryset=ServiceComponent.objects.filter(
                         is_overall=True
                     ).for_display(user),
-                    to_attr="overall_components",
+                    to_attr="_overall_components",
                 )
             )
         )
@@ -72,6 +72,38 @@ class Service(BaseModel):
         super().save(*args, **kwargs)
         if new:
             self.ensure_poller()
+
+    def overall_component(self):
+        """The rollup component, which is the service's own status.
+
+        This and the two below read what `for_display` prepared. A row
+        fetched without it asks instead. The underscore names are that
+        queryset's, so a rename cannot leave a reader behind.
+        """
+        prepared = getattr(self, "_overall_components", None)
+        if prepared is None:
+            return self.components.filter(is_overall=True).first()
+        return prepared[0] if prepared else None
+
+    def component_count(self):
+        """The parts. The rollup is excluded, because it is the service."""
+        prepared = getattr(self, "_component_count", None)
+        if prepared is not None:
+            return prepared
+        return self.components.filter(is_overall=False, is_archived=False).count()
+
+    def tracked_component_count(self, user):
+        """How many parts this user has on a board."""
+        if user is None or not user.is_authenticated:
+            return 0
+        prepared = getattr(self, "_tracked_component_count", None)
+        if prepared is not None:
+            return prepared
+        return (
+            ServiceComponent.objects.filter(service=self, boards__owner=user)
+            .distinct()
+            .count()
+        )
 
     def ensure_poller(self):
         """Every service is polled, so every service has one.
@@ -195,8 +227,8 @@ class ServiceComponentQuerySet(models.QuerySet):
         return (
             self.select_related("service", "parent", "parent__parent")
             .annotate(
-                child_count_now=related_count(self.model.objects, "parent"),
-                is_tracked_now=tracked,
+                _child_count=related_count(self.model.objects, "parent"),
+                _is_tracked=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -206,12 +238,12 @@ class ServiceComponentQuerySet(models.QuerySet):
                     queryset=ComponentStatus.objects.filter(
                         ended_at__isnull=True
                     ).select_related("component__service__poller"),
-                    to_attr="open_statuses",
+                    to_attr="_open_statuses",
                 ),
                 models.Prefetch(
                     "events",
                     queryset=ServiceEvent.objects.live(),
-                    to_attr="live_events",
+                    to_attr="_live_events",
                 ),
             )
         )
@@ -266,6 +298,40 @@ class ServiceComponent(BaseModel):
                 name="archived_flag_and_date_agree",
             ),
         ]
+
+    def live_events(self, kind):
+        """The live events of one kind.
+
+        This and the three below read what `for_display` prepared. A row
+        fetched without it asks instead.
+        """
+        prepared = getattr(self, "_live_events", None)
+        if prepared is None:
+            return list(self.events.live(kind))
+        return [event for event in prepared if event.kind == kind]
+
+    def open_status(self):
+        """The status span still running, if there is one."""
+        prepared = getattr(self, "_open_statuses", None)
+        if prepared is None:
+            return self.statuses.filter(ended_at__isnull=True).first()
+        return prepared[0] if prepared else None
+
+    def child_count(self):
+        """How many components sit under this one."""
+        if self.is_overall:
+            return 0
+        prepared = getattr(self, "_child_count", None)
+        return self.children.count() if prepared is None else prepared
+
+    def is_tracked_by(self, user):
+        """Whether this user has it on a board. Null if nobody asked."""
+        if user is None or not user.is_authenticated:
+            return None
+        prepared = getattr(self, "_is_tracked", None)
+        if prepared is None:
+            return self.boards.filter(owner=user).exists()
+        return prepared
 
     def save(self, *args, **kwargs):
         """Keep the archive date in step with the flag.

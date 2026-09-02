@@ -60,3 +60,15 @@ class FieldsMixin:
                 sub = child._parse(",".join(children))
                 child._fields_tree = sub
                 child._prune(sub)
+
+
+class ViewerMixin:
+    """Who is asking, for a field that answers per person.
+
+    Anonymous reads as nobody. A field then has one thing to check.
+    """
+
+    @property
+    def viewer(self):
+        user = getattr(self.context.get("request"), "user", None)
+        return user if user is not None and user.is_authenticated else None
