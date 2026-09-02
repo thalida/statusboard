@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, Throttled
 from rest_framework.views import exception_handler as drf_handler
 
-from common.serializers import ERROR_CODES
+from common.serializers import ErrorCode
 
 
 class CodedError(APIException):
@@ -23,21 +23,24 @@ class CodedError(APIException):
     The code is what a client branches on. The detail is for a person.
     """
 
-    def __init__(self, code, detail, status_code=status.HTTP_400_BAD_REQUEST):
-        assert code in ERROR_CODES, f"{code!r} is not a code the contract names."
-        self.code = code
+    def __init__(
+        self, code: ErrorCode, detail, status_code=status.HTTP_400_BAD_REQUEST
+    ):
+        self.code = ErrorCode(code)
         self.status_code = status_code
         super().__init__(detail)
 
 
 class ProviderUnreachable(CodedError):
     def __init__(self, detail):
-        super().__init__("provider_unreachable", detail, status.HTTP_502_BAD_GATEWAY)
+        super().__init__(
+            ErrorCode.PROVIDER_UNREACHABLE, detail, status.HTTP_502_BAD_GATEWAY
+        )
 
 
 class NoStatusPageFound(CodedError):
     def __init__(self, detail):
-        super().__init__("no_status_page_found", detail)
+        super().__init__(ErrorCode.NO_STATUS_PAGE_FOUND, detail)
 
 
 def _code(exception):
@@ -45,11 +48,11 @@ def _code(exception):
     if isinstance(exception, CodedError):
         return exception.code
     if isinstance(exception, Throttled):
-        return "throttled"
+        return ErrorCode.THROTTLED
     # Django raises its own 404 and DRF translates it, so the exception
     # reaching here is `Http404` rather than DRF's `NotFound`.
     if isinstance(exception, NotFound | Http404):
-        return "not_found"
+        return ErrorCode.NOT_FOUND
     return None
 
 
@@ -66,5 +69,5 @@ def handler(exception, context):
     if code is None:
         return response
     detail = response.data.get("detail") if isinstance(response.data, dict) else None
-    response.data = {"code": code, "detail": str(detail or exception)}
+    response.data = {"code": str(code), "detail": str(detail or exception)}
     return response

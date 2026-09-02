@@ -105,7 +105,7 @@ def test_every_named_failure_answers_in_the_documented_shape():
     # raised by nothing. Three different shapes came back instead.
     from rest_framework.test import APIClient
 
-    from common.serializers import ERROR_CODES
+    from common.serializers import ErrorCode
 
     caller = APIClient()
     seen = {}
@@ -127,7 +127,7 @@ def test_every_named_failure_answers_in_the_documented_shape():
         assert body["code"] == code, f"{code} answered {body}"
         assert body["detail"], f"{code} carries no detail"
         assert set(body) == {"code", "detail"}
-        assert code in ERROR_CODES
+        assert code in set(ErrorCode)
     assert seen["throttled"].headers["Retry-After"]
 
 

@@ -20,6 +20,7 @@ from api.defaults import (  # noqa: F401
     POLL_MAX_INTERVAL_SECONDS,
     POLL_RUN_RETENTION_DAYS,
     SYSTEM_EMAIL,
+    THROTTLE_RATES,
     debug,
     secret_key,
 )
@@ -132,24 +133,14 @@ REST_FRAMEWORK = {
     # The contract calls it `q`, and DRF's SearchFilter calls it
     # `search`. One name, and the schema documents it.
     "SEARCH_PARAM": "q",
-    # The contract has always answered 429, and nothing raised one.
-    # Two endpoints make that expensive rather than untidy. An import
-    # fetches a URL somebody handed us. A magic link mails an address
-    # nobody has proved they own.
+    # The contract has always answered 429, and nothing raised one. See
+    # `Throttle` for what each rate is protecting.
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.ScopedRateThrottle",
     ],
-    "DEFAULT_THROTTLE_RATES": {
-        # Reading the catalog is the point, so the plain rates are wide.
-        "anon": "120/min",
-        "user": "600/min",
-        # Each of these costs somebody else something: an outbound fetch
-        # and a delivered email.
-        "import": "6/min",
-        "magic-link": "5/hour",
-    },
+    "DEFAULT_THROTTLE_RATES": THROTTLE_RATES,
     # One shape for every failure. See common/errors.py.
     "EXCEPTION_HANDLER": "common.errors.handler",
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
@@ -167,6 +158,10 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # Beat runs every minute and enqueues only what is due. The interval
 # itself lives on each Poller.next_at, so a service can be tuned in
 # admin without touching this schedule.
+#
+# A task is named by its dotted path, because settings loads before the
+# app registry and cannot import one. A test resolves every name here
+# against what Celery registered, so a rename cannot go quiet.
 CELERY_BEAT_SCHEDULE = {
     "enqueue-due-polls": {
         "task": "polling.tasks.enqueue_due_polls",

@@ -1,20 +1,27 @@
+from enum import StrEnum
+
 from rest_framework import serializers
 
-# The failure codes the contract names. A bare string would let any new
-# code ship without the client knowing it exists.
-ERROR_CODES = [
-    "throttled",
-    "provider_unreachable",
-    "no_status_page_found",
-    "invalid_or_expired_token",
-    "not_found",
-]
+
+class ErrorCode(StrEnum):
+    """What a failure calls itself.
+
+    A bare string would let a new code ship without the client knowing
+    it exists. The handler that raises one is a file away from the
+    schema that publishes them.
+    """
+
+    THROTTLED = "throttled"
+    PROVIDER_UNREACHABLE = "provider_unreachable"
+    NO_STATUS_PAGE_FOUND = "no_status_page_found"
+    INVALID_OR_EXPIRED_TOKEN = "invalid_or_expired_token"
+    NOT_FOUND = "not_found"
 
 
 class ErrorSerializer(serializers.Serializer):
     """The one error shape. Every failure response uses it."""
 
-    code = serializers.ChoiceField(choices=ERROR_CODES)
+    code = serializers.ChoiceField(choices=ErrorCode)
     detail = serializers.CharField()
 
 

@@ -74,6 +74,32 @@ class Environment(StrEnum):
 # handed it.
 ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 
+
+class Throttle(StrEnum):
+    """A rate this deployment enforces.
+
+    A view names its scope and `settings.py` gives it a rate, so the
+    string was written twice and had to match. DRF names the first two;
+    we named the rest.
+    """
+
+    ANONYMOUS = "anon"
+    SIGNED_IN = "user"
+    IMPORT = "import"
+    MAGIC_LINK = "magic-link"
+
+
+# Reading the catalog is the point, so the plain rates are wide. Each of
+# the others costs somebody else something: an outbound fetch, and a
+# delivered email.
+THROTTLE_RATES = {
+    Throttle.ANONYMOUS: "120/min",
+    Throttle.SIGNED_IN: "600/min",
+    Throttle.IMPORT: "6/min",
+    Throttle.MAGIC_LINK: "5/hour",
+}
+
+
 # Cursor pagination. `/meta` publishes both, so a client can size a page
 # without guessing which values the server will accept.
 DEFAULT_PAGE_SIZE = 50

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from api.defaults import Throttle
 from catalog.filters import ComponentFilter, ServiceEventFilter, ServiceFilter
 from catalog.models import Service, ServiceComponent
 from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
@@ -144,7 +145,7 @@ class CatalogImportView(APIView):
 
     permission_classes = [AllowAny]
     # Every call makes the server fetch a URL somebody else chose.
-    throttle_scope = "import"
+    throttle_scope = Throttle.IMPORT
 
     @extend_schema(
         request=ImportRequestSerializer,

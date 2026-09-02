@@ -131,3 +131,45 @@ def test_an_unknown_environment_is_refused():
 
     with pytest.raises(ImproperlyConfigured, match="Expected one of"):
         Environment.parse("prod")
+
+
+def test_every_scheduled_task_exists():
+    # Beat names a task by its dotted path, because settings loads
+    # before the app registry. A rename would leave the schedule
+    # pointing at nothing, and the failure lands in a worker log.
+    from django.conf import settings
+
+    from api.celery import app
+
+    app.loader.import_default_modules()
+    scheduled = {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()}
+
+    assert scheduled
+    assert scheduled <= set(app.tasks), scheduled - set(app.tasks)
+
+
+def test_every_throttled_view_names_a_rate_that_exists():
+    # The enum keeps the two spellings together. It cannot keep a
+    # member somebody adds and gives no rate. DRF raises on that, in
+    # the request that hits it.
+    from django.conf import settings
+
+    from api.defaults import Throttle
+    from authentication.views import MagicLinkView
+    from catalog.views import CatalogImportView
+
+    named = {MagicLinkView.throttle_scope, CatalogImportView.throttle_scope}
+    rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
+
+    assert named <= set(Throttle)
+    assert all(rates[scope] for scope in Throttle)
+
+
+def test_every_code_the_handler_raises_is_one_the_contract_publishes():
+    # The handler that names a failure is a file away from the schema
+    # that lists them.
+    from common.errors import NoStatusPageFound, ProviderUnreachable
+    from common.serializers import ErrorCode
+
+    assert ProviderUnreachable("x").code in set(ErrorCode)
+    assert NoStatusPageFound("x").code in set(ErrorCode)

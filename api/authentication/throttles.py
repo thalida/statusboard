@@ -1,5 +1,7 @@
 from rest_framework.throttling import ScopedRateThrottle
 
+from api.defaults import Throttle
+
 
 class PerAddressThrottle(ScopedRateThrottle):
     """A sign-in link, counted against the address it would reach.
@@ -9,7 +11,7 @@ class PerAddressThrottle(ScopedRateThrottle):
     links to one address. That is the shape that buries an inbox.
     """
 
-    scope = "magic-link"
+    scope = Throttle.MAGIC_LINK
 
     def get_cache_key(self, request, view):
         address = (request.data.get("email") or "").strip().lower()

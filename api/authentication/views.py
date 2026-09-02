@@ -8,6 +8,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from api.defaults import Throttle
 from authentication.emails import send_magic_link
 from authentication.models import MagicLinkToken
 from authentication.serializers import (
@@ -27,7 +28,7 @@ class MagicLinkView(APIView):
     # Every call creates a user and sends mail, to an address nobody has
     # proved they own. The scope counts per caller. `PerAddressThrottle`
     # counts per recipient, so many callers cannot bury one inbox.
-    throttle_scope = "magic-link"
+    throttle_scope = Throttle.MAGIC_LINK
     throttle_classes = [ScopedRateThrottle, PerAddressThrottle]
 
     @extend_schema(
