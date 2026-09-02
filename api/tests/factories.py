@@ -81,6 +81,6 @@ def track(component, user=None):
 
 def watchers(service):
     """How many people track it, counted the way the app counts."""
-    from common.ordering import WATCHER_COUNT
+    from catalog.queries import WATCHER_COUNT
 
     return Service.objects.annotate(n=WATCHER_COUNT).get(pk=service.pk).n

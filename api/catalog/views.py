@@ -11,6 +11,7 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from catalog.filters import ComponentFilter, ServiceEventFilter, ServiceFilter
 from catalog.models import Service, ServiceComponent
+from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
 from catalog.serializers import (
     ComponentSerializer,
     ImportRequestSerializer,
@@ -19,13 +20,9 @@ from catalog.serializers import (
 from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.errors import NoStatusPageFound, ProviderUnreachable
 from common.filters import FieldsBackend
-from common.ordering import (
-    CURRENT_SEVERITY,
-    OVERALL_SEVERITY,
-    WATCHER_COUNT,
-    MappedOrderingFilter,
-)
+from common.ordering import MappedOrderingFilter
 from status.models import ServiceEvent
+from status.queries import CURRENT_SEVERITY
 from status.serializers import ServiceEventSerializer
 
 

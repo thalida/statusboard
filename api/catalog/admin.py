@@ -19,6 +19,7 @@ from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
 from catalog.models import Service, ServiceComponent, StatusPage
+from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
@@ -31,11 +32,11 @@ from common.admin import (
     phase_label,
     severity_label,
 )
-from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY, WATCHER_COUNT
 from common.queries import related_count
 from polling.models import Poller, PollRun
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
+from status.queries import CURRENT_SEVERITY
 
 
 class ImportServiceForm(BaseDialogForm):

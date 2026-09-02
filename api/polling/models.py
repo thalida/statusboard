@@ -45,7 +45,7 @@ class PollerQuerySet(models.QuerySet):
         stale. Anything reporting on polling reads this, or it reports
         on pollers that were never going to run.
         """
-        from common.ordering import is_tracked
+        from catalog.queries import is_tracked
 
         return self.filter(
             is_tracked("service_id"),

@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from unfold.decorators import display
 
 from api.defaults import Environment
-from common.ordering import is_tracked
+from catalog.queries import is_tracked
 from status.choices import EVENT_PHASES_BY_KIND, Severity
 
 

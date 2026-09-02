@@ -10,10 +10,11 @@ from catalog.models import ServiceComponent
 from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
 from common.filters import FieldsBackend
-from common.ordering import CURRENT_SEVERITY, NEXT_TRANSITION, MappedOrderingFilter
+from common.ordering import MappedOrderingFilter
 from dashboards.filters import BoardComponentFilter
 from dashboards.models import Dashboard, DashboardItem
 from dashboards.serializers import TrackComponentSerializer
+from status.queries import CURRENT_SEVERITY, NEXT_TRANSITION
 
 
 def _board(request, uuid):
