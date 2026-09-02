@@ -1,15 +1,13 @@
-from datetime import datetime, timedelta
-from urllib.parse import urljoin
+from datetime import timedelta
 
 from catalog.choices import StatusPageProvider
-from polling import fetch
-from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
+from polling.adapters.base import (
+    Adapter,
+    NormalisedComponent,
+    NormalisedEvent,
+    timestamp,
+)
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
-
-
-def _parse(value):
-    """Parse an Instatus timestamp. Return None for a missing value."""
-    return datetime.fromisoformat(value) if value else None
 
 
 class InstatusAdapter(Adapter):
@@ -21,6 +19,7 @@ class InstatusAdapter(Adapter):
     """
 
     provider = StatusPageProvider.INSTATUS
+    TIMEOUT = 10
 
     # Component and incident-impact vocabulary, per Instatus docs.
     # summary.json never lists components, but incident "impact" uses
@@ -55,14 +54,8 @@ class InstatusAdapter(Adapter):
     def matches(cls, url: str) -> bool:
         return "instatus.com" in url
 
-    def _get(self, path):
-        session = self.session or fetch.session
-        response = session.get(urljoin(self.url, path), timeout=10)
-        response.raise_for_status()
-        return response.json()
-
     def fetch_status(self):
-        page = self._get("summary.json").get("page", {})
+        page = self.get_json("summary.json").get("page", {})
         # summary.json carries no component list, only the page's own
         # status. Return a single overall component built from it.
         return [
@@ -83,11 +76,11 @@ class InstatusAdapter(Adapter):
             phase=self.INCIDENT_PHASE.get(
                 raw.get("status"), IncidentPhase.INVESTIGATING
             ),
-            starts_at=_parse(raw.get("started")),
+            starts_at=timestamp(raw.get("started")),
         )
 
     def _maintenance(self, raw):
-        starts_at = _parse(raw.get("start"))
+        starts_at = timestamp(raw.get("start"))
         duration = raw.get("duration")
         ends_at = (
             starts_at + timedelta(minutes=duration) if starts_at and duration else None
@@ -106,11 +99,11 @@ class InstatusAdapter(Adapter):
     def fetch_incidents(self):
         # Only active incidents and maintenance are public here. There
         # is no update log or affected-component list at this endpoint.
-        body = self._get("summary.json")
+        body = self.get_json("summary.json")
         events = [self._incident(raw) for raw in body.get("activeIncidents", [])]
         events += [self._maintenance(raw) for raw in body.get("activeMaintenances", [])]
         return events
 
     def fetch_service_metadata(self):
-        page = self._get("summary.json").get("page", {})
+        page = self.get_json("summary.json").get("page", {})
         return {"name": page.get("name", ""), "homepage_url": page.get("url", "")}

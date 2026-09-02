@@ -1,14 +1,11 @@
-from datetime import datetime
-from urllib.parse import urljoin
-
 from catalog.choices import StatusPageProvider
-from polling import fetch
-from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
+from polling.adapters.base import (
+    Adapter,
+    NormalisedComponent,
+    NormalisedEvent,
+    timestamp,
+)
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
-
-
-def _parse(value):
-    return datetime.fromisoformat(value) if value else None
 
 
 class GoogleCloudAdapter(Adapter):
@@ -35,15 +32,9 @@ class GoogleCloudAdapter(Adapter):
     def matches(cls, url: str) -> bool:
         return "status.cloud.google.com" in url
 
-    def _get(self, path):
-        session = self.session or fetch.session
-        response = session.get(urljoin(self.url, path), timeout=15)
-        response.raise_for_status()
-        return response.json()
-
     def _open_incidents(self):
         # No end time means it is still running.
-        return [raw for raw in self._get("incidents.json") if not raw.get("end")]
+        return [raw for raw in self.get_json("incidents.json") if not raw.get("end")]
 
     def fetch_status(self):
         worst = {}
@@ -65,7 +56,9 @@ class GoogleCloudAdapter(Adapter):
                 order=-1,
             )
         ]
-        for index, product in enumerate(self._get("products.json").get("products", [])):
+        for index, product in enumerate(
+            self.get_json("products.json").get("products", [])
+        ):
             product_id = str(product.get("id"))
             components.append(
                 NormalisedComponent(
@@ -79,7 +72,7 @@ class GoogleCloudAdapter(Adapter):
 
     def fetch_incidents(self):
         events = []
-        for raw in self._get("incidents.json"):
+        for raw in self.get_json("incidents.json"):
             closed = bool(raw.get("end"))
             events.append(
                 NormalisedEvent(
@@ -89,8 +82,8 @@ class GoogleCloudAdapter(Adapter):
                     phase=IncidentPhase.RESOLVED
                     if closed
                     else IncidentPhase.INVESTIGATING,
-                    starts_at=_parse(raw.get("begin")),
-                    ends_at=_parse(raw.get("end")),
+                    starts_at=timestamp(raw.get("begin")),
+                    ends_at=timestamp(raw.get("end")),
                     affected_external_ids=tuple(
                         str(p["id"])
                         for p in raw.get("affected_products") or []

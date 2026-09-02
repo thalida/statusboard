@@ -4,14 +4,8 @@ from datetime import UTC, datetime
 import feedparser
 
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
-
-# A status feed writes its newest update first. Each update is led by a
-# bolded phase word, such as "<strong>Resolved</strong>". So the first
-# marker in the body is the entry's current phase.
-PHASE_MARKER = re.compile(r"<strong>\s*(.*?)\s*</strong>", re.IGNORECASE | re.DOTALL)
 
 
 class RSSAdapter(Adapter):
@@ -23,6 +17,13 @@ class RSSAdapter(Adapter):
 
     provider = StatusPageProvider.RSS
     status_source = StatusSource.INCIDENTS
+    TIMEOUT = 10
+
+    # A feed writes its newest update first. Each update is led by a
+    # bolded phase word. So the first marker is the entry's phase.
+    PHASE_MARKER = re.compile(
+        r"<strong>\s*(.*?)\s*</strong>", re.IGNORECASE | re.DOTALL
+    )
 
     # The vocabulary Statuspage-backed feeds bold. "Update" is a progress
     # note with no phase of its own, so it leaves the entry open.
@@ -50,8 +51,7 @@ class RSSAdapter(Adapter):
         became one synthetic component reading OPERATIONAL. A page we
         cannot read must fail the poll, not invent green.
         """
-        session = self.session or fetch.session
-        feed = feedparser.parse(session.get(self.url, timeout=10).text)
+        feed = feedparser.parse(self.get().text)
         if not feed.version:
             raise ValueError(f"{self.url} is not a feed this adapter can read")
         return feed
@@ -77,7 +77,7 @@ class RSSAdapter(Adapter):
         after the entry resolves. Reading the title leaves every entry
         open. The service would then sit at DEGRADED forever.
         """
-        match = PHASE_MARKER.search(description or "")
+        match = self.PHASE_MARKER.search(description or "")
         if not match:
             return IncidentPhase.INVESTIGATING
         return self.PHASE.get(match.group(1).lower(), IncidentPhase.INVESTIGATING)

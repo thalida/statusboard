@@ -1,28 +1,21 @@
-from datetime import datetime
-from urllib.parse import urljoin
-
 import requests
 
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import (
     Adapter,
     NormalisedComponent,
     NormalisedEvent,
     NormalisedUpdate,
+    timestamp,
 )
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
-
-
-def _parse(value):
-    """Parse a Statuspage timestamp. Return None for a missing value."""
-    return datetime.fromisoformat(value) if value else None
 
 
 class StatuspageAdapter(Adapter):
     """Atlassian Statuspage. Covers most of the industry."""
 
     provider = StatusPageProvider.STATUSPAGE
+    TIMEOUT = 10
 
     SEVERITY = {
         "operational": Severity.OPERATIONAL,
@@ -64,14 +57,8 @@ class StatuspageAdapter(Adapter):
             and ("status." in url or "githubstatus" in url or "statuspage.io" in url)
         )
 
-    def _get(self, path):
-        session = self.session or fetch.session
-        response = session.get(urljoin(self.url, path), timeout=10)
-        response.raise_for_status()
-        return response.json()
-
     def fetch_status(self):
-        body = self._get("api/v2/summary.json")
+        body = self.get_json("api/v2/summary.json")
         page = body.get("page", {})
         status = body.get("status", {})
         # Use the page's own indicator. Never derive the overall from
@@ -125,8 +112,8 @@ class StatuspageAdapter(Adapter):
             kind=kind,
             title=raw.get("name", ""),
             phase=phases.get(raw.get("status"), default),
-            starts_at=_parse(starts),
-            ends_at=_parse(ends),
+            starts_at=timestamp(starts),
+            ends_at=timestamp(ends),
             affected_external_ids=tuple(
                 str(c["id"]) for c in raw.get("components", []) if c.get("id")
             ),
@@ -134,7 +121,7 @@ class StatuspageAdapter(Adapter):
                 NormalisedUpdate(
                     phase=phases.get(u.get("status"), default),
                     body=u.get("body", ""),
-                    posted_at=_parse(u.get("created_at")),
+                    posted_at=timestamp(u.get("created_at")),
                 )
                 for u in raw.get("incident_updates", [])
             ),
@@ -151,7 +138,7 @@ class StatuspageAdapter(Adapter):
         That is an empty list, not an error.
         """
         try:
-            return self._get("api/v2/scheduled-maintenances.json").get(
+            return self.get_json("api/v2/scheduled-maintenances.json").get(
                 "scheduled_maintenances", []
             )
         except requests.HTTPError as error:
@@ -160,7 +147,7 @@ class StatuspageAdapter(Adapter):
             raise
 
     def fetch_incidents(self):
-        incidents = self._get("api/v2/incidents.json")
+        incidents = self.get_json("api/v2/incidents.json")
         events = [
             self._event(raw, EventKind.INCIDENT)
             for raw in incidents.get("incidents", [])
@@ -171,5 +158,5 @@ class StatuspageAdapter(Adapter):
         return events
 
     def fetch_service_metadata(self):
-        page = self._get("api/v2/summary.json").get("page", {})
+        page = self.get_json("api/v2/summary.json").get("page", {})
         return {"name": page.get("name", ""), "homepage_url": page.get("url", "")}

@@ -1,7 +1,4 @@
-from urllib.parse import urljoin
-
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent
 from status.choices import Severity
 
@@ -32,14 +29,8 @@ class OracleAdapter(Adapter):
     def matches(cls, url: str) -> bool:
         return "ocistatus.oraclecloud.com" in url
 
-    def _get(self, path):
-        base = self.url if self.url.endswith("/") else self.url + "/"
-        response = (self.session or fetch.session).get(urljoin(base, path), timeout=15)
-        response.raise_for_status()
-        return response.json()
-
     def fetch_status(self):
-        status = self._get("api/v2/status.json").get("status") or {}
+        status = self.get_json("api/v2/status.json").get("status") or {}
         components = [
             NormalisedComponent(
                 external_id="overall",
@@ -49,7 +40,9 @@ class OracleAdapter(Adapter):
                 order=-1,
             )
         ]
-        regions = self._get("api/v2/components.json").get("regionHealthReports") or []
+        regions = (
+            self.get_json("api/v2/components.json").get("regionHealthReports") or []
+        )
         for index, region in enumerate(regions):
             unhealthy = [
                 report

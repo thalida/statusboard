@@ -1,8 +1,6 @@
 from catalog.choices import StatusPageProvider
 from polling.adapters.services.rss import RSSAdapter
 
-FEED = "https://status.aws.amazon.com/rss/all.rss"
-
 
 class AwsAdapter(RSSAdapter):
     """AWS, which publishes a feed and a page that cannot be read.
@@ -16,6 +14,8 @@ class AwsAdapter(RSSAdapter):
     provider = StatusPageProvider.AWS
     host_specific = True
 
+    FEED = "https://status.aws.amazon.com/rss/all.rss"
+
     @classmethod
     def matches(cls, url: str) -> bool:
         return "aws.amazon.com" in url and ("health" in url or "status" in url)
@@ -28,7 +28,7 @@ class AwsAdapter(RSSAdapter):
         could read. AWS's events would land under that service's name.
         """
         if self.matches(self.url):
-            self.url = FEED
+            self.url = self.FEED
         return super()._feed()
 
     def fetch_service_metadata(self):

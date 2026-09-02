@@ -1,12 +1,8 @@
 import json
-from urllib.parse import urljoin
 
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent
 from status.choices import Severity
-
-INDEX = "index.json"
 
 
 class CStateAdapter(Adapter):
@@ -18,6 +14,8 @@ class CStateAdapter(Adapter):
     """
 
     provider = StatusPageProvider.CSTATE
+
+    INDEX = "index.json"
 
     # cState's own vocabulary, taken from the colour keys it ships.
     SEVERITY = {
@@ -34,15 +32,11 @@ class CStateAdapter(Adapter):
 
     def _payload(self):
         if not hasattr(self, "_cached"):
-            base = self.url if self.url.endswith("/") else self.url + "/"
-            response = (self.session or fetch.session).get(
-                urljoin(base, INDEX), timeout=15
-            )
-            response.raise_for_status()
+            body = self.get(self.INDEX).text
             # cState writes descriptions straight from Markdown, so the
             # file can carry raw control characters that strict JSON
             # rejects.
-            payload = json.loads(response.text, strict=False)
+            payload = json.loads(body, strict=False)
             if "cStateVersion" not in payload:
                 raise ValueError(f"{self.url} is not a cState page")
             self._cached = payload

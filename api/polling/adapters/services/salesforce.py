@@ -1,18 +1,11 @@
-from datetime import datetime
-
 from catalog.choices import StatusPageProvider
-from polling import fetch
-from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
+from polling.adapters.base import (
+    Adapter,
+    NormalisedComponent,
+    NormalisedEvent,
+    timestamp,
+)
 from status.choices import EventKind, IncidentPhase, Severity
-
-API = "https://api.status.salesforce.com/v1"
-
-
-def _parse(value):
-    try:
-        return datetime.fromisoformat(value) if value else None
-    except ValueError:
-        return None
 
 
 class SalesforceAdapter(Adapter):
@@ -27,15 +20,18 @@ class SalesforceAdapter(Adapter):
 
     provider = StatusPageProvider.SALESFORCE
     host_specific = True
+    TIMEOUT = 20
+
+    API = "https://api.status.salesforce.com/v1"
 
     @classmethod
     def matches(cls, url: str) -> bool:
         return "status.salesforce.com" in url
 
-    def _get(self, path):
-        response = (self.session or fetch.session).get(f"{API}/{path}", timeout=20)
-        response.raise_for_status()
-        return response.json()
+    @property
+    def base_url(self):
+        """The API, not the page. Nothing is read from the page itself."""
+        return f"{self.API}/"
 
     @staticmethod
     def _count(raw, key):
@@ -45,7 +41,7 @@ class SalesforceAdapter(Adapter):
             return 0
 
     def fetch_status(self):
-        products = self._get("products")
+        products = self.get_json("products")
         components = []
         worst = Severity.OPERATIONAL
         for index, raw in enumerate(products):
@@ -80,7 +76,7 @@ class SalesforceAdapter(Adapter):
 
     def fetch_incidents(self):
         events = []
-        for raw in self._get("incidents"):
+        for raw in self.get_json("incidents"):
             resolved = str(raw.get("status", "")).lower() == "resolved"
             events.append(
                 NormalisedEvent(
@@ -92,8 +88,8 @@ class SalesforceAdapter(Adapter):
                     phase=IncidentPhase.RESOLVED
                     if resolved
                     else IncidentPhase.INVESTIGATING,
-                    starts_at=_parse(raw.get("createdAt")),
-                    ends_at=_parse(raw.get("updatedAt")) if resolved else None,
+                    starts_at=timestamp(raw.get("createdAt")),
+                    ends_at=timestamp(raw.get("updatedAt")) if resolved else None,
                     # serviceKeys are internal names like "coreService" and
                     # do not map onto the product keys above.
                 )

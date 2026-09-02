@@ -1,12 +1,6 @@
 from catalog.choices import StatusPageProvider
 from polling.adapters.services.rss import RSSAdapter
 
-HELP = (
-    "Auth0 publishes a feed per tenant, not one for everyone. Use "
-    "https://status.auth0.com/rss?domain=YOUR_TENANT.REGION.auth0.com "
-    "as the status page URL."
-)
-
 
 class Auth0Adapter(RSSAdapter):
     """Auth0, whose status is per tenant.
@@ -23,11 +17,17 @@ class Auth0Adapter(RSSAdapter):
     provider = StatusPageProvider.AUTH0
     host_specific = True
 
+    HELP = (
+        "Auth0 publishes a feed per tenant, not one for everyone. Use "
+        "https://status.auth0.com/rss?domain=YOUR_TENANT.REGION.auth0.com "
+        "as the status page URL."
+    )
+
     @classmethod
     def matches(cls, url: str) -> bool:
         return "status.auth0.com" in url
 
     def _feed(self):
         if "domain=" not in self.url:
-            raise ValueError(HELP)
+            raise ValueError(self.HELP)
         return super()._feed()

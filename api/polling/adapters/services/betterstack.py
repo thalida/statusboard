@@ -1,20 +1,12 @@
-from datetime import datetime
-from urllib.parse import urljoin
-
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import (
     Adapter,
     NormalisedComponent,
     NormalisedEvent,
     NormalisedUpdate,
+    timestamp,
 )
 from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
-
-
-def _parse(value):
-    """Parse a Better Stack timestamp. Return None for a missing value."""
-    return datetime.fromisoformat(value) if value else None
 
 
 class BetterStackAdapter(Adapter):
@@ -25,6 +17,7 @@ class BetterStackAdapter(Adapter):
     """
 
     provider = StatusPageProvider.BETTERSTACK
+    TIMEOUT = 10
 
     # A resource's own status. "not_monitored" is real but carries no
     # severity signal, so it is left out and falls through to unknown.
@@ -57,17 +50,11 @@ class BetterStackAdapter(Adapter):
     def matches(cls, url: str) -> bool:
         return "betterstack.com" in url
 
-    def _get(self, path):
-        session = self.session or fetch.session
-        response = session.get(urljoin(self.url, path), timeout=10)
-        response.raise_for_status()
-        return response.json()
-
     def _included(self, body, kind):
         return [raw for raw in body.get("included", []) if raw.get("type") == kind]
 
     def fetch_status(self):
-        body = self._get("index.json")
+        body = self.get_json("index.json")
         data = body.get("data", {})
         attrs = data.get("attributes", {})
         # Use the page's own aggregate_state. Never derive the overall
@@ -129,7 +116,7 @@ class BetterStackAdapter(Adapter):
                 NormalisedUpdate(
                     phase=phases.get(resource_status, default),
                     body=update_attrs.get("message", ""),
-                    posted_at=_parse(update_attrs.get("published_at")),
+                    posted_at=timestamp(update_attrs.get("published_at")),
                 )
             )
         return NormalisedEvent(
@@ -137,8 +124,8 @@ class BetterStackAdapter(Adapter):
             kind=kind,
             title=attrs.get("title", ""),
             phase=phases.get(attrs.get("aggregate_state"), default),
-            starts_at=_parse(attrs.get("starts_at")),
-            ends_at=_parse(attrs.get("ends_at")),
+            starts_at=timestamp(attrs.get("starts_at")),
+            ends_at=timestamp(attrs.get("ends_at")),
             affected_external_ids=tuple(
                 str(r["status_page_resource_id"])
                 for r in attrs.get("affected_resources", [])
@@ -150,7 +137,7 @@ class BetterStackAdapter(Adapter):
     def fetch_incidents(self):
         # Reports and their updates are both sideloaded here.
         # There is no separate incidents endpoint, unlike Statuspage.
-        body = self._get("index.json")
+        body = self.get_json("index.json")
         updates_by_id = {
             raw["id"]: raw for raw in self._included(body, "status_update")
         }
@@ -160,7 +147,7 @@ class BetterStackAdapter(Adapter):
         ]
 
     def fetch_service_metadata(self):
-        attrs = self._get("index.json").get("data", {}).get("attributes", {})
+        attrs = self.get_json("index.json").get("data", {}).get("attributes", {})
         return {
             "name": attrs.get("company_name", ""),
             "homepage_url": attrs.get("company_url", ""),

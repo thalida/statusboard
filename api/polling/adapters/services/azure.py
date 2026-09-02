@@ -1,8 +1,6 @@
 from catalog.choices import StatusPageProvider
 from polling.adapters.services.rss import RSSAdapter
 
-FEED = "https://rssfeed.azure.status.microsoft/en-us/status/feed/"
-
 
 class AzureAdapter(RSSAdapter):
     """Azure, whose page is an application and whose feed is elsewhere.
@@ -15,13 +13,15 @@ class AzureAdapter(RSSAdapter):
     provider = StatusPageProvider.AZURE
     host_specific = True
 
+    FEED = "https://rssfeed.azure.status.microsoft/en-us/status/feed/"
+
     @classmethod
     def matches(cls, url: str) -> bool:
         return "azure.status.microsoft" in url or "azure.microsoft.com/status" in url
 
     def _feed(self):
         if self.matches(self.url):
-            self.url = FEED
+            self.url = self.FEED
         return super()._feed()
 
     def fetch_service_metadata(self):

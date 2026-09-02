@@ -1,11 +1,6 @@
-from urllib.parse import urljoin
-
 from catalog.choices import StatusPageProvider
-from polling import fetch
 from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
-
-DATA = "data/system_status_en_US.js"
 
 
 class AppleAdapter(Adapter):
@@ -19,18 +14,15 @@ class AppleAdapter(Adapter):
     host_specific = True
     status_source = StatusSource.INCIDENTS
 
+    DATA = "data/system_status_en_US.js"
+
     @classmethod
     def matches(cls, url: str) -> bool:
         return "apple.com/support/systemstatus" in url
 
     def _payload(self):
         if not hasattr(self, "_cached"):
-            base = self.url if self.url.endswith("/") else self.url + "/"
-            response = (self.session or fetch.session).get(
-                urljoin(base, DATA), timeout=15
-            )
-            response.raise_for_status()
-            self._cached = response.json()
+            self._cached = self.get_json(self.DATA)
         return self._cached
 
     def _services(self):

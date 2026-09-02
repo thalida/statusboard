@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
+from polling import fetch
 from status.choices import StatusSource
 
 
@@ -41,6 +42,20 @@ class NormalisedEvent:
     updates: tuple[NormalisedUpdate, ...] = field(default_factory=tuple)
 
 
+def timestamp(value):
+    """One provider timestamp, or None.
+
+    Every provider writes ISO 8601 and one of them will write something
+    else. A malformed date is not worth failing a whole poll over.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 class Adapter(ABC):
     """One class per provider. One interface.
 
@@ -62,9 +77,45 @@ class Adapter(ABC):
     # Two callers read this, and both used to spell the default out.
     status_source: str = StatusSource.PROVIDER
 
+    # How long one request may wait. A slow page must not hold a worker.
+    TIMEOUT = 15
+
     def __init__(self, url: str, session=None):
         self.url = url
         self.session = session
+
+    @property
+    def http(self):
+        """The session to fetch with.
+
+        The guarded one, unless a caller passed its own. A URL reaching
+        here came from a person, so it is never ours to trust.
+        """
+        return self.session or fetch.session
+
+    @property
+    def base_url(self):
+        """The page URL as a base.
+
+        The trailing slash is what keeps the last segment. Without it
+        `urljoin` replaces it, and a page under a path loses it.
+        """
+        return self.url if self.url.endswith("/") else self.url + "/"
+
+    def get(self, path=""):
+        """One response: the page itself, or a path under it.
+
+        No path means the page as given. A feed URL names a file, and
+        joining onto it would ask for a directory of that name.
+        """
+        url = urljoin(self.base_url, path) if path else self.url
+        response = self.http.get(url, timeout=self.TIMEOUT)
+        response.raise_for_status()
+        return response
+
+    def get_json(self, path=""):
+        """The same, parsed."""
+        return self.get(path).json()
 
     @classmethod
     @abstractmethod

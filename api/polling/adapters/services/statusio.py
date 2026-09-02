@@ -1,27 +1,13 @@
 import re
-from datetime import datetime
 
 from catalog.choices import StatusPageProvider
-from polling import fetch
-from polling.adapters.base import Adapter, NormalisedComponent, NormalisedEvent
-from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
-
-API = "https://api.status.io/1.0/status/{page_id}"
-
-# The page embeds its own id. The API cannot be reached without it, and
-# no URL tells a status.io page from any other.
-PAGE_ID = re.compile(
-    r"statuspage_id[\"']?\s*[:=]\s*[\"']([0-9a-f]{16,})", re.IGNORECASE
+from polling.adapters.base import (
+    Adapter,
+    NormalisedComponent,
+    NormalisedEvent,
+    timestamp,
 )
-
-
-def _parse(value):
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+from status.choices import EventKind, IncidentPhase, MaintenancePhase, Severity
 
 
 class StatusIoAdapter(Adapter):
@@ -32,6 +18,15 @@ class StatusIoAdapter(Adapter):
     """
 
     provider = StatusPageProvider.STATUS_IO
+    TIMEOUT = 10
+
+    API = "https://api.status.io/1.0/status/{page_id}"
+
+    # The page embeds its own id. The API cannot be reached without it,
+    # and no URL tells a status.io page from any other.
+    PAGE_ID = re.compile(
+        r"statuspage_id[\"']?\s*[:=]\s*[\"']([0-9a-f]{16,})", re.IGNORECASE
+    )
 
     # status.io's own scale. Anything unlisted is UNKNOWN rather than a
     # guess at green.
@@ -50,17 +45,14 @@ class StatusIoAdapter(Adapter):
         # asking the page, which is the only way.
         return False
 
-    def _session(self):
-        return self.session or fetch.session
-
     def _payload(self):
         if not hasattr(self, "_cached"):
-            markup = self._session().get(self.url, timeout=10).text
-            found = PAGE_ID.search(markup)
+            markup = self.get().text
+            found = self.PAGE_ID.search(markup)
             if not found:
                 raise ValueError(f"{self.url} is not a status.io page")
-            response = self._session().get(
-                API.format(page_id=found.group(1)), timeout=10
+            response = self.http.get(
+                self.API.format(page_id=found.group(1)), timeout=self.TIMEOUT
             )
             response.raise_for_status()
             self._cached = response.json()["result"]
@@ -98,10 +90,10 @@ class StatusIoAdapter(Adapter):
             kind=kind,
             title=raw.get("name", ""),
             phase=phase,
-            starts_at=_parse(
+            starts_at=timestamp(
                 raw.get("datetime_open") or raw.get("datetime_planned_start")
             ),
-            ends_at=_parse(
+            ends_at=timestamp(
                 raw.get("datetime_closed") or raw.get("datetime_planned_end")
             ),
         )
