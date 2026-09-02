@@ -164,6 +164,8 @@ REST_FRAMEWORK = {
         "import": "6/min",
         "magic-link": "5/hour",
     },
+    # One shape for every failure. See common/errors.py.
+    "EXCEPTION_HANDLER": "common.errors.handler",
     "DEFAULT_PAGINATION_CLASS": "common.pagination.EnvelopePagination",
     # The same number `/meta` publishes and the paginator reads.
     "PAGE_SIZE": DEFAULT_PAGE_SIZE,

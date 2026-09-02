@@ -17,6 +17,7 @@ from authentication.serializers import (
     VerifyRequestSerializer,
 )
 from authentication.throttles import PerAddressThrottle
+from common.errors import CodedError
 
 User = get_user_model()
 
@@ -63,7 +64,9 @@ class VerifyView(APIView):
             token=request.data.get("token") or ""
         ).first()
         if link is None or not link.is_usable:
-            return Response({"detail": "invalid or expired token"}, status=400)
+            raise CodedError(
+                "invalid_or_expired_token", "That link is no longer valid."
+            )
         link.used_at = timezone.now()
         link.save(update_fields=["used_at"])
         link.user.last_login = timezone.now()

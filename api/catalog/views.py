@@ -1,3 +1,4 @@
+import requests
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status as http
@@ -16,6 +17,7 @@ from catalog.serializers import (
     ServiceSerializer,
 )
 from common.aggregates import EventAggregateSet, StatusAggregateSet
+from common.errors import NoStatusPageFound, ProviderUnreachable
 from common.filters import FieldsBackend
 from common.ordering import (
     CURRENT_SEVERITY,
@@ -158,9 +160,16 @@ class CatalogImportView(APIView):
         body = ImportRequestSerializer(data=request.data)
         if not body.is_valid():
             return Response(body.errors, status=400)
-        service, created = Service.objects.import_from_url(
-            body.validated_data["status_page_url"]
-        )
+        url = body.validated_data["status_page_url"]
+        try:
+            service, created = Service.objects.import_from_url(url)
+        except ValueError as error:
+            # `identify` raises this when no adapter could read the page.
+            # It is the ordinary outcome of pasting the wrong address,
+            # and it used to reach the caller as a 500.
+            raise NoStatusPageFound(str(error)) from error
+        except requests.RequestException as error:
+            raise ProviderUnreachable(f"{url} could not be read: {error}") from error
         return Response(
             ServiceSerializer(service, context={"request": request}).data,
             status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,

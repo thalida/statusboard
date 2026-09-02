@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from django.urls import reverse
 from drf_spectacular.drainage import GENERATOR_STATS, reset_generator_stats
 from drf_spectacular.generators import SchemaGenerator
 
@@ -96,3 +97,79 @@ def test_the_schema_generates_without_a_single_warning():
     )
     reset_generator_stats()
     assert not complaints, "\n".join(complaints)
+
+
+@pytest.mark.django_db
+def test_every_named_failure_answers_in_the_documented_shape():
+    # `ErrorSerializer` and its codes were declared, documented, and
+    # raised by nothing. Three different shapes came back instead.
+    from rest_framework.test import APIClient
+
+    from common.serializers import ERROR_CODES
+
+    caller = APIClient()
+    seen = {}
+
+    missing = caller.get(reverse("service-detail", kwargs={"slug": "nope"}))
+    seen["not_found"] = missing
+
+    bad_token = caller.post(reverse("verify"), {"token": "no"}, format="json")
+    seen["invalid_or_expired_token"] = bad_token
+
+    for _ in range(8):
+        throttled = caller.post(
+            reverse("magic-link"), {"email": "shape@example.com"}, format="json"
+        )
+    seen["throttled"] = throttled
+
+    for code, response in seen.items():
+        body = response.json()
+        assert body["code"] == code, f"{code} answered {body}"
+        assert body["detail"], f"{code} carries no detail"
+        assert set(body) == {"code", "detail"}
+        assert code in ERROR_CODES
+    assert seen["throttled"].headers["Retry-After"]
+
+
+@pytest.mark.django_db
+def test_a_page_nothing_can_read_is_not_a_server_error(monkeypatch):
+    # `identify` raises when no adapter could read the page. That is the
+    # ordinary outcome of pasting the wrong address, and it used to
+    # reach the caller as a 500.
+    from rest_framework.test import APIClient
+
+    def refuses(url, session=None):
+        raise ValueError(f"No adapter could read {url}")
+
+    # The address guard is not what is under test. It would resolve a
+    # name the suite has no network for.
+    monkeypatch.setattr("polling.fetch.check", lambda url: url)
+    monkeypatch.setattr("polling.adapters.registry.identify", refuses)
+    response = APIClient().post(
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.example.com/"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "no_status_page_found"
+
+
+@pytest.mark.django_db
+def test_a_provider_that_will_not_answer_is_named_as_such(monkeypatch):
+    import requests
+    from rest_framework.test import APIClient
+
+    def times_out(url, session=None):
+        raise requests.ConnectTimeout("took too long")
+
+    monkeypatch.setattr("polling.fetch.check", lambda url: url)
+    monkeypatch.setattr("polling.adapters.registry.identify", times_out)
+    response = APIClient().post(
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.example.com/"},
+        format="json",
+    )
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "provider_unreachable"
