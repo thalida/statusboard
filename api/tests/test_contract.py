@@ -144,7 +144,7 @@ def test_a_page_nothing_can_read_is_not_a_server_error(monkeypatch):
     # The address guard is not what is under test. It would resolve a
     # name the suite has no network for.
     monkeypatch.setattr("polling.fetch.check", lambda url: url)
-    monkeypatch.setattr("polling.adapters.registry.identify", refuses)
+    monkeypatch.setattr("polling.importer.identify", refuses)
     response = APIClient().post(
         reverse("catalog-import"),
         {"status_page_url": "https://status.example.com/"},
@@ -164,7 +164,7 @@ def test_a_provider_that_will_not_answer_is_named_as_such(monkeypatch):
         raise requests.ConnectTimeout("took too long")
 
     monkeypatch.setattr("polling.fetch.check", lambda url: url)
-    monkeypatch.setattr("polling.adapters.registry.identify", times_out)
+    monkeypatch.setattr("polling.importer.identify", times_out)
     response = APIClient().post(
         reverse("catalog-import"),
         {"status_page_url": "https://status.example.com/"},

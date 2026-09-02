@@ -4,8 +4,8 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
 from api.defaults import Environment
-from catalog.models import Service
 from dashboards.models import Dashboard, DashboardItem
+from polling.importer import import_from_url
 
 # Three real status pages, one of each shape worth having. A big tree to
 # navigate, a small one to read whole, and one whose components nest.
@@ -49,7 +49,7 @@ class Command(BaseCommand):
 
         imported = {}
         for url in SERVICES:
-            service, created = Service.objects.import_from_url(url)
+            service, created = import_from_url(url)
             imported[url] = service
             self.stdout.write(
                 f"{'imported' if created else 'already had'} {service.name} "

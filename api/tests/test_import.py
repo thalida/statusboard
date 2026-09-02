@@ -4,6 +4,7 @@ from rest_framework.test import APIClient
 
 from catalog.models import Service, StatusPage
 from polling.adapters.base import Adapter
+from polling.importer import import_from_url
 from polling.models import Poller
 
 
@@ -41,7 +42,7 @@ class FakeAdapter(Adapter):
 @pytest.fixture(autouse=True)
 def fake_detect(monkeypatch):
     monkeypatch.setattr(
-        "polling.adapters.registry.identify",
+        "polling.importer.identify",
         lambda url, session=None: (FakeAdapter, url),
     )
 
@@ -169,10 +170,10 @@ def test_a_provider_that_names_nothing_still_gets_a_service_name(monkeypatch):
             return ""
 
     monkeypatch.setattr(
-        "polling.adapters.registry.identify",
+        "polling.importer.identify",
         lambda url: (Nameless, url),
     )
-    service, created = Service.objects.import_from_url("https://status.nameless.test/")
+    service, created = import_from_url("https://status.nameless.test/")
 
     assert created
     assert service.name == "status.nameless.test"
@@ -210,11 +211,11 @@ def test_the_page_is_read_before_a_transaction_opens(monkeypatch):
             return super().fetch_status()
 
     monkeypatch.setattr(
-        "polling.adapters.registry.identify",
+        "polling.importer.identify",
         lambda url, session=None: (Watching, url),
     )
     outer = len(connection.savepoint_ids)
-    Service.objects.import_from_url("https://status.watched.test/")
+    import_from_url("https://status.watched.test/")
 
     assert depth == [outer]
 
@@ -223,8 +224,8 @@ def test_the_page_is_read_before_a_transaction_opens(monkeypatch):
 def test_a_second_import_of_the_same_page_returns_the_first_service():
     # The fetch is outside the transaction, so two callers can read the
     # same page at once. The second must not make a second service.
-    first, created = Service.objects.import_from_url("https://status.race.test/")
-    second, again = Service.objects.import_from_url("https://status.race.test/")
+    first, created = import_from_url("https://status.race.test/")
+    second, again = import_from_url("https://status.race.test/")
 
     assert created is True
     assert again is False

@@ -184,8 +184,8 @@ def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch)
     from catalog.models import Service
 
     monkeypatch.setattr(
-        "catalog.models.ServiceManager.import_from_url",
-        lambda self, url: (Service.objects.create(name="Imported"), True),
+        "catalog.admin.import_from_url",
+        lambda url: (Service.objects.create(name="Imported"), True),
     )
     response = staff_client.post(
         "/admin/catalog/service/import-from-url/",
@@ -199,10 +199,10 @@ def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch)
 def test_an_unreadable_page_is_reported_not_a_500(staff_client, monkeypatch):
     # The URL came from a person pasting a stranger's page. Anything can
     # come back from it.
-    def boom(self, url):
+    def boom(url):
         raise ValueError("not a status page")
 
-    monkeypatch.setattr("catalog.models.ServiceManager.import_from_url", boom)
+    monkeypatch.setattr("catalog.admin.import_from_url", boom)
     response = staff_client.post(
         "/admin/catalog/service/import-from-url/",
         {"status_page_url": "https://nope.example.com/", "_form_submitted": "1"},

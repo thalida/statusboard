@@ -33,6 +33,7 @@ from common.admin import (
     severity_label,
 )
 from common.queries import related_count
+from polling.importer import import_from_url
 from polling.models import Poller, PollRun
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
@@ -457,7 +458,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
         url = form.cleaned_data["status_page_url"]
         try:
-            service, created = Service.objects.import_from_url(url)
+            service, created = import_from_url(url)
         except Exception as error:  # noqa: BLE001 — the page is a stranger's
             # Anything can come back from a URL a person pasted. Say what
             # happened rather than showing a 500.

@@ -21,6 +21,7 @@ from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.errors import NoStatusPageFound, ProviderUnreachable
 from common.filters import FieldsBackend
 from common.ordering import MappedOrderingFilter
+from polling.importer import import_from_url
 from status.models import ServiceEvent
 from status.queries import CURRENT_SEVERITY
 from status.serializers import ServiceEventSerializer
@@ -159,7 +160,7 @@ class CatalogImportView(APIView):
             return Response(body.errors, status=400)
         url = body.validated_data["status_page_url"]
         try:
-            service, created = Service.objects.import_from_url(url)
+            service, created = import_from_url(url)
         except ValueError as error:
             # `identify` raises this when no adapter could read the page.
             # It is the ordinary outcome of pasting the wrong address,
