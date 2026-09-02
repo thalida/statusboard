@@ -69,6 +69,11 @@ class Environment(StrEnum):
             ) from error
 
 
+# Which deployment this is. We named it, so it is resolved here, and
+# `debug` and `secret_key` in `settings.py` read it rather than being
+# handed it.
+ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
+
 # Cursor pagination. `/meta` publishes both, so a client can size a page
 # without guessing which values the server will accept.
 DEFAULT_PAGE_SIZE = 50
@@ -97,11 +102,6 @@ SYSTEM_EMAIL = "system@statusboard.invalid"
 # short enough that a link left in an inbox is not a key.
 MAGIC_LINK_TTL = timedelta(minutes=15)
 
-
-# Which deployment this is. We named it, so it is resolved here, and
-# `debug` and `secret_key` in `settings.py` read it rather than being
-# handed it.
-ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 
 # The client app, not this service. A sign-in email links to a page the
 # client serves. This project is the API on its own subdomain, so it
