@@ -1,10 +1,33 @@
+import json
 from dataclasses import FrozenInstanceError
+from types import SimpleNamespace
 
 import pytest
+import requests
 
 from catalog.choices import StatusPageProvider
 from polling.adapters.base import Adapter, NormalisedComponent
-from polling.adapters.registry import detect
+from polling.adapters.registry import (
+    RSSAdapter,
+    _other_origins,
+    advertised_feeds,
+    detect,
+    identify,
+)
+from polling.adapters.services.statuspage import StatuspageAdapter
+
+# One resolved entry, which is all a feed needs to be readable.
+ATOM = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Status</title>
+  <entry>
+    <title>TITLE</title>
+    <updated>2026-08-01T00:00:00Z</updated>
+    <id>urn:1</id>
+    <content type="html">&lt;strong&gt;Resolved&lt;/strong&gt; all clear</content>
+  </entry>
+</feed>
+"""
 
 
 @pytest.mark.parametrize(
@@ -157,3 +180,165 @@ def test_a_company_adapter_matches_only_its_own_company():
         assert not adapter_class.matches("https://status.someone-else.example/"), (
             f"{adapter_class.__name__} is host_specific and still claims a foreign page"
         )
+
+
+class Page:
+    """A fake session that answers a fixed map of URLs.
+
+    `identify` is a ladder of fallbacks, and each rung is reached only
+    when the one above it fails. So the way to test a rung is to decide
+    what each URL answers.
+    """
+
+    def __init__(self, pages=None, feed_markup=""):
+        self.pages = pages or {}
+        self.feed_markup = feed_markup
+        self.asked = []
+
+    def get(self, url, **kwargs):
+        self.asked.append(url)
+        body = self.pages.get(url, self.feed_markup if url in self.pages else None)
+        if body is None:
+            raise requests.HTTPError(f"404 for {url}")
+        return SimpleNamespace(
+            text=body, json=lambda: json.loads(body), raise_for_status=lambda: None
+        )
+
+
+def test_a_page_that_answers_its_own_api_is_read_there():
+    # The first rung: the adapter the URL suggests, at the URL given.
+    page = Page(
+        {
+            "https://status.example.com/api/v2/summary.json": json.dumps(
+                {"components": [{"id": "a", "name": "API", "status": "operational"}]}
+            )
+        }
+    )
+
+    adapter, url = identify("https://status.example.com/", session=page)
+
+    assert adapter is StatuspageAdapter
+    assert url == "https://status.example.com/"
+
+
+def test_a_page_with_no_api_is_read_at_the_feed_it_advertises():
+    # The second rung. A page that publishes nothing machine-readable
+    # still names its feed in the markup, often on another host.
+    feed = ATOM.replace("TITLE", "Investigating latency")
+    page = Page(
+        {
+            "https://status.example.com/": (
+                '<link rel="alternate" type="application/rss+xml" '
+                'href="https://feeds.example.net/history.atom">'
+            ),
+            "https://feeds.example.net/history.atom": feed,
+        }
+    )
+
+    adapter, url = identify("https://status.example.com/", session=page)
+
+    assert adapter is RSSAdapter
+    assert url == "https://feeds.example.net/history.atom"
+
+
+def test_a_page_that_advertises_nothing_is_tried_where_feeds_live():
+    # The third rung. A page that links to no feed often serves one.
+    page = Page(
+        {
+            "https://status.example.com/": "<html>nothing here</html>",
+            "https://status.example.com/history.rss": ATOM.replace("TITLE", "Down"),
+        }
+    )
+
+    adapter, url = identify("https://status.example.com/", session=page)
+
+    assert adapter is RSSAdapter
+    assert url.endswith("/history.rss")
+
+
+def test_a_page_that_moved_is_followed_to_the_host_it_names():
+    # The fourth rung. intercomstatus.com links finstatus.com, whose
+    # feed 404s while its API answers, so the host is worth a look.
+    page = Page(
+        {
+            "https://status.example.com/": (
+                '<link rel="alternate" type="application/atom+xml" '
+                'href="https://moved.example.net/feed.atom">'
+            ),
+            "https://moved.example.net/api/v2/summary.json": json.dumps(
+                {"components": [{"id": "a", "name": "API", "status": "operational"}]}
+            ),
+        }
+    )
+
+    adapter, url = identify("https://status.example.com/", session=page)
+
+    assert adapter is StatuspageAdapter
+    assert url == "https://moved.example.net/"
+
+
+def test_nothing_readable_raises_rather_than_inventing_a_service():
+    # A status page we cannot parse has to fail loudly. The alternative
+    # is a service showing green because nothing read it.
+    page = Page({"https://status.example.com/": "<html>not a status page</html>"})
+
+    with pytest.raises(ValueError, match="No adapter could read"):
+        identify("https://status.example.com/", session=page)
+
+
+def test_a_host_specific_adapter_explains_why_it_could_not_read():
+    # Auth0's reason is that only the person adding it knows their
+    # tenant. That beats "nothing worked".
+    page = Page({})
+
+    with pytest.raises(ValueError) as raised:
+        identify("https://status.auth0.com/", session=page)
+
+    assert "tenant" in str(raised.value).lower()
+
+
+def test_a_page_that_cannot_be_read_advertises_no_feeds():
+    # No page, no feeds. It must not raise into the ladder above it.
+    page = Page({})
+
+    assert advertised_feeds("https://status.example.com/", session=page) == []
+
+
+def test_only_a_feed_link_counts_as_a_feed():
+    # A stylesheet is also a `link`. The type is what decides.
+    markup = (
+        '<link rel="alternate" type="text/html" href="/mirror">'
+        '<link rel="alternate" type="application/rss+xml" href="/history.rss">'
+    )
+    page = Page({"https://status.example.com/": markup})
+
+    found = advertised_feeds("https://status.example.com/", session=page)
+
+    assert found == ["https://status.example.com/history.rss"]
+
+
+def test_a_feed_on_this_host_is_not_another_origin():
+    # Only a host the page pointed away to is worth a second look.
+    here = "https://status.example.com/"
+    feeds = [
+        "https://status.example.com/history.rss",
+        "https://www.status.example.com/other.rss",
+        "https://elsewhere.example.net/feed.atom",
+    ]
+
+    assert _other_origins(here, feeds) == ["https://elsewhere.example.net/"]
+
+
+def test_a_host_that_also_cannot_be_read_is_not_the_answer():
+    # The last rung fails too, so the ladder ends where it began.
+    page = Page(
+        {
+            "https://status.example.com/": (
+                '<link rel="alternate" type="application/atom+xml" '
+                'href="https://moved.example.net/feed.atom">'
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="No adapter could read"):
+        identify("https://status.example.com/", session=page)
