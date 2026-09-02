@@ -98,6 +98,18 @@ SYSTEM_EMAIL = "system@statusboard.invalid"
 MAGIC_LINK_TTL = timedelta(minutes=15)
 
 
+# Which deployment this is. We named it, so it is resolved here, and
+# `debug` and `secret_key` in `settings.py` read it rather than being
+# handed it.
+ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
+
+# The client app, not this service. A sign-in email links to a page the
+# client serves. This project is the API on its own subdomain, so it
+# cannot work either of these out. APP_URL has no default for the same
+# reason: a guess would point where nothing is served.
+APP_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
+APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/verify"
+
 # The key this repository publishes. Development runs on it; nothing
 # else may.
 DEV_SECRET_KEY = "dev-only-not-for-deploy"
@@ -132,16 +144,3 @@ def debug(configured, environment=None):
     if configured is not None and configured.strip():
         return configured.strip() == "1"
     return environment is Environment.DEVELOPMENT
-
-
-# Which deployment this is. We named it, so it is resolved here, and
-# `debug` and `secret_key` in `settings.py` read it rather than being
-# handed it.
-ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
-
-# The client app, not this service. A sign-in email links to a page the
-# client serves. This project is the API on its own subdomain, so it
-# cannot work either of these out. APP_URL has no default for the same
-# reason: a guess would point where nothing is served.
-APP_URL = os.environ.get("APP_URL", "").strip().rstrip("/")
-APP_MAGIC_LINK_PATH = os.environ.get("APP_MAGIC_LINK_PATH", "").strip() or "/verify"
