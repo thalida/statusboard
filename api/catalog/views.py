@@ -89,7 +89,7 @@ class ServiceViewSet(ReadOnlyModelViewSet):
         # `q` is SearchFilter's, through SEARCH_PARAM. It was a hand
         # rolled `name__icontains` beside a `search_fields` that no
         # backend read, so the slug was declared searchable and was not.
-        return Service.objects.select_related("status_page", "poller").annotate(
+        return Service.objects.for_display(self.request.user).annotate(
             watcher_count=WATCHER_COUNT,
             severity_now=OVERALL_SEVERITY,
         )
@@ -114,7 +114,7 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     def components(self, request, slug=None):
         return self._page(
             ServiceComponent.objects.filter(service__slug=slug)
-            .select_related("service", "parent")
+            .for_display(self.request.user)
             .annotate(severity_now=CURRENT_SEVERITY)
         )
 

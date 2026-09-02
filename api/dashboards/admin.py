@@ -12,8 +12,8 @@ from common.admin import (
     audit_section,
     change_link,
     record_column,
-    related_count,
 )
+from common.queries import related_count
 from dashboards.models import Dashboard, DashboardItem
 
 

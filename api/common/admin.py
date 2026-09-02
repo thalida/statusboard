@@ -6,8 +6,8 @@ from uuid import UUID
 
 from django.conf import settings
 from django.contrib.admin.widgets import AutocompleteSelect
-from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery
-from django.db.models.functions import Coalesce, TruncHour
+from django.db.models import Count, F, Q
+from django.db.models.functions import TruncHour
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
@@ -483,23 +483,6 @@ def filtered_list(model_admin_path, label, count=None, **filters):
     query = "&".join(f"{k}={v}" for k, v in filters.items())
     title = label if count is None else f"{label} ({count})"
     return {"title": title, "link": f"{reverse(model_admin_path)}?{query}"}
-
-
-def related_count(queryset, group_by, ref="pk"):
-    """How many rows are on the other end, without joining to fetch them.
-
-    Several counts on one row multiply into one another. Each is a
-    join, so a service is read once per component per event. Each count
-    asks its own question instead.
-    """
-    counted = (
-        queryset.filter(**{group_by: OuterRef(ref)})
-        .order_by()
-        .values(group_by)
-        .annotate(total=Count("pk"))
-        .values("total")
-    )
-    return Coalesce(Subquery(counted, output_field=IntegerField()), 0)
 
 
 def poll_run_link(obj):

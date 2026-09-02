@@ -23,9 +23,9 @@ from common.admin import (
     phase_label,
     poll_run_link,
     record_column,
-    related_count,
     severity_label,
 )
+from common.queries import related_count
 from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 

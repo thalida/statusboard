@@ -29,10 +29,10 @@ from common.admin import (
     change_link,
     filtered_list,
     phase_label,
-    related_count,
     severity_label,
 )
 from common.ordering import CURRENT_SEVERITY, OVERALL_SEVERITY, WATCHER_COUNT
+from common.queries import related_count
 from polling.models import Poller, PollRun
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent

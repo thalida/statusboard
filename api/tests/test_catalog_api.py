@@ -334,3 +334,50 @@ def test_a_finished_maintenance_window_is_not_live():
     live = ServiceEvent.objects.live(EventKind.MAINTENANCE)
 
     assert list(live) == [running]
+
+
+@pytest.mark.django_db
+def test_a_component_list_costs_the_same_whatever_its_length():
+    # It answered seven fields with a query each, per row. A page of
+    # fifty cost three hundred and fifty six.
+    from django.db import connection, reset_queries
+    from django.test import override_settings
+
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    for n in range(30):
+        _with_status(service, Severity.DEGRADED, external_id=f"c{n}")
+
+    counts = {}
+    with override_settings(DEBUG=True):
+        for size in (2, 30):
+            reset_queries()
+            APIClient().get(
+                reverse("service-components", kwargs={"slug": service.slug}),
+                {"page_size": size},
+            )
+            counts[size] = len(connection.queries)
+
+    assert counts[2] == counts[30], counts
+
+
+@pytest.mark.django_db
+def test_a_service_list_costs_the_same_whatever_its_length():
+    # Three fields asked per service, and one of them serialized a
+    # component, which asked seven more.
+    from django.db import connection, reset_queries
+    from django.test import override_settings
+
+    for n in range(12):
+        service = ServiceFactory(name=f"Service {n}")
+        StatusPageFactory(service=service)
+        _with_status(service, Severity.OPERATIONAL, is_overall=True)
+
+    counts = {}
+    with override_settings(DEBUG=True):
+        for size in (2, 12):
+            reset_queries()
+            APIClient().get(reverse("service-list"), {"page_size": size})
+            counts[size] = len(connection.queries)
+
+    assert counts[2] == counts[12], counts

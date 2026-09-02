@@ -8,6 +8,7 @@ from simple_history.models import HistoricalRecords
 
 from catalog.choices import StatusPageProvider
 from common.models import BaseModel
+from common.queries import related_count
 
 
 class ServiceManager(models.Manager):
@@ -111,6 +112,43 @@ class ServiceManager(models.Manager):
         return service, True
 
 
+class ServiceQuerySet(models.QuerySet):
+    def for_display(self, user=None):
+        """Everything `ServiceSerializer` reads, without a query a row.
+
+        Three fields asked per service, and one of them serialized a
+        component, which asked seven more.
+        """
+        from django.contrib.auth.models import AnonymousUser
+
+        tracked = models.Value(0, output_field=models.IntegerField())
+        if user is not None and not isinstance(user, AnonymousUser):
+            tracked = related_count(
+                ServiceComponent.objects.filter(boards__owner=user), "service"
+            )
+        return (
+            self.select_related("status_page", "poller")
+            .annotate(
+                component_count_now=related_count(
+                    ServiceComponent.objects.filter(
+                        is_overall=False, is_archived=False
+                    ),
+                    "service",
+                ),
+                tracked_component_count_now=tracked,
+            )
+            .prefetch_related(
+                models.Prefetch(
+                    "components",
+                    queryset=ServiceComponent.objects.filter(
+                        is_overall=True
+                    ).for_display(user),
+                    to_attr="overall_components",
+                )
+            )
+        )
+
+
 class Service(BaseModel):
     name = models.CharField(max_length=200)
     slug = models.SlugField(
@@ -122,7 +160,7 @@ class Service(BaseModel):
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
     is_featured = models.BooleanField(verbose_name="Featured", default=False)
-    objects = ServiceManager()
+    objects = ServiceManager.from_queryset(ServiceQuerySet)()
 
     history = HistoricalRecords()
 
@@ -226,6 +264,55 @@ class StatusPage(BaseModel):
         )
 
 
+class ServiceComponentQuerySet(models.QuerySet):
+    def for_display(self, user=None):
+        """Everything `ComponentSerializer` reads, in four queries.
+
+        It answered seven fields with a query each, per row. A page of
+        fifty cost three hundred and fifty six.
+
+        A row that skipped this still serializes, because a single
+        service nests one. So the fast path has to be asked for.
+        """
+        from django.contrib.auth.models import AnonymousUser
+
+        from status.models import ComponentStatus, ServiceEvent
+
+        tracked = models.Value(None, output_field=models.BooleanField())
+        if user is not None and not isinstance(user, AnonymousUser):
+            # Through DashboardItem, which names the column `component`.
+            # The through model is explicit, so it is not the automatic
+            # `servicecomponent`.
+            tracked = models.Exists(
+                self.model.boards.through.objects.filter(
+                    component=models.OuterRef("pk"), dashboard__owner=user
+                )
+            )
+        return (
+            self.select_related("service", "parent", "parent__parent")
+            .annotate(
+                child_count_now=related_count(self.model.objects, "parent"),
+                is_tracked_now=tracked,
+            )
+            .prefetch_related(
+                models.Prefetch(
+                    "statuses",
+                    # The status carries when its service was last read,
+                    # which is on the poller, one join further out.
+                    queryset=ComponentStatus.objects.filter(
+                        ended_at__isnull=True
+                    ).select_related("component__service__poller"),
+                    to_attr="open_statuses",
+                ),
+                models.Prefetch(
+                    "events",
+                    queryset=ServiceEvent.objects.live(),
+                    to_attr="live_events",
+                ),
+            )
+        )
+
+
 class ServiceComponent(BaseModel):
     service = models.ForeignKey(
         Service, on_delete=models.CASCADE, related_name="components"
@@ -239,6 +326,8 @@ class ServiceComponent(BaseModel):
         on_delete=models.SET_NULL,
         related_name="children",
     )
+    objects = ServiceComponentQuerySet.as_manager()
+
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
     is_overall = models.BooleanField(verbose_name="Overall", default=False)
     # Archiving is the flag. The date is kept because `updated_at`

@@ -42,7 +42,7 @@ class BoardComponentListView(generics.ListCreateAPIView):
         board = _board(self.request, self.kwargs["uuid"])
         return (
             ServiceComponent.objects.filter(tracked_by__dashboard=board)
-            .select_related("service", "parent")
+            .for_display(self.request.user)
             .annotate(severity_now=CURRENT_SEVERITY, next_transition=NEXT_TRANSITION)
             .distinct()
         )

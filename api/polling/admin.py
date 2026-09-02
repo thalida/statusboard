@@ -35,8 +35,8 @@ from common.admin import (
     change_link,
     filtered_list,
     record_column,
-    related_count,
 )
+from common.queries import related_count
 from polling.models import Poller, PollRun
 from status.models import ComponentStatus, ServiceEvent
 
