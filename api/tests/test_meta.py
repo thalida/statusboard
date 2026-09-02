@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -128,5 +129,5 @@ def test_an_unknown_environment_is_refused():
     # deployment and let the seeding commands run there.
     from api.defaults import Environment
 
-    with pytest.raises(ValueError, match="Expected one of"):
+    with pytest.raises(ImproperlyConfigured, match="Expected one of"):
         Environment.parse("prod")

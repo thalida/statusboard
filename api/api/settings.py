@@ -3,50 +3,26 @@ from pathlib import Path
 
 import dj_database_url
 from celery.schedules import crontab
-from django.core.exceptions import ImproperlyConfigured
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
-from dotenv import load_dotenv
 
 # Re-exported so `django.conf.settings` carries them. See api/defaults.py.
 from api.defaults import (  # noqa: F401
+    DEBUG,
     DEFAULT_PAGE_SIZE,
+    ENVIRONMENT,
     MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,
     POLL_INTERVAL_SECONDS,
     POLL_MAX_INTERVAL_SECONDS,
     POLL_RUN_RETENTION_DAYS,
+    SECRET_KEY,
     SYSTEM_EMAIL,
-    Environment,
-    debug,
-    secret_key,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Development only, and never committed. It sits beside this service,
-# not at the repository root. An app alongside will have its own, and
-# none of these variables mean anything to it. A deployment has no file,
-# so load_dotenv does nothing and the real environment is used.
-load_dotenv(BASE_DIR / ".env.local")
-# The banner colour, the development-only commands and the two settings
-# below all branch on this. A value nobody recognises stops here.
-try:
-    ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
-except ValueError as error:
-    raise ImproperlyConfigured(str(error)) from error
-DEVELOPING = ENVIRONMENT is Environment.DEVELOPMENT
-
-# These two used to default toward development. A deployment that
-# forgot either ran with tracebacks on, and with a key published in this
-# repository. See `secret_key` and `debug` for what each refuses.
-DEBUG = debug(os.environ.get("DEBUG"), ENVIRONMENT)
-try:
-    SECRET_KEY = secret_key(os.environ.get("SECRET_KEY"), ENVIRONMENT)
-except ValueError as error:
-    raise ImproperlyConfigured(str(error)) from error
 
 # A wildcard accepts any Host header. The dev machine is usually on a
 # network too. So debug adds the loopback names and nothing else.

@@ -5,8 +5,17 @@ These are ours, and several are read twice. `/meta` publishes the page
 sizes. DRF needs the same page size. A Poller row overrides the poll
 intervals for one service.
 
-No environment is read here. `settings.py` loads `.env.local` before it
-reads any variable, so anything from the environment belongs there.
+This is also where the environment is read. The three values that decide
+what a deployment is were resolved in `settings.py`. That meant passing
+the same environment into two calls and catching the same error twice.
+They are resolved once here, and `settings.py` imports the answers.
+
+`.env.local` is loaded here for the same reason: nothing may read a
+variable before the file that supplies it. Importing this module is what
+loads it, and `settings.py` imports this module first.
+
+A value that cannot be used raises `ImproperlyConfigured`, which is what
+a settings file raises.
 
 A duration is a timedelta unless something else fixes its type. The poll
 values are seconds because they are also `PositiveIntegerField` columns
@@ -14,8 +23,19 @@ on Poller, and the API publishes them as integers. The link lifetime is
 neither, so it stays a timedelta and is added to a datetime.
 """
 
+import os
 from datetime import timedelta
 from enum import StrEnum
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
+# Development only, and never committed. It sits beside this service,
+# not at the repository root. An app alongside will have its own, and
+# none of these variables mean anything to it. A deployment has no file,
+# so this does nothing and the real environment is used.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
 
 
 class Environment(StrEnum):
@@ -43,7 +63,7 @@ class Environment(StrEnum):
         try:
             return cls(value.strip().lower())
         except ValueError as error:
-            raise ValueError(
+            raise ImproperlyConfigured(
                 f"ENVIRONMENT is {value!r}. Expected one of: {', '.join(cls)}."
             ) from error
 
@@ -93,7 +113,7 @@ def secret_key(configured, environment):
     if configured:
         return configured
     if environment is not Environment.DEVELOPMENT:
-        raise ValueError(
+        raise ImproperlyConfigured(
             f"SECRET_KEY is unset, and ENVIRONMENT is {environment}. Every "
             "signature this process makes would use a key in the repository."
         )
@@ -109,3 +129,11 @@ def debug(configured, environment):
     if configured is not None and configured.strip():
         return configured.strip() == "1"
     return environment is Environment.DEVELOPMENT
+
+
+# What this deployment is, and what follows from it. Each function above
+# refuses a value it cannot use, so a deployment stops here rather than
+# guessing.
+ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
+DEBUG = debug(os.environ.get("DEBUG"), ENVIRONMENT)
+SECRET_KEY = secret_key(os.environ.get("SECRET_KEY"), ENVIRONMENT)

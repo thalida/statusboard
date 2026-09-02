@@ -1,6 +1,7 @@
 """The three findings that turn a mistake into an incident."""
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -128,9 +129,9 @@ def test_reading_the_catalog_is_not_throttled_away(db):
 def test_a_deployment_will_not_run_on_the_key_in_this_repository(environment):
     from api.defaults import Environment, secret_key
 
-    with pytest.raises(ValueError, match="SECRET_KEY"):
+    with pytest.raises(ImproperlyConfigured, match="SECRET_KEY"):
         secret_key(None, Environment(environment))
-    with pytest.raises(ValueError, match="SECRET_KEY"):
+    with pytest.raises(ImproperlyConfigured, match="SECRET_KEY"):
         secret_key("   ", Environment(environment))
 
 
