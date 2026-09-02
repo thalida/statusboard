@@ -22,8 +22,8 @@ class GoogleFeedAdapter(RSSAdapter):
     def matches(cls, url: str) -> bool:
         return any(host in url for host in cls.HOSTS)
 
-    def _feed(self):
+    def get_feed(self):
         if self.matches(self.url) and not self.url.endswith(self.FEED_PATH):
             base = self.url if self.url.endswith("/") else self.url + "/"
             self.url = urljoin(base, self.FEED_PATH)
-        return super()._feed()
+        return super().get_feed()

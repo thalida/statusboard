@@ -27,7 +27,7 @@ class Auth0Adapter(RSSAdapter):
     def matches(cls, url: str) -> bool:
         return "status.auth0.com" in url
 
-    def _feed(self):
+    def get_feed(self):
         if "domain=" not in self.url:
             raise ValueError(self.HELP)
-        return super()._feed()
+        return super().get_feed()

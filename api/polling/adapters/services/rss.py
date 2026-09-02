@@ -41,8 +41,11 @@ class RSSAdapter(Adapter):
         # The registry only reaches this adapter when nothing else matched.
         return True
 
-    def _feed(self):
+    def get_feed(self):
         """Parse the feed, or refuse.
+
+        The extension point. A page whose feed lives elsewhere overrides
+        this, points `self.url` at the feed, and calls back here.
 
         This is the fallback adapter. Anything unrecognised lands here,
         pages that are not feeds included.
@@ -84,7 +87,7 @@ class RSSAdapter(Adapter):
 
     def fetch_incidents(self):
         events = []
-        for entry in self._feed().entries:
+        for entry in self.get_feed().entries:
             published = entry.get("published_parsed")
             starts_at = datetime(*published[:6], tzinfo=UTC) if published else None
             phase = self._phase(entry.get("description", ""))
@@ -106,5 +109,5 @@ class RSSAdapter(Adapter):
         return events
 
     def fetch_service_metadata(self):
-        feed = self._feed().feed
+        feed = self.get_feed().feed
         return {"name": feed.get("title", ""), "homepage_url": feed.get("link", "")}

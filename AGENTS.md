@@ -41,6 +41,12 @@ lives in one place. Restating it somewhere else is how two answers to the
 same question drift apart. The admin dashboard once counted pollers the
 scheduler never runs, because it restated the scheduler's filter.
 
+**A leading underscore means private.** Reserve it for a method nothing
+outside the class calls and no subclass overrides. Anything a subclass is
+meant to replace is public, and its docstring says what an override owes
+the caller. `RSSAdapter.get_feed` is public because four adapters
+redirect the URL before calling it.
+
 **Verify the rendered result.** An edit that ran without error is not an
 edit that worked. Open the page. Read the value back.
 

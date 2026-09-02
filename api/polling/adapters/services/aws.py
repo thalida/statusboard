@@ -20,7 +20,7 @@ class AwsAdapter(RSSAdapter):
     def matches(cls, url: str) -> bool:
         return "aws.amazon.com" in url and ("health" in url or "status" in url)
 
-    def _feed(self):
+    def get_feed(self):
         """Read AWS's feed, but only for an AWS URL.
 
         Probing tries every adapter against every page. One that
@@ -29,7 +29,7 @@ class AwsAdapter(RSSAdapter):
         """
         if self.matches(self.url):
             self.url = self.FEED
-        return super()._feed()
+        return super().get_feed()
 
     def fetch_service_metadata(self):
         return {

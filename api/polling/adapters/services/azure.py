@@ -19,10 +19,10 @@ class AzureAdapter(RSSAdapter):
     def matches(cls, url: str) -> bool:
         return "azure.status.microsoft" in url or "azure.microsoft.com/status" in url
 
-    def _feed(self):
+    def get_feed(self):
         if self.matches(self.url):
             self.url = self.FEED
-        return super()._feed()
+        return super().get_feed()
 
     def fetch_service_metadata(self):
         return {
