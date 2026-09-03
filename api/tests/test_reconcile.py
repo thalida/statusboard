@@ -8,7 +8,13 @@ from polling.adapters.base import (
     NormalisedUpdate,
 )
 from polling.reconcile import apply_fetch, rebuild_ancestry, rebuild_search
-from status.choices import EventKind, IncidentPhase, Severity, StatusSource
+from status.choices import (
+    EventKind,
+    EventSource,
+    IncidentPhase,
+    Severity,
+    StatusSource,
+)
 from status.models import ComponentStatus, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory
 
@@ -155,6 +161,51 @@ def test_an_event_is_linked_to_the_components_it_names():
     )
     event = ServiceEvent.objects.get(service=service)
     assert [c.external_id for c in event.affected_components.all()] == ["a"]
+
+
+@pytest.mark.django_db
+def test_a_later_provider_post_joins_the_event_the_poll_opened():
+    # A poll saw the drop before the provider wrote it up. Without the
+    # claim the feed shows two cards for one outage.
+    service = ServiceFactory()
+    apply_fetch(
+        service,
+        [_component("a", severity=Severity.DEGRADED)],
+        [],
+        StatusSource.PROVIDER,
+    )
+    ours = ServiceEvent.objects.get(service=service)
+    assert ours.detected_by == EventSource.SYSTEM
+
+    apply_fetch(
+        service,
+        [_component("a", severity=Severity.DEGRADED)],
+        [
+            NormalisedEvent(
+                external_id="inc-1",
+                kind=EventKind.INCIDENT,
+                title="Elevated SMS delivery failures",
+                phase=IncidentPhase.INVESTIGATING,
+                starts_at=timezone.now(),
+                affected_external_ids=("a",),
+                updates=(
+                    NormalisedUpdate(
+                        phase=IncidentPhase.INVESTIGATING,
+                        body="We are looking into it",
+                        posted_at=timezone.now(),
+                    ),
+                ),
+            )
+        ],
+        StatusSource.PROVIDER,
+    )
+
+    event = ServiceEvent.objects.get(service=service)
+    assert event.pk == ours.pk
+    assert event.external_id == "inc-1"
+    # We found it first, and a claim never rewrites that.
+    assert event.detected_by == EventSource.SYSTEM
+    assert event.updates.count() == 2
 
 
 @pytest.mark.django_db

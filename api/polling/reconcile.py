@@ -5,7 +5,7 @@ from django.db.models import Value
 from django.utils import timezone
 
 from catalog.models import ServiceComponent
-from polling.system_events import reconcile_system_events
+from polling.system_events import claim, reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
@@ -230,3 +230,6 @@ def _upsert_events(service, events, rows, author, run=None):
                     "updated_by": author,
                 },
             )
+        # After the updates, so they move with the row if this event
+        # takes over one we opened.
+        claim(event, author)
