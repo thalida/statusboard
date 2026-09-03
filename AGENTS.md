@@ -4,7 +4,7 @@
 
 Comments, docstrings, commit messages and documentation follow ASD-STE100.
 
-- One idea per sentence. Under 20 words.
+- One idea per sentence. 20 words or fewer.
 - Active voice. Present tense.
 - No em dashes. A qualifier goes in brackets: `GitHub (2026-08-30 15:32)`.
 - A standalone `—` is allowed as an empty-cell marker. It is a placeholder,

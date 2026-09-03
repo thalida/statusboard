@@ -202,8 +202,8 @@ class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
 class ImportRequestSerializer(serializers.Serializer):
     """The body of POST /catalog/import/.
 
-    Named `status_page_url`, not `url`, because that is what the contract
-    documents and the contract is what the client is written against.
+    Named `status_page_url`, not `url`. The contract names it that way,
+    and the client follows the contract.
     """
 
     status_page_url = serializers.URLField()

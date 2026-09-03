@@ -178,7 +178,7 @@ class ServiceEvent(BaseModel):
             )
         ]
         indexes = [
-            # `live` reads this for every component on a page, and the
+            # `live` reads this for every component on a page. The
             # only index was the unique key, which serves neither
             # column. Ordered as the filter narrows: the service first,
             # then the kind, then the phase it excludes.

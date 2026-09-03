@@ -86,8 +86,8 @@ class ServiceViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self):
         # `q` is SearchFilter's, through SEARCH_PARAM. It was a hand
-        # rolled `name__icontains` beside a `search_fields` that no
-        # backend read, so the slug was declared searchable and was not.
+        # rolled `name__icontains` beside a `search_fields` no backend
+        # read. The slug was declared searchable, and was not.
         return Service.objects.for_display(self.request.user).annotate(
             watcher_count=WATCHER_COUNT,
             severity_now=OVERALL_SEVERITY,

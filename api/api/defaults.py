@@ -69,18 +69,17 @@ class Environment(StrEnum):
             ) from error
 
 
-# Which deployment this is. We named it, so it is resolved here, and
-# `debug` and `secret_key` in `settings.py` read it rather than being
-# handed it.
+# Which deployment this is. We named it, so `debug` and `secret_key`
+# in `settings.py` read it here rather than being handed it.
 ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 
 
 class Throttle(StrEnum):
     """A rate this deployment enforces.
 
-    A view names its scope and `settings.py` gives it a rate, so the
-    string was written twice and had to match. DRF names the first two;
-    we named the rest.
+    A view names its scope and `settings.py` gives it a rate. The two
+    spellings had to match. DRF names the first two; we named the
+    rest.
     """
 
     ANONYMOUS = "anon"

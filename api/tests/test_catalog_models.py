@@ -120,7 +120,7 @@ def test_a_name_with_no_slug_characters_still_gets_one():
 
 @pytest.mark.django_db
 def test_archiving_sets_the_date():
-    # `updated_at` cannot answer when a provider dropped a component: it
+    # `updated_at` cannot answer when a provider dropped a component. It
     # moves on every save, so a later rename would erase it.
     component = ComponentFactory()
     assert component.archived_at is None

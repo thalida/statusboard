@@ -28,6 +28,8 @@ DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
 # A directive is not prose.
 DIRECTIVE = re.compile(r"^#\s*(noqa|type:|ruff:|pragma:|fmt:|mypy:|!)")
 CODE_ISH = re.compile(r"^\s*[\w.]+\([^)]*\)\s*$|^\s*[-*]\s|^\s{4,}\S")
+# A code span, however many tokens inside, is one thing to read.
+CODE_SPAN = re.compile(r"`[^`]*`")
 
 
 def sentences(blocks):
@@ -52,7 +54,15 @@ def sentences(blocks):
 
 
 def words(sentence):
-    """Count words, ignoring anything that is code rather than prose."""
+    """Count words. A code span counts as one, however many it wraps.
+
+    A span like `external_id IS NULL` is one thing to read, not three
+    words to weigh. A lone backtick has no partner to pair into a
+    span. It falls back to the old per-token filter, instead of
+    raising.
+    """
+    if sentence.count("`") % 2 == 0:
+        sentence = CODE_SPAN.sub("codespan", sentence)
     countable = [
         w
         for w in sentence.split()
