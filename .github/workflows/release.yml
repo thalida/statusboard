@@ -154,9 +154,12 @@ jobs:
           # A trailing slash would make the path //api/v1/..., so it is
           # dropped here rather than left to whoever fills the secret in.
           FORGEJO_HOST="${FORGEJO_HOST%/}"
-          # The folder in the deploy repository holding this stack. One
-          # dispatch brings up every service in it.
-          APP="${FORGEJO_DEPLOY_APP:-app-statusboard}"
+          # Which stack to deploy. It names private infrastructure, so
+          # it is configuration rather than a default written down here.
+          APP="${FORGEJO_DEPLOY_APP:-}"
+          if [ -z "$APP" ]; then
+            echo "::error::FORGEJO_DEPLOY_APP variable is not set"; exit 1
+          fi
           echo "Dispatching $APP"
           CODE=$(curl -sS -o /tmp/resp -w '%{http_code}' -X POST \
             "$FORGEJO_HOST/api/v1/repos/$FORGEJO_REPO/actions/workflows/deploy.yml/dispatches" \

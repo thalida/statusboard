@@ -150,11 +150,12 @@ release VERSION:
 # Redeploy the current image without cutting a release.
 deploy:
     @set -e ; \
-     APP="${FORGEJO_DEPLOY_APP:-app-statusboard}" ; \
+     APP="${FORGEJO_DEPLOY_APP:-}" ; \
      MISSING="" ; \
      [ -n "${FORGEJO_HOST:-}" ]  || MISSING="$MISSING FORGEJO_HOST" ; \
      [ -n "${FORGEJO_REPO:-}" ]  || MISSING="$MISSING FORGEJO_REPO" ; \
      [ -n "${FORGEJO_TOKEN:-}" ] || MISSING="$MISSING FORGEJO_TOKEN" ; \
+     [ -n "$APP" ]               || MISSING="$MISSING FORGEJO_DEPLOY_APP" ; \
      if [ -n "$MISSING" ]; then \
          echo "[just] error: api/.env.local is missing$MISSING" >&2 ; exit 1 ; \
      fi ; \

@@ -79,9 +79,9 @@ supplies it.
 - A check that gates a release runs in `docker-compose.test.yml`, not on
   the runner. What CI proves is then what ships. A stdlib-only script is
   the exception, because a container costs more than it saves.
-- The stack lives in the `deploy-pipeline` repository, under
-  `app-statusboard/`. Nothing here describes how the server runs it.
-- Add an environment variable to that folder's `.env.example` in the
+- The stack lives in a separate private repository. Nothing here
+  describes how the server runs it, or names where it sits.
+- Add an environment variable to that repository's `.env.example` in the
   same change. It is the contract with the deployment, which holds the
   values. A setting missing from it is found on the server.
 
