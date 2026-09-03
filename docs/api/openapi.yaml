@@ -722,7 +722,7 @@ components:
 
             It is a plain `Component`, the same shape a component has anywhere else, so one
             renderer draws every row. Six of its fields are fixed by what an overall component is:
-            `parent` and `path` are null, `child_count` is 0, `is_overall` is true, `archived_at`
+            `parent` and `path` are null, `descendant_count` is 0, `is_overall` is true, `archived_at`
             is null, and `name` is the service name. They are returned rather than omitted — a
             client that special-cased them would need a second renderer to gain nothing.
 
@@ -774,10 +774,11 @@ components:
             nothing.
           items: { $ref: '#/components/schemas/PathNode' }
         parent: { type: string, format: uuid, nullable: true }
-        child_count:
+        descendant_count:
           type: integer
           description: |
-            A component is a group when this is above zero. There is no is_group flag.
+            How many components sit anywhere under this one. A component is a group when this
+            is above zero. There is no is_group flag.
 
             Always 0 on the overall component. It is a peer of the top-level components, not their
             parent.

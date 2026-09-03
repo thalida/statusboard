@@ -2,6 +2,7 @@ import pytest
 from django.db.utils import IntegrityError
 
 from catalog.models import Service, ServiceComponent, StatusPage
+from polling.reconcile import rebuild_ancestry
 from tests.factories import (
     ComponentFactory,
     PollerFactory,
@@ -156,3 +157,38 @@ def test_the_flag_and_the_date_cannot_disagree():
     component = ComponentFactory()
     with pytest.raises(IntegrityError), transaction.atomic():
         ServiceComponent.objects.filter(pk=component.pk).update(is_archived=True)
+
+
+def test_ancestor_ids_are_stored_top_down(db):
+    # A descendant query reads this array. Walking `parent` per row
+    # cannot use an index, and `for_display` only selects two levels up.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    leaf = ComponentFactory(service=service, parent=middle)
+    rebuild_ancestry(service)
+
+    leaf.refresh_from_db()
+    assert leaf.ancestor_ids == [top.id, middle.id]
+
+    # Every descendant, not the direct children. `top` has two below it.
+    assert ServiceComponent.objects.filter(ancestor_ids__contains=[top.id]).count() == 2
+
+
+def test_for_display_counts_descendants_without_a_query_a_row(
+    db, django_assert_num_queries
+):
+    # The count is why `for_display` exists. Asked per row, a page of
+    # fifty components costs fifty extra queries.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    ComponentFactory(service=service, parent=middle)
+    rebuild_ancestry(service)
+
+    rows = list(ServiceComponent.objects.for_display())
+    with django_assert_num_queries(0):
+        counts = sorted(row.descendant_count() for row in rows)
+
+    # Two below the top, one below the middle, none below the leaf.
+    assert counts == [0, 1, 2]

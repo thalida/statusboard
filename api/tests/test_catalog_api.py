@@ -67,7 +67,7 @@ def test_the_overall_component_is_a_plain_component():
         "name",
         "path",
         "parent",
-        "child_count",
+        "descendant_count",
         "is_overall",
         "archived_at",
         "status",

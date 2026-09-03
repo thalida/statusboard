@@ -1,7 +1,10 @@
 from urllib.parse import urlparse, urlunparse
 
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.text import slugify
 from simple_history.models import HistoricalRecords
@@ -200,6 +203,32 @@ class StatusPage(BaseModel):
         )
 
 
+def _descendant_count():
+    """How many components sit under each row, in one query for the page.
+
+    `related_count` cannot express this. It compares a column to the
+    outer key. `ancestor_ids` holds an array, so the outer key goes in
+    as a one element array of its own.
+
+    The constant in `values` is what makes this one aggregate. Without
+    it Django counts per row and returns one row a component, which a
+    subquery in a SELECT list refuses.
+    """
+    key = models.Func(
+        models.OuterRef("pk"),
+        template="ARRAY[%(expressions)s]",
+        output_field=ArrayField(models.UUIDField()),
+    )
+    counted = (
+        ServiceComponent.objects.filter(ancestor_ids__contains=key)
+        .order_by()
+        .values(one_group=models.Value(1))
+        .annotate(total=models.Count("pk"))
+        .values("total")
+    )
+    return Coalesce(models.Subquery(counted, output_field=models.IntegerField()), 0)
+
+
 class ServiceComponentQuerySet(models.QuerySet):
     def for_display(self, user=None):
         """Everything `ComponentSerializer` reads, in four queries.
@@ -227,7 +256,7 @@ class ServiceComponentQuerySet(models.QuerySet):
         return (
             self.select_related("service", "parent", "parent__parent")
             .annotate(
-                _child_count=related_count(self.model.objects, "parent"),
+                _descendant_count=_descendant_count(),
                 _is_tracked=tracked,
             )
             .prefetch_related(
@@ -261,6 +290,13 @@ class ServiceComponent(BaseModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="children",
+    )
+    # The chain above this one, root first, written by reconcile. A
+    # component's Components tab lists every descendant, and a self-FK
+    # lookup returns one level. Walking the chain per row cannot use an
+    # index either.
+    ancestor_ids = ArrayField(
+        models.UUIDField(), default=list, blank=True, editable=False
     )
     objects = ServiceComponentQuerySet.as_manager()
 
@@ -302,6 +338,9 @@ class ServiceComponent(BaseModel):
                 name="archived_flag_and_date_agree",
             ),
         ]
+        indexes = [
+            GinIndex(fields=["ancestor_ids"], name="components_by_ancestor"),
+        ]
 
     def live_events(self, kind):
         """The live events of one kind.
@@ -321,12 +360,16 @@ class ServiceComponent(BaseModel):
             return self.statuses.filter(ended_at__isnull=True).first()
         return prepared[0] if prepared else None
 
-    def child_count(self):
-        """How many components sit under this one."""
+    def descendant_count(self):
+        """How many components sit anywhere under this one."""
         if self.is_overall:
             return 0
-        prepared = getattr(self, "_child_count", None)
-        return self.children.count() if prepared is None else prepared
+        prepared = getattr(self, "_descendant_count", None)
+        if prepared is None:
+            return ServiceComponent.objects.filter(
+                ancestor_ids__contains=[self.pk]
+            ).count()
+        return prepared
 
     def is_tracked_by(self, user):
         """Whether this user has it on a board. Null if nobody asked."""

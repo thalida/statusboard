@@ -77,7 +77,41 @@ def _upsert_components(service, components, author):
             row.parent = parent
             row.updated_by = author
             row.save(update_fields=["parent", "updated_by"])
+    rebuild_ancestry(service)
     return rows
+
+
+def rebuild_ancestry(service):
+    """Write every component's chain of ancestors, root first.
+
+    A rename does not touch this. A reparent moves a whole subtree, so
+    the pass rewrites the service rather than one row. A service holds
+    hundreds of components, not millions.
+    """
+    rows = list(ServiceComponent.objects.filter(service=service))
+    # The walk reads this map, not the database. A deep tree costs no
+    # extra query.
+    parents = {row.id: row.parent_id for row in rows}
+
+    def chain(node):
+        # The column points at its own table, so the data allows a loop.
+        # `seen` ends the walk. Without it bad data hangs the worker.
+        walked, seen, up = [], {node}, parents.get(node)
+        while up is not None and up not in seen:
+            seen.add(up)
+            walked.append(up)
+            up = parents.get(up)
+        return list(reversed(walked))
+
+    # Only the rows that moved. Most polls change no parent, and this
+    # runs on every poll of every service.
+    changed = []
+    for row in rows:
+        computed = chain(row.id)
+        if row.ancestor_ids != computed:
+            row.ancestor_ids = computed
+            changed.append(row)
+    ServiceComponent.objects.bulk_update(changed, ["ancestor_ids"])
 
 
 def _archive_vanished(service, components, author):

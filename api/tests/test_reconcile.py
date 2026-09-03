@@ -7,7 +7,7 @@ from polling.adapters.base import (
     NormalisedEvent,
     NormalisedUpdate,
 )
-from polling.reconcile import apply_fetch
+from polling.reconcile import apply_fetch, rebuild_ancestry
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 from status.models import ComponentStatus, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory
@@ -243,3 +243,64 @@ def test_a_second_poll_does_not_rewrite_who_made_the_row():
     again = ServiceComponent.objects.get()
     assert again.created_by_id == first.created_by_id
     assert again.created_at == first.created_at
+
+
+@pytest.mark.django_db
+def test_a_poll_writes_the_ancestor_chain():
+    # Nothing else writes the column. Without this pass a component's
+    # Components tab lists no descendant, whatever the provider nests.
+    service = ServiceFactory()
+    apply_fetch(
+        service,
+        [_component(external_id="a"), _component(external_id="b", parent="a")],
+        [],
+        StatusSource.PROVIDER,
+    )
+
+    top = ServiceComponent.objects.get(external_id="a")
+    child = ServiceComponent.objects.get(external_id="b")
+    assert top.ancestor_ids == []
+    assert child.ancestor_ids == [top.id]
+
+
+@pytest.mark.django_db
+def test_a_reparent_rewrites_the_subtree():
+    # The chain of a grandchild changes when its parent moves, and
+    # nothing tells the grandchild. The pass rewrites the service.
+    service = ServiceFactory()
+    nested = [
+        _component(external_id="a"),
+        _component(external_id="b", parent="a"),
+        _component(external_id="c", parent="b"),
+    ]
+    apply_fetch(service, nested, [], StatusSource.PROVIDER)
+
+    moved = [
+        _component(external_id="a"),
+        _component(external_id="b"),
+        _component(external_id="c", parent="b"),
+    ]
+    apply_fetch(service, moved, [], StatusSource.PROVIDER)
+
+    assert ServiceComponent.objects.get(external_id="c").ancestor_ids == [
+        ServiceComponent.objects.get(external_id="b").id
+    ]
+
+
+@pytest.mark.django_db
+def test_a_loop_in_the_parent_column_does_not_hang_the_pass():
+    # The column points at its own table, so bad data can make a cycle.
+    # Without the guard the walk never reaches a root, and the worker
+    # never finishes the poll that called it.
+    service = ServiceFactory()
+    first = ComponentFactory(service=service)
+    second = ComponentFactory(service=service, parent=first)
+    # `update` skips `clean`, which is the only thing refusing this.
+    ServiceComponent.objects.filter(pk=first.pk).update(parent=second)
+
+    rebuild_ancestry(service)
+
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert first.ancestor_ids == [second.id]
+    assert second.ancestor_ids == [first.id]

@@ -54,7 +54,7 @@ class PathNodeSerializer(serializers.ModelSerializer):
 class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
-    child_count = serializers.SerializerMethodField()
+    descendant_count = serializers.SerializerMethodField()
     upcoming_maintenance = serializers.SerializerMethodField()
     upcoming_maintenance_count = serializers.SerializerMethodField()
     active_incident = serializers.SerializerMethodField()
@@ -69,7 +69,7 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
             "name",
             "path",
             "parent",
-            "child_count",
+            "descendant_count",
             "is_overall",
             "archived_at",
             "status",
@@ -108,8 +108,8 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         return PathNodeSerializer(row.ancestors, many=True).data
 
     @extend_schema_field(serializers.IntegerField())
-    def get_child_count(self, row):
-        return row.child_count()
+    def get_descendant_count(self, row):
+        return row.descendant_count()
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):

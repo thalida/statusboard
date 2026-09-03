@@ -157,6 +157,7 @@ erDiagram
         string external_id "unique with service"
         string name
         uuid parent_id FK "self, null at top level"
+        uuid[] ancestor_ids "root first, written by reconcile"
         int status_page_order
         bool is_overall
         bool is_featured "first key of the suggested sort"
@@ -397,7 +398,7 @@ Unique on `(dashboard, component)`.
 ### Every service has an overall component
 
 Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
-"All services". `path` is null, since it has no ancestry, and `child_count` is 0 — it is a peer of
+"All services". `path` is null, since it has no ancestry, and `descendant_count` is 0 — it is a peer of
 the top-level components rather than their parent.
 
 **`component_count` excludes it.** The number equals what the provider's own status page claims,
