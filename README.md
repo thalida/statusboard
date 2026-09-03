@@ -40,12 +40,8 @@ per-worktree, and only the `just` recipes know it.
 just check
 ```
 
-It builds the deployment image and runs every check CI runs, inside it:
-the suite against a real Postgres, lint, the docs cross-check, the prose
-rules and a missing-migration check.
-
-`just test` is the fast loop and runs on the host. `just check` is the one
-that proves the image.
+Everything CI runs, in the image CI runs it in. `just test` is the fast
+loop on the host; this is the one that proves the image.
 
 ### Checking the status pages we can read
 
@@ -67,41 +63,17 @@ suite blocks sockets on purpose.
 
 ## Deployment
 
-`api.statusboard.dev` runs as one stack behind Traefik: the API, the
-poller, its scheduler, Postgres and Redis. Four of those are this one
-image, told apart by the argument. See `api/entrypoint.sh`.
-
-The stack itself lives in the `deploy-pipeline` repository, under
-`app-statusboard/`. Its `compose.yml` says how the services fit
-together, and `.env.example` lists the settings they need.
-
-### Releasing
-
-A `v*` tag builds the image, signs it, smoke tests it against a real
-Postgres, and asks the deploy pipeline to bring the stack up.
+`api.statusboard.dev` is one stack behind Traefik: the API, the poller,
+its scheduler, Postgres and Redis. The first four are this image with a
+different argument. The stack lives in the `deploy-pipeline` repository,
+under `app-statusboard/`.
 
 ```bash
-just release v0.1.0
+just release v0.1.0    # tag, build, sign, deploy
+just deploy            # redeploy the current image
 ```
 
-It refuses a version that is not `v<major>.<minor>.<patch>`, a branch
-other than main, a dirty tree, a main that differs from origin, and a
-tag origin already has. `just deploy` redeploys the current image
-without cutting a release, and reads its credentials from
+Releasing needs `FORGEJO_HOST`, `FORGEJO_REPO` and `FORGEJO_TOKEN` as
+GitHub secrets. Without them the deploy step says so and the release
+still succeeds. `just deploy` reads the same names from
 `api/.env.local`.
-
-GitHub needs three secrets and one variable.
-
-| Name | Kind | Value |
-| --- | --- | --- |
-| `FORGEJO_HOST` | secret | The Forgejo base URL. |
-| `FORGEJO_REPO` | secret | The `owner/repo` holding `deploy.yml`. |
-| `FORGEJO_TOKEN` | secret | A token that may dispatch workflows. |
-| `FORGEJO_DEPLOY_APP` | variable | Optional. Defaults to `app-statusboard`. |
-
-Without them the deploy step reports that it is not configured, and the
-release still succeeds. That is what lets a fork cut one.
-
-Adding a setting means adding it to `app-statusboard/.env.example` in
-the same change. That file is how the deploy repository learns a value
-is now needed.
