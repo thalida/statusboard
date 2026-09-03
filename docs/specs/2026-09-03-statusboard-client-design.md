@@ -279,7 +279,6 @@ The counter is the record.
 | Column | Type | Written by |
 | --- | --- | --- |
 | `ServiceComponent.is_featured` | bool | admin |
-| `ServiceComponent.watcher_count` | int | recomputed on `DashboardItem` create and delete |
 | `ServiceComponent.ancestor_ids` | `ArrayField(UUIDField)`, GIN index | reconcile |
 | `ServiceComponent.search_document` | `SearchVectorField`, GIN index | reconcile |
 | `ServiceEvent.detected_by` | `provider` or `system` | set when the event opens, never changed |
@@ -287,17 +286,24 @@ The counter is the record.
 
 ### Removed columns
 
-`Service.is_featured` and `Service.watcher_count`. Both were keys of the service
-suggestion sort, and that list is gone.
+`Service.is_featured`. It was the first key of the service suggestion sort, and that list
+is gone. `ServiceFilter` goes with it.
 
 `Service.description`. The About tab shows Website, Status page and Provider. Nothing
 renders the description. So the column goes, with the adapter return value that filled it.
 The v1 spec's sentence about refreshing it goes too.
 
-The recompute hook and the nightly reconciliation task do not disappear. They move to
-`ServiceComponent`, and get simpler. `DashboardItem` points straight at a component, so
-the count is `COUNT(DISTINCT owner_id)` on one indexed column. The service version needed
-a distinct count across a join.
+`catalog.queries.WATCHER_COUNT` goes too. It annotated a service, and only the service
+sort read it.
+
+**A component's watcher count is an annotation, not a column.** `Service.watcher_count`
+was a column a signal kept true, and four write paths never reached the signal. Migration
+`catalog/0002` dropped it for that reason. A component repeats neither the column nor the
+signal.
+
+`COMPONENT_WATCHER_COUNT` is `Count("boards__owner", distinct=True)`, in
+`catalog/queries.py`. `DashboardItem` points straight at a component, so it is one join.
+The service version needed three.
 
 ### Changed
 
