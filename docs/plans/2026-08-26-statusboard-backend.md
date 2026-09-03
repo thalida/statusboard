@@ -8,8 +8,8 @@
 
 **Tech Stack:** Django 5, DRF, SimpleJWT, django-filter, drf-spectacular, django-unfold, django-celery-beat, Celery + Redis, Postgres 17, uv, ruff, pytest + pytest-django + factory_boy.
 
-**Spec:** [`docs/specs/2026-08-23-statusboard-design.md`](../../specs/2026-08-23-statusboard-design.md)
-**Contract:** [`docs/api/openapi.yaml`](../../api/openapi.yaml)
+**Spec:** [`docs/specs/2026-08-23-statusboard-design.md`](../specs/2026-08-23-statusboard-design.md)
+**Contract:** [`docs/api/openapi.yaml`](../api/openapi.yaml)
 
 ## Scope
 
@@ -5168,14 +5168,3 @@ positional arguments in Tasks 14 and 17 and defined that way in Task 13. `detect
 class in Tasks 9, 14 and 17. `NormalisedComponent` field names match between Tasks 9, 10, 12, 13
 and 17. `ComponentSerializer` field list matches the contract's `Component` properties, asserted
 by Task 18.
-
-## Execution Handoff
-
-Plan complete and saved to `docs/superpowers/plans/2026-08-26-statusboard-backend.md`. Two
-execution options:
-
-**1. Subagent-Driven (recommended)** — a fresh subagent per task, review between tasks, fast
-iteration.
-
-**2. Inline Execution** — execute tasks in this session using executing-plans, batch execution
-with checkpoints for review.
