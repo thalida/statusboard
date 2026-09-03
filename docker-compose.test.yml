@@ -66,6 +66,10 @@ services:
     volumes:
       # Read-write: the suite writes coverage next to the source.
       - './api:/srv/api'
+      # api/.env.local is a developer's file, and gitignored. Mounted
+      # over, the suite here sees what CI sees: a test that leans on a
+      # local value fails in both places rather than only in CI.
+      - '/dev/null:/srv/api/.env.local:ro'
       - './api/pyproject.toml:/srv/pyproject.toml:ro'
       - './api/uv.lock:/srv/uv.lock:ro'
       # test_contract.py reads the committed contract, which lives

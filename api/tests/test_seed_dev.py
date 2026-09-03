@@ -11,6 +11,18 @@ from dashboards.models import Dashboard, DashboardItem
 from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
 
 
+@pytest.fixture(autouse=True)
+def credentials(monkeypatch):
+    """The admin `seed_admin` makes, which this command needs an owner from.
+
+    A developer has these in .env.local, and that file is gitignored. So
+    the suite passed here and failed on a machine that had never run
+    `just env`.
+    """
+    monkeypatch.setenv("DJANGO_SUPERUSER_EMAIL", "admin@example.com")
+    monkeypatch.setenv("DJANGO_SUPERUSER_PASSWORD", "dev-only-password")
+
+
 @pytest.fixture
 def imports(monkeypatch):
     """Stand in for the fetch. The suite reaches no network.
