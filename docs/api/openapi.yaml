@@ -536,7 +536,11 @@ components:
               additionalProperties: { type: string }
               description: |
                 Both sets, keyed by kind:
-                `{"incident": {"investigating": "Investigating", …}, "maintenance": {"scheduled": "Scheduled", …}}`
+                `{"incident": {"detected": "Detected", …}, "maintenance": {"scheduled": "Scheduled", …}}`
+            event_source:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"provider": "Provider", "system": "Statusboard"}'
     TokenPair:
       type: object
       properties:
@@ -926,7 +930,7 @@ components:
         phase:
           type: string
           description: |
-            `investigating, identified, monitoring, resolved` for an incident.
+            `detected, investigating, identified, monitoring, resolved` for an incident.
             `scheduled, in_progress, verifying, completed` for maintenance.
 
             Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
@@ -934,12 +938,20 @@ components:
         ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
         updates:
           type: array
-          items:
-            type: object
-            properties:
-              phase: { type: string }
-              body: { type: string }
-              posted_at: { type: string, format: date-time }
+          items: { $ref: '#/components/schemas/EventUpdate' }
+    EventUpdate:
+      type: object
+      description: One posted update within an event's timeline.
+      properties:
+        phase: { type: string }
+        body: { type: string }
+        posted_at: { type: string, format: date-time }
+        source:
+          type: string
+          enum: [provider, system]
+          description: |
+            Who wrote this update. `system` is a severity change we recorded ourselves.
+            Render the label from `/meta/` `enums.event_source`.
     ServiceRef:
       type: object
       properties:

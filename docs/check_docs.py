@@ -35,6 +35,7 @@ BACKED = {
     "Status": "ComponentStatus",
     "ServiceEvent": "ServiceEvent",
     "EventRef": "ServiceEvent",
+    "EventUpdate": "EventUpdate",
     "Me": "User",
 }
 PLAIN = {

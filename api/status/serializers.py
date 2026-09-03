@@ -32,7 +32,7 @@ class EventRefSerializer(FieldsMixin, serializers.ModelSerializer):
 class EventUpdateSerializer(FieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = EventUpdate
-        fields = ["phase", "body", "posted_at"]
+        fields = ["phase", "body", "posted_at", "source"]
 
 
 class ServiceEventSerializer(FieldsMixin, serializers.ModelSerializer):

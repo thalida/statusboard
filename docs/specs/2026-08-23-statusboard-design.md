@@ -175,7 +175,8 @@ erDiagram
     ServiceEvent {
         uuid id PK
         uuid service_id FK
-        string external_id "unique with service"
+        string external_id "provider's id, null until claimed"
+        enum detected_by "provider or system, never rewritten"
         enum kind "incident or maintenance"
         string title
         enum phase "valid set depends on kind"
@@ -188,6 +189,7 @@ erDiagram
         enum phase "TextChoices"
         text body "written by the provider"
         datetime posted_at
+        enum source "provider or system"
     }
     PollRun {
         uuid id PK

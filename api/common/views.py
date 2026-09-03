@@ -9,7 +9,13 @@ from rest_framework.views import APIView
 
 from catalog.choices import StatusPageProvider
 from common.serializers import MetaSerializer
-from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSource
+from status.choices import (
+    EVENT_PHASES_BY_KIND,
+    EventKind,
+    EventSource,
+    Severity,
+    StatusSource,
+)
 
 
 def _labels(choices):
@@ -52,6 +58,7 @@ class MetaView(APIView):
                     "status_source": _labels(StatusSource),
                     "status_page_provider": _labels(StatusPageProvider),
                     "event_kind": _labels(EventKind),
+                    "event_source": _labels(EventSource),
                     "event_phase": {
                         str(kind): _labels(phases)
                         for kind, phases in EVENT_PHASES_BY_KIND.items()

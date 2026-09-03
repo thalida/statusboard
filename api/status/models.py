@@ -9,6 +9,7 @@ from status.choices import (
     CLOSED_PHASES,
     EVENT_PHASES_BY_KIND,
     EventKind,
+    EventSource,
     Severity,
     StatusSource,
 )
@@ -124,7 +125,20 @@ class ServiceEvent(BaseModel):
     service = models.ForeignKey(
         Service, on_delete=models.CASCADE, related_name="events"
     )
-    external_id = models.CharField(verbose_name="Provider ID", max_length=200)
+    # Null until a provider claims this event. We open events a
+    # provider never published, and they have no id of theirs.
+    external_id = models.CharField(
+        verbose_name="Provider ID", max_length=200, null=True, blank=True
+    )
+    # Who opened it, never rewritten by a claim. `external_id IS NULL`
+    # cannot answer this: claiming fills the column in, which destroys
+    # the fact that we found the outage first.
+    detected_by = models.CharField(
+        max_length=32,
+        choices=EventSource.choices,
+        default=EventSource.PROVIDER,
+        db_default=EventSource.PROVIDER,
+    )
     kind = models.CharField(max_length=32, choices=EventKind.choices)
     title = models.CharField(max_length=500)
     phase = models.CharField(max_length=32)
@@ -154,8 +168,13 @@ class ServiceEvent(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
+            # Partial. Two events we opened both hold null, and null
+            # does not collide with null in Postgres anyway. Stating
+            # the condition says the exemption is deliberate.
             models.UniqueConstraint(
-                fields=["service", "external_id"], name="one_event_per_provider_id"
+                fields=["service", "external_id"],
+                condition=models.Q(external_id__isnull=False),
+                name="one_event_per_provider_id",
             )
         ]
         indexes = [
@@ -202,6 +221,14 @@ class EventUpdate(BaseModel):
     phase = models.CharField(max_length=32)
     body = models.TextField()
     posted_at = models.DateTimeField(verbose_name="Posted")
+    # Who wrote this post. A claimed event holds both: our detection
+    # first, then the provider's log.
+    source = models.CharField(
+        max_length=32,
+        choices=EventSource.choices,
+        default=EventSource.PROVIDER,
+        db_default=EventSource.PROVIDER,
+    )
 
     def clean(self):
         """A phase belongs to one kind, the same rule the event follows.

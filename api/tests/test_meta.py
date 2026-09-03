@@ -36,6 +36,7 @@ def test_meta_publishes_every_enum():
         "status_source",
         "status_page_provider",
         "event_kind",
+        "event_source",
         "event_phase",
     }
     assert body["enums"]["severity"]["0"] == "Major outage"
