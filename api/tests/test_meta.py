@@ -48,6 +48,55 @@ def test_meta_publishes_every_enum():
 
 
 @pytest.mark.django_db
+def test_fields_prunes_the_top_level():
+    # /meta/ built its dict and skipped the serializer that prunes it.
+    # ?fields= was declared but did nothing.
+    body = APIClient().get(reverse("meta") + "?fields=max_page_size").json()
+    assert body == {"max_page_size": 200}
+
+
+@pytest.mark.django_db
+def test_fields_prunes_inside_enums():
+    # `enums` is a plain dict. FieldsMixin only prunes a nested
+    # serializer, so a dotted path into `enums` reached nothing.
+    url = reverse("meta") + "?fields=enums.status_source"
+    body = APIClient().get(url).json()
+    assert body == {
+        "enums": {
+            "status_source": {
+                "provider": "Provider",
+                "components": "Components",
+                "incidents": "Incidents",
+            }
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_fields_enums_with_no_dotted_path_keeps_every_enum():
+    # `?fields=enums` names the whole map, not one entry in it.
+    body = APIClient().get(reverse("meta") + "?fields=enums").json()
+    assert set(body) == {"enums"}
+    assert set(body["enums"]) == {
+        "severity",
+        "status_source",
+        "status_page_provider",
+        "event_kind",
+        "event_source",
+        "event_phase",
+    }
+
+
+@pytest.mark.django_db
+def test_fields_keeps_two_dotted_paths_under_enums():
+    # Two dotted paths under enums must both survive. Parsing only the
+    # last one would silently drop status_source here.
+    url = reverse("meta") + "?fields=enums.status_source,enums.event_kind"
+    body = APIClient().get(url).json()
+    assert set(body["enums"]) == {"status_source", "event_kind"}
+
+
+@pytest.mark.django_db
 def test_meta_publishes_the_deployment_defaults():
     body = APIClient().get(reverse("meta")).json()
     assert body["poll_interval_seconds"] == 300
