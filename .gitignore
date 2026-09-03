@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local-only settings and credentials, seeded from api/.env.local.example.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.local.example
+
+# Django
+api/staticfiles/
+api/media/
+db.sqlite3
+db.sqlite3-journal
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Lint / tooling caches
+.ruff_cache/
+.mypy_cache/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Superpowers subagent run state (briefs, reports, ledger)
+.superpowers/
+
+# Generated local state (per-worktree ports). Never hand-edited.
+.local/

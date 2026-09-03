@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        # Two approved documents have never passed this hook: the design
+        # spec and the plan it was built from. Reflowing either would be
+        # a huge diff on prose nobody asked to rewrite.
+        exclude: ^docs/(specs|superpowers)/
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Must match the ruff in api/uv.lock. On different versions the hook
+    # and `just lint` format differently and undo each other, so a commit
+    # fails with "files were modified by this hook" and nothing explains
+    # why.
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      # Three of the prose rules in AGENTS.md are mechanical. Review kept
+      # having to raise them, so they are checked here.
+      - id: check-prose
+        name: comments follow AGENTS.md
+        entry: python3 bin/check_prose.py
+        language: system
+        types: [python]
+        exclude: ^api/[^/]+/migrations/

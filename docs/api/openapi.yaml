@@ -1,0 +1,897 @@
+openapi: 3.1.0
+info:
+  title: Statusboard API
+  version: 1.0.0
+  description: |
+    Monitor the status pages of many services in one place.
+
+    ## Everything on a board is a component
+
+    Each service has an overall component. Statusboard creates it. It has `is_overall: true`.
+    It carries the provider's own top-level indicator.
+
+    To track a service, track its overall component. To track one part of a service, track that
+    component. Both are the same call with a different id.
+
+    ## Severity is the state
+
+    `severity` is an integer from 0 to 5. Lower is worse. This matches the SEV0/SEV1 convention.
+
+    Do not expect a status string. The client renders the label from the number.
+
+    | severity | label |
+    |---|---|
+    | 0 | Major outage |
+    | 1 | Partial outage |
+    | 2 | Degraded |
+    | 3 | Unknown. The provider was unreachable. |
+    | 4 | Maintenance |
+    | 5 | Operational |
+
+    Filter severity as a number. `status__severity__lte=3` is everything needing attention.
+    `status__severity=4` gives Maintenance.
+
+    ## Status and incidents are different things
+
+    A severity is the state the provider reports now. An incident is the provider's written
+    record: a title, a log, and a workflow `phase`.
+
+    The two move independently. A provider can monitor a fix while every component reads
+    operational. A provider can report degraded with no incident open.
+
+    Do not derive one from the other.
+
+    ## One schema, one model
+
+    Every schema maps to one Django model, and every nested key is a real relation a
+    `ModelSerializer` can traverse. Nest a related model under a key. Do not flatten it into the
+    parent.
+
+    | key | relation |
+    | --- | --- |
+    | `Service.status_page` | `OneToOneField` |
+    | `Service.poller` | `OneToOneField` |
+    | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
+    | `Component.status` | the `ComponentStatus` row where `ended_at` is null |
+    | `Component.active_incident` | newest unresolved `ServiceEvent` with `kind=incident`, across the reverse M2M |
+    | `ServiceEvent.updates` | reverse FK from `EventUpdate` |
+    | `Component.service` | `ForeignKey` |
+
+    `status` is its own object because `ComponentStatus` is its own table. A `ModelSerializer`
+    with a nested serializer produces these shapes directly.
+
+    The rule applies transitively. A `Service` nests its overall component. It does not copy that
+    component's status.
+
+    **One model, one schema.** There is no list variant and detail variant of the same thing.
+    A second schema exists only to withhold fields, and every field here is either a column on the
+    row or a `select_related` join — nothing a variant would save is expensive. `?fields=` lets a
+    client ask for a smaller shape, and unlike a schema variant the client chooses.
+
+    `allOf` therefore appears only where two schemas cover two models.
+
+    Query parameters use the ORM path. django-filter generates them from `filterset_fields` and
+    `ordering_fields`. No `FilterSet` class is necessary.
+
+    The nesting is visible in the URL. Read a field's path in the response body to build its
+    filter. This holds for fields added later.
+
+    Three parameters are declared, not generated. They have no ORM path:
+    `overall_component__is_tracked`, `ordering=suggested`, and `ordering=next_transition`.
+
+    Model field names are chosen to read well in a URL, because a field name appears in `?fields=`
+    and in a filter path.
+
+    ## Conventions
+
+    Every endpoint that returns a body accepts `?fields=`. Name the fields you need, and the
+    response contains those only. See the `fields` parameter.
+
+    This is a base serializer and a default filter backend, not per-view code. A view opts out by
+    setting `fields_param = None`.
+
+    Lists return `{ aggregates, next, results }`. `aggregates` covers the whole collection, not
+    the page. `ordering` follows DRF. Prefix a field with `-` to reverse it. GETs are ETagged.
+
+    ## Identity
+
+    Every resource has a UUID. `Service` also has a stable `slug`. Public catalog routes use the
+    slug, because people share those URLs during an outage.
+servers:
+  - url: https://statusboard.app/api
+tags:
+  - name: meta
+  - name: auth
+  - name: me
+  - name: catalog
+    description: Public. Services, their components, and incidents.
+  - name: board
+
+paths:
+  /meta/:
+    get:
+      tags: [meta]
+      summary: Server configuration
+      description: Deployment-wide values the client needs but does not own — poll interval, page size, the severity map. Not user preferences.
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Meta' } } }
+
+  /auth/magic-link/:
+    post:
+      tags: [auth]
+      summary: Send a sign-in link
+      description: Throttled per email and per IP. Always 202, even for unknown addresses.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
+      responses:
+        '202': { description: Accepted }
+        '429': { $ref: '#/components/responses/Throttled' }
+  /auth/verify/:
+    post:
+      tags: [auth]
+      summary: Exchange a link token for a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/refresh/:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh token
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+  /auth/logout/:
+    post:
+      tags: [auth]
+      summary: Blacklist the refresh token
+      responses: { '204': { description: No content } }
+
+  /me/:
+    get:
+      tags: [me]
+      summary: The signed-in user
+      description: |
+        This resource has no theme field. Theme is per device. Store it in local storage.
+        Poll interval is deployment-wide. Read it from `/meta/`.
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+    delete:
+      tags: [me]
+      summary: Delete the account
+      description: Removes the dashboard, its tracked components and the user. Catalog and status data are untouched — they are not personal.
+      responses: { '204': { description: No content } }
+
+  /catalog/services/:
+    get:
+      tags: [catalog]
+      summary: List services
+      description: |
+        This endpoint serves Discover, the suggested lists, and the public "down right now" view.
+        Use parameters to select the view.
+
+        With `q`, results are ordered by relevance. Without `q`, the default ordering is
+        `suggested`: `(-is_featured, severity, -watcher_count, name)`. A broken service outranks a
+        more popular service that is working.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: overall_component__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'A service''s severity is its overall component''s, so the path runs through it.' }
+        - { name: overall_component__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
+        - { name: overall_component__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
+        - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall_component__status__severity, -overall_component__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Service' } }
+  /catalog/import/:
+    post:
+      tags: [catalog]
+      summary: Import a service from its status page URL
+      description: |
+        The importer detects the provider. If the service is new, it creates the service and its
+        components. It returns the service either way: `201` when it created one, `200` when the
+        URL already resolved to one.
+
+        Services are deduplicated on a normalised URL. One status page gives one service and one
+        poll.
+
+        Nothing is stored about the attempt itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [status_page_url], properties: { status_page_url: { type: string, format: uri } } }
+      parameters:
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: The URL resolves to a service already in the catalog
+          content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } }
+        '201':
+          description: Service created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } }
+        '422':
+          description: No supported status page found at that URL
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+
+  /catalog/services/{slug}/:
+    get:
+      tags: [catalog]
+      summary: Service detail
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /catalog/services/{slug}/components/:
+    get:
+      tags: [catalog]
+      summary: List a service's components
+      description: |
+        The component tree, flattened. `parent` links a child to its group. The overall component
+        is first. `aggregates` gives the tab labels.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { name: is_tracked, in: query, schema: { type: boolean }, description: Drives Showing All / Tracked / Untracked }
+        - { name: status__severity__lte, in: query, schema: { type: integer } }
+        - { name: status__severity, in: query, schema: { type: integer } }
+        - { name: ordering, in: query, schema: { type: string, enum: [status_page_order, status__severity, -status__severity, name, -name], default: status_page_order }, description: '`status_page_order` keeps the order the status page lists them in.' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+
+  /catalog/services/{slug}/events/:
+    get:
+      tags: [catalog]
+      summary: List a service's events
+      description: |
+        Incidents and maintenance are one collection. Filter with `kind`.
+
+        The Incidents tab passes `kind=incident&ends_at__isnull=true`. The Maintenance tab passes
+        `kind=maintenance` with a window filter.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Slug' }
+        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] }, description: Omit for both. }
+        - { name: phase, in: query, schema: { type: string }, description: 'Valid values depend on `kind`. See `/meta/` `enums.event_phase`.' }
+        - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated. }
+        - { name: ends_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the open set — unresolved, or a window still to close.' }
+        - { name: starts_at__gte, in: query, schema: { type: string, format: date-time } }
+        - { name: starts_at__lte, in: query, schema: { type: string, format: date-time }, description: 'With `ends_at__gte`, answers "what happens between now and Thursday".' }
+        - { name: ends_at__gte, in: query, schema: { type: string, format: date-time } }
+        # The M2M filter stays although no field exposes it. django-filter generates it free,
+        # and narrowing events to one component is a query a screen may want. The field was
+        # different: a prefetch and bytes on every row that nothing rendered.
+        - { name: affected_components, in: query, schema: { type: string, format: uuid }, description: Events naming this component. }
+        - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/EventAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
+
+  /dashboards/{uuid}/components/:
+    get:
+      tags: [board]
+      summary: The components tracked on this dashboard
+      description: Filtering, sorting and pagination are server-side without exception — nothing assumes a board is small.
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - name: event
+          in: query
+          schema: { type: string, enum: [incident, maintenance] }
+          description: |
+            The Incidents and Maintenance tabs. Keep a row if the component has an open
+            `ServiceEvent` of this kind. Omit the parameter for the All tab.
+
+            Declared, not generated. `ServiceEvent` and `ServiceComponent` are many-to-many, and
+            two generated parameters would apply as two `.filter()` calls. On a many-to-many each
+            call joins the relation again, so `events__kind` and `events__phase` can be satisfied
+            by two different events: a component with one closed incident and one running
+            maintenance would match `event=incident`. One `.filter()` holding both conditions
+            binds them to the same row.
+        - { name: status__severity__lte, in: query, schema: { type: integer }, description: 'Severity, not events. It works inside any tab — `event=incident&status__severity__lte=3` is written-up incidents that are also down now.' }
+        - { name: status__severity, in: query, schema: { type: integer } }
+        - name: ordering
+          in: query
+          schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at, next_transition], default: status__severity }
+          description: |
+            `next_transition` sorts the Maintenance tab. It uses `ends_at` for a running window
+            and `starts_at` for one that has not started. Running windows sort first. This
+            ordering is declared, not generated.
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+    post:
+      tags: [board]
+      summary: Track a component
+      description: One component per call. Add-all is the client repeating it; there is no bulk variant to choose between.
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { $ref: '#/components/parameters/Fields' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [component_id], properties: { component_id: { type: string, format: uuid } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Component' } } } }
+        '409': { description: Already tracked }
+
+  /dashboards/{uuid}/components/{component_id}/:
+    delete:
+      tags: [board]
+      summary: Stop tracking a component
+      description: Addressed by the component's id — the one the client already has from the row it is looking at.
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { name: component_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: No content }
+        '404': { description: Not tracked }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque keyset cursor from `next` }
+    Fields:
+      name: fields
+      in: query
+      required: false
+      schema: { type: string }
+      example: id,name,overall_component.status.severity
+      description: |
+        Comma-separated list of fields to return. Omit to get every field.
+
+        Use a dotted path for a nested field. `overall_component.status.severity` returns
+        `overall_component` containing `status` containing `severity` only.
+
+        A path that names an unknown field returns `400`.
+    PageSize: { name: page_size, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+    Slug: { name: slug, in: path, required: true, schema: { type: string }, example: twilio }
+    Uuid: { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Throttled:
+      description: Rate limited
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string, enum: [throttled, provider_unreachable, no_status_page_found, invalid_or_expired_token, not_found] }
+        detail: { type: string }
+    Meta:
+      type: object
+      description: Deployment-wide configuration. Nothing here is a user preference.
+      properties:
+        poll_interval_seconds:
+          type: integer
+          example: 300
+          description: |
+            The default interval for a healthy service. Settings shows it.
+
+            A single service can differ. Read `Service.poller.interval_seconds` for that
+            service's effective interval.
+        poll_cooldown_seconds:
+          type: integer
+          example: 60
+          description: |
+            The default shortest gap between two reads of one page. A single page can differ;
+            read `Service.poller.cooldown_seconds` for that page's value.
+        default_page_size: { type: integer, example: 50 }
+        max_page_size: { type: integer, example: 200 }
+        enums:
+          type: object
+          description: |
+            Every fixed set the API uses, as value-to-label maps. One source, so a client never
+            carries its own copy and a new value reaches every screen without a release.
+
+            Each key matches the field it belongs to.
+          properties:
+            severity:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"0": "Major outage", "1": "Partial outage", … "5": "Operational"}'
+            status_source:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"provider": "Published by the provider", "components": "Worst of its components", "incidents": "Derived from open incidents"}'
+            status_page_provider:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"statuspage": "Atlassian Statuspage", "instatus": "Instatus", "betterstack": "Better Stack", "rss": "RSS feed"}'
+            event_kind:
+              type: object
+              additionalProperties: { type: string }
+              description: '{"incident": "Incident", "maintenance": "Maintenance"}'
+            event_phase:
+              type: object
+              additionalProperties: { type: string }
+              description: |
+                Both sets, keyed by kind:
+                `{"incident": {"investigating": "Investigating", …}, "maintenance": {"scheduled": "Scheduled", …}}`
+    TokenPair:
+      type: object
+      properties:
+        access: { type: string, description: 15 minutes }
+        refresh: { type: string, description: 30 days, rotating }
+    Me:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        default_dashboard_id:
+          type: string
+          format: uuid
+          description: |
+            The dashboard where `is_default` is true. Use it on
+            `/dashboards/{uuid}/components/`.
+
+            One per user in v1. The name survives a second board arriving.
+    Envelope:
+      type: object
+      description: |
+        Every list response has the same three keys. `aggregates` covers the whole collection.
+        `results` is the page. `next` is the cursor.
+
+        A list endpoint composes this with its own `aggregates` and `results`. Every aggregate
+        schema extends `Aggregates`, so `aggregates.total` is readable without knowing the
+        endpoint. See `StatusAggregates` and `EventAggregates`.
+
+        `aggregates` is not declared here. Declaring the base type and then overriding it puts the
+        property in the schema twice, and a reader is shown the base rather than the one the
+        endpoint returns.
+
+        Do not add a collection-wide value at the top level. Put it in `aggregates`.
+      properties:
+        next:
+          type: string
+          nullable: true
+          description: Cursor for the next page. Null on the last page.
+    Aggregates:
+      type: object
+      description: |
+        The base every aggregate block shares. An endpoint extends it. Read `aggregates.total`
+        without knowing the endpoint.
+      properties:
+        total: { type: integer, description: Size of the whole collection, not the page. }
+    StatusAggregates:
+      allOf:
+        - $ref: '#/components/schemas/Aggregates'
+        - type: object
+          description: For any list of things that carry a status — services, components, a board.
+          properties:
+            by_severity:
+              type: object
+              additionalProperties: { type: integer }
+              description: |
+                Keys are severities 0–5. Sorting and the dot read from this. No tab is a severity.
+            by_event_kind:
+              type: object
+              additionalProperties: { type: integer }
+              description: |
+                `{"incident": 3, "maintenance": 1}` — how many rows each value of `event` returns.
+                These are the Incidents and Maintenance tab counts.
+
+                Neither can be read off `by_severity`. A maintenance window three days out leaves
+                the component at severity 5, and a provider can open an incident on components it
+                still reports as operational.
+            next_refresh_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                The soonest scheduled check across the collection — the earliest
+                `Service.poller.next_at`. Null if nothing here is being polled.
+
+                The header pill reads "2 min ago" from `oldest_refreshed_at` and, on hover, "next
+                check in 3 min" from this. There is no refresh control, so this is how a reader
+                learns when the number improves.
+            oldest_refreshed_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                The oldest refresh time in the collection. The header shows it. "2 min ago" means
+                no item is older than two minutes. This covers the whole collection, not the page.
+    EventAggregates:
+      allOf:
+        - $ref: '#/components/schemas/Aggregates'
+        - type: object
+          properties:
+            by_phase:
+              type: object
+              additionalProperties: { type: integer }
+              description: Keys are every phase present. The Incidents tab count is the sum of the unresolved ones.
+    StatusPage:
+      type: object
+      description: |
+        Where a service's data is read from. Identity only — how it is read is the `Poller`.
+      properties:
+        url: { type: string, format: uri }
+        provider:
+          type: string
+          enum: [statuspage, instatus, betterstack, rss]
+          description: |
+            The adapter that reads this page. Render the label from `/meta/`
+            `enums.status_page_provider`.
+    Poller:
+      type: object
+      description: |
+        How a service is read: how often, when next, and how that is going.
+
+        It reads the service's `status_page` but holds no reference to it, so swapping a page
+        changes nothing here.
+      properties:
+        interval_seconds:
+          type: integer
+          description: |
+            How often this service is read now. The About tab shows it as "Refreshed every".
+
+            Computed: the poller's own override if set, otherwise the `/meta/` default, scaled by
+            the current backoff.
+        cooldown_seconds:
+          type: integer
+          description: |
+            The shortest gap allowed between two reads of this service's page.
+
+            The cooldown is on the service, not on a user or a board. Two boards that track it
+            cost one read.
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When the page was last read without error. Null until the first success.
+
+            One read covers every component, so `Status.last_refreshed_at` is this value.
+        next_at: { type: string, format: date-time, nullable: true, description: When the scheduler reads it next. }
+        consecutive_failure_count:
+          type: integer
+          description: |
+            How many reads have failed in a row. Zero after a success.
+
+            It drives the backoff that scales `interval_seconds`, and tips a component to severity
+            3 once the data is too stale to trust. Read it with `last_success_at` to say why a
+            status is unknown.
+        is_paused: { type: boolean, description: Polling is stopped for this service. }
+    Status:
+      type: object
+      description: |
+        The state the provider reports now.
+
+        `ComponentStatus` is append-only, one row per severity change. Each row is an interval;
+        this is the open one, where `ended_at` is null.
+
+        It is unrelated to incident phase.
+      properties:
+        severity:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: |
+            Lower is worse. An `IntegerChoices` class, which is where `/meta/` `enums.severity` gets its labels. Render from there, not from a copy in the client.
+        source:
+          type: string
+          enum: [provider, components, incidents]
+          description: |
+            Where this severity comes from.
+
+            A `TextChoices` class, so a new value is one line and reaches the schema, the admin
+            and validation together.
+
+            `provider` — the provider publishes this status. Trust it.
+
+            `components` — the provider publishes component statuses but no top-level indicator.
+            This is the worst severity among the components. Only the overall component uses it.
+
+            `incidents` — the provider publishes incidents only, with no status of any kind. An
+            open incident gives severity 2. No open incident gives severity 5. The feed does not
+            say how bad it is, so no other severity is inferred.
+
+            A screen that shows a derived status says so. "Degraded" from a published indicator
+            and "Degraded" because an RSS entry exists are different claims.
+        started_at: { type: string, format: date-time, description: When it entered this severity }
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When it left this severity. **Always null here**, because this is the open row.
+
+            `ComponentStatus` is append-only and each row is an interval; a closed row carries the
+            time it ended. Reading `ended_at: null` is how you know you are looking at the current
+            state and not a historical one.
+        last_refreshed_at:
+          type: string
+          format: date-time
+          description: |
+            When this severity was last confirmed. It is the service's
+            `status_page.poll_last_success_at`, because one fetch reads every component of a service.
+
+            It is not stored per component. Doing so would mean a write for every component on
+            every poll, and `ComponentStatus` only writes when severity changes.
+    Service:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        homepage_url:
+          type: string
+          format: uri
+          nullable: true
+          description: The service's own site. The About tab links to it as "Website".
+        logo:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            The poller takes this from the provider's page. It uses the favicon or `og:image`.
+
+            The poller discards a favicon that belongs to the parent company and not the product.
+            The field is then null. The client shows the service initial instead.
+        component_count:
+          type: integer
+          description: |
+            How many components the provider publishes. The overall component is not counted, so
+            this number equals the one on the provider's own status page.
+        status_page: { $ref: '#/components/schemas/StatusPage' }
+        poller: { $ref: '#/components/schemas/Poller' }
+        overall_component:
+          allOf: [{ $ref: '#/components/schemas/Component' }]
+          description: |
+            The service's own status *is* its overall component's, so this is that component
+            rather than a copy of its fields. One FK, one nested serializer.
+
+            It is a plain `Component`, the same shape a component has anywhere else, so one
+            renderer draws every row. Six of its fields are fixed by what an overall component is:
+            `parent` and `path` are null, `child_count` is 0, `is_overall` is true, `archived_at`
+            is null, and `name` is the service name. They are returned rather than omitted — a
+            client that special-cased them would need a second renderer to gain nothing.
+
+            Read severity at `overall_component.status.severity`. The filter uses the same path.
+        tracked_component_count:
+          type: integer
+          nullable: true
+          description: |
+            The number of this service's components on your board. The overall component counts.
+
+            A value above 0 means the service is on your board. This differs from
+            `overall_component.is_tracked`, which covers the overall component only.
+        description:
+          type: string
+          nullable: true
+          description: The provider's own summary of the service. The About tab shows it.
+        in_catalog_since:
+          type: string
+          format: date
+          description: |
+            When the service entered the catalog. The About tab shows it.
+
+            It is not when you started tracking. The app has held the service since this date;
+            your board is separate.
+    PathNode:
+      type: object
+      description: One step above a component, and enough to link to it.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        is_overall: { type: boolean, description: 'The service rollup. A client draws this step as the service.' }
+
+    Component:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: Track or untrack this component by this id. }
+        name:
+          type: string
+          description: |
+            The component's own name. For the overall component it is `"All services"`.
+
+            Use this name on a service screen. On a board row, show the service name instead, with
+            `"Overall status"` below it. Select with `is_overall`. The API sends one name only.
+        path:
+          type: array
+          description: |
+            Every component above this one, top down. Each step carries its own id, so a client
+            builds a breadcrumb it can click. Empty on the overall component, which is under
+            nothing.
+          items: { $ref: '#/components/schemas/PathNode' }
+        parent: { type: string, format: uuid, nullable: true }
+        child_count:
+          type: integer
+          description: |
+            A component is a group when this is above zero. There is no is_group flag.
+
+            Always 0 on the overall component. It is a peer of the top-level components, not their
+            parent.
+        is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
+        archived_at: { type: string, format: date-time, nullable: true, description: Set when the provider stops publishing it. The row stays, reads unknown, and says so — deleting it would silently drop it from someone's board. }
+        status: { $ref: '#/components/schemas/Status' }
+        upcoming_maintenance:
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
+          description: |
+            The soonest maintenance window that names this component and has not ended — a
+            `ServiceEvent` with `kind=maintenance`. Null if there are none.
+
+            **"Upcoming" includes a window already running.** The Maintenance tab shows both
+            "ends in 2 hrs" and "in 3 days", so the field covers anything not yet finished, not
+            only work that has still to start.
+
+            Finished windows are excluded. A window that ran last March is not something a row
+            reports, and including them would make "soonest" mean the oldest one on record.
+
+            A card shows this one. Windows are never merged into a combined span — two windows a
+            week apart are two facts, and a merged one would be true of neither.
+
+            A provider schedules maintenance against the service and names the components it
+            touches, often naming none. On the **overall** component this covers every window in
+            the service, which is where an unnamed one appears.
+        upcoming_maintenance_count:
+          type: integer
+          description: |
+            How many unfinished windows name this component. A card shows the soonest and adds
+            "+2 more" from this.
+
+            It counts the same set `upcoming_maintenance` is drawn from. A count over a wider set
+            than the item beside it produces "+3 more" pointing at nothing a screen can reach.
+
+            The full list is not on the component. History is unbounded, and a row renders from
+            the soonest plus this count. Read the list from
+            `GET /catalog/services/{slug}/events/?kind=maintenance` when a screen needs it.
+        active_incident:
+          allOf: [{ $ref: '#/components/schemas/EventRef' }]
+          description: |
+            The most recently started **unresolved** incident affecting this component. Null if
+            there is none.
+
+            Resolved incidents are excluded. A row reports what is wrong now, and time since the
+            last problem is already `status.started_at`.
+
+            A provider names the components an incident affects. On the **overall** component this
+            is the most recent unresolved incident anywhere in the service.
+        active_incident_count:
+          type: integer
+          description: |
+            How many unresolved incidents affect this component. A card shows `active_incident`
+            and adds "+1 more" from this.
+
+            It counts the same set `active_incident` is drawn from.
+
+            On the **overall** component this counts every unresolved incident in the service.
+        service:
+          allOf: [{ $ref: '#/components/schemas/ServiceRef' }]
+          description: |
+            The service that publishes this component. A board mixes services, so a row reads its
+            logo and name from here.
+
+            It is always present, including on a service's own components, where every row repeats
+            the same service. Pass `?fields=` to leave it out there.
+        is_tracked: { type: boolean, nullable: true }
+    EventRef:
+      type: object
+      nullable: true
+      description: |
+        A `ServiceEvent` as it appears on a component. A subset with no `updates` array, so a list
+        row costs one title and not a log.
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [incident, maintenance] }
+        title: { type: string }
+        phase: { type: string, description: 'Valid values depend on `kind`. Render from `/meta/` `enums.event_phase`.' }
+        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
+        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
+    ServiceEvent:
+      type: object
+      description: |
+        A provider's narrative record — an incident or a scheduled maintenance. Providers publish
+        both as one object, so this is one schema with a `kind`.
+
+        `phase` is workflow, not state. It is unrelated to `severity`.
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [incident, maintenance]
+          description: Render the label from `/meta/` `enums.event_kind`.
+        title: { type: string }
+        phase:
+          type: string
+          description: |
+            `investigating, identified, monitoring, resolved` for an incident.
+            `scheduled, in_progress, verifying, completed` for maintenance.
+
+            Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
+        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
+        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
+        updates:
+          type: array
+          items:
+            type: object
+            properties:
+              phase: { type: string }
+              body: { type: string }
+              posted_at: { type: string, format: date-time }
+    ServiceRef:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        logo: { type: string, nullable: true }

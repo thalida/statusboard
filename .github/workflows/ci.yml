@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Built once, then every check below runs inside it. What CI proves
+      # is what ships, rather than what a runner happened to install.
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./api
+          load: true
+          tags: |
+            statusboard-api:ci
+            statusboard-api:test
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            VERSION=0.0.0+g${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # A cached runtime layer pins its apt-get upgrade to the day it
+          # was first built, which is how Trivy fails on a CVE apt could
+          # already fix.
+          no-cache-filters: runtime
+          pull: true
+
+      # Runs against a real Postgres. The schema uses check constraints
+      # and partial indexes, so a substitute would prove less.
+      - name: Tests, with the coverage gate
+        run: |
+          docker compose -f docker-compose.test.yml run --rm pytest \
+            -n auto --cov-fail-under=85 --cov-report=xml:/srv/api/coverage.xml
+
+      - name: Lint and format check
+        run: docker compose -f docker-compose.test.yml run --rm ruff
+
+      - name: Every documented field maps to the model
+        run: docker compose -f docker-compose.test.yml run --rm docs
+
+      # Stdlib only, so it runs on the runner rather than paying for a
+      # container. Holds comments and docstrings to AGENTS.md.
+      - name: Prose
+        run: python3 bin/check_prose.py
+
+      - name: No migration is missing
+        run: |
+          docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
+            -c 'python manage.py makemigrations --check --dry-run'
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: api/coverage.xml
+          if-no-files-found: warn
+
+      - name: Stop the stores
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: statusboard-api:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1

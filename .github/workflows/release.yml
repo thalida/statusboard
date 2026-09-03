@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  api:
+    name: Build and publish the API image
+    runs-on: ubuntu-latest
+    # A release publishes an image and deploys production, so only the
+    # repository owner's tags trigger it. The first line of defence is a
+    # tag ruleset restricting who can create `v*` at all, which stops the
+    # tag rather than the run.
+    if: github.actor == github.repository_owner
+    permissions:
+      contents: write # to create the GitHub Release
+      packages: write # to push to GHCR
+      id-token: write # for cosign keyless signing over OIDC
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tag info
+        id: tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          MAJOR=${VERSION%%.*}
+          MINOR_AND_PATCH=${VERSION#${MAJOR}.}
+          MINOR=${MINOR_AND_PATCH%%.*}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./api
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          provenance: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/statusboard-api:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-api:v${{ steps.tag.outputs.major }}.${{ steps.tag.outputs.minor }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-api:v${{ steps.tag.outputs.major }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-api:latest
+            ghcr.io/${{ github.repository_owner }}/statusboard-api:sha-${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            VERSION=${{ steps.tag.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless over OIDC)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository_owner }}/statusboard-api@${{ steps.build.outputs.digest }}
+
+      # The published image, against a real Postgres and Redis, from
+      # nothing: it migrates an empty database and then answers. That is
+      # the same path the deployment takes on the server.
+      - name: Smoke test the published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/statusboard-api:${{ steps.tag.outputs.tag }}
+        run: |
+          docker network create smoke
+          docker run -d --name smoke-db --network smoke \
+            -e POSTGRES_USER=statusboard -e POSTGRES_PASSWORD=statusboard \
+            -e POSTGRES_DB=statusboard postgres:17
+          docker run -d --name smoke-redis --network smoke redis:7
+          for i in $(seq 1 30); do
+            docker exec smoke-db pg_isready -U statusboard && break
+            sleep 1
+          done
+          docker pull "$IMAGE"
+          docker run -d --name smoke --network smoke --init -p 18000:8000 \
+            -e ENVIRONMENT=production \
+            -e DEBUG=0 \
+            -e SECRET_KEY=smoke-test-only \
+            -e ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e DATABASE_URL=postgres://statusboard:statusboard@smoke-db:5432/statusboard \
+            -e REDIS_URL=redis://smoke-redis:6379/0 \
+            "$IMAGE"
+          for i in $(seq 1 60); do
+            status=$(docker inspect --format '{{ .State.Health.Status }}' smoke 2>/dev/null)
+            if [ "$status" = "healthy" ]; then break; fi
+            if [ "$status" = "unhealthy" ]; then docker logs smoke; exit 1; fi
+            sleep 2
+          done
+          # SECURE_SSL_REDIRECT is on outside debug, so the check follows
+          # the redirect it is meant to send.
+          curl -sfL http://localhost:18000/health/
+          docker rm -f smoke smoke-db smoke-redis
+          docker network rm smoke
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            Docker image: `ghcr.io/${{ github.repository_owner }}/statusboard-api:${{ steps.tag.outputs.tag }}`
+
+            Verify signature:
+            ```
+            cosign verify \
+              --certificate-identity-regexp 'https://github.com/${{ github.repository_owner }}/statusboard/.*' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              ghcr.io/${{ github.repository_owner }}/statusboard-api:${{ steps.tag.outputs.tag }}
+            ```
+
+  deploy:
+    name: Deploy to production
+    needs: [api]
+    runs-on: ubuntu-latest
+    # The image has to exist before the deploy pulls it, so this waits on
+    # the release job. Skipped when the Forgejo target is not configured,
+    # so a fork's release still succeeds.
+    #
+    # Host and repository are secrets rather than variables: only secrets
+    # are masked in logs. Nothing here echoes either one.
+    steps:
+      - name: Dispatch the Forgejo deploy workflow
+        env:
+          FORGEJO_HOST: ${{ secrets.FORGEJO_HOST }}
+          FORGEJO_REPO: ${{ secrets.FORGEJO_REPO }}
+          FORGEJO_DEPLOY_APP: ${{ vars.FORGEJO_DEPLOY_APP }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          if [ -z "$FORGEJO_HOST" ] || [ -z "$FORGEJO_REPO" ] || [ -z "$FORGEJO_TOKEN" ]; then
+            echo "::notice::Forgejo deploy not configured (FORGEJO_HOST/FORGEJO_REPO/FORGEJO_TOKEN secrets), skipping"
+            exit 0
+          fi
+          # A trailing slash would make the path //api/v1/..., so it is
+          # dropped here rather than left to whoever fills the secret in.
+          FORGEJO_HOST="${FORGEJO_HOST%/}"
+          # Which stack to deploy. It names private infrastructure, so
+          # it is configuration rather than a default written down here.
+          APP="${FORGEJO_DEPLOY_APP:-}"
+          if [ -z "$APP" ]; then
+            echo "::error::FORGEJO_DEPLOY_APP variable is not set"; exit 1
+          fi
+          echo "Dispatching $APP"
+          CODE=$(curl -sS -o /tmp/resp -w '%{http_code}' -X POST \
+            "$FORGEJO_HOST/api/v1/repos/$FORGEJO_REPO/actions/workflows/deploy.yml/dispatches" \
+            -H "Authorization: token $FORGEJO_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"app\":\"$APP\"}}")
+          if [ "$CODE" != "204" ] && [ "$CODE" != "201" ] && [ "$CODE" != "200" ]; then
+            echo "::error::Forgejo returned $CODE"; cat /tmp/resp; exit 1
+          fi
+          echo "Deploy queued on the Forgejo instance"

@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: statusboard
+      POSTGRES_PASSWORD: statusboard
+      POSTGRES_DB: statusboard
+    # Per-worktree host port; `just` sets it. The default covers a bare
+    # `docker compose up` in a single checkout.
+    ports: ["${POSTGRES_HOST_PORT:-5432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    # `up -d --wait` blocks on this, so nothing polls for a container by name.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U statusboard"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  redis:
+    image: redis:7
+    ports: ["${REDIS_HOST_PORT:-6379}:6379"]
+volumes:
+  pgdata:
+    # Scoped to the compose project, which `just` derives from the branch.
+    # That is what gives each worktree its own database rather than a
+    # shared one whose migrations fight.

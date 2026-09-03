@@ -1,0 +1,122 @@
+# The checks CI runs, in containers. `just check` runs the same thing.
+#
+# Separate from docker-compose.yml, which starts the stores development
+# talks to from the host. This file runs the suite inside the image, so
+# what CI proves is what ships.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: statusboard
+      POSTGRES_PASSWORD: statusboard
+      POSTGRES_DB: statusboard
+    # No published port. Only the containers below reach it, so two runs
+    # on one machine do not collide.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U statusboard']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs:
+      # The database is thrown away after the run, so it never needs to
+      # reach a disk. Faster, and nothing is left behind.
+      - /var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # The runtime image is built with `uv sync --no-dev`, so pytest is not
+  # in /srv/.venv. Sync again without that flag to add the dev group.
+  #
+  # `user: root` because the venv was created by root during the build,
+  # before USER statusboard. These containers are ephemeral and run
+  # nothing a person sends, so root is acceptable here and nowhere else.
+  #
+  # The trailing "--" becomes $0, so arguments passed through
+  # `docker compose run --rm pytest <args>` reach pytest as "$@". Without
+  # it `sh -c` drops them, and the coverage report is written nowhere.
+  pytest: &check
+    image: statusboard-api:test
+    build:
+      # The API's own build. The client app will have its own beside it.
+      context: ./api
+    user: 'root'
+    init: true
+    working_dir: /srv/api
+    entrypoint:
+      [
+        'sh',
+        '-c',
+        'cd /srv && uv sync --frozen && cd /srv/api && exec /srv/.venv/bin/python -m pytest "$@"',
+        '--',
+      ]
+    environment:
+      # The suite runs against a real Postgres, because the schema uses
+      # constraints and partial indexes that SQLite does not have.
+      DATABASE_URL: postgres://statusboard:statusboard@postgres:5432/statusboard
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      SECRET_KEY: test-only-not-a-deployment
+      DEBUG: '1'
+    volumes:
+      # Read-write: the suite writes coverage next to the source.
+      - './api:/srv/api'
+      # api/.env.local is a developer's file, and gitignored. Mounted
+      # over, the suite here sees what CI sees: a test that leans on a
+      # local value fails in both places rather than only in CI.
+      - '/dev/null:/srv/api/.env.local:ro'
+      - './api/pyproject.toml:/srv/pyproject.toml:ro'
+      - './api/uv.lock:/srv/uv.lock:ro'
+      # test_contract.py reads the committed contract, which lives
+      # outside api/. Mounted rather than copied into the image: nothing
+      # at runtime reads it.
+      - './docs:/srv/docs:ro'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Lint before format, so a real error is not hidden behind a diff.
+  # Read-only mounts: it reports, never writes. `just lint` applies.
+  #
+  # The cache goes to /tmp because ruff writes it beside the code it
+  # reads, and the code is mounted read-only here.
+  ruff:
+    <<: *check
+    environment:
+      RUFF_CACHE_DIR: /tmp/ruff
+    entrypoint:
+      [
+        'sh',
+        '-c',
+        'cd /srv && uv sync --frozen && cd /srv/api && /srv/.venv/bin/ruff check . && exec /srv/.venv/bin/ruff format --check .',
+        '--',
+      ]
+    depends_on: []
+    volumes:
+      - './api:/srv/api:ro'
+      - './api/pyproject.toml:/srv/pyproject.toml:ro'
+      - './api/uv.lock:/srv/uv.lock:ro'
+
+  # Every documented field maps to a column or a declared derivation.
+  # Needs the venv for yaml, and no database.
+  docs:
+    <<: *check
+    entrypoint:
+      [
+        'sh',
+        '-c',
+        'cd /srv && uv sync --frozen && exec /srv/.venv/bin/python docs/check_docs.py',
+        '--',
+      ]
+    depends_on: []
+    volumes:
+      - './api/pyproject.toml:/srv/pyproject.toml:ro'
+      - './api/uv.lock:/srv/uv.lock:ro'
+      - './docs:/srv/docs:ro'

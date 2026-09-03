@@ -1,0 +1,880 @@
+{
+ "realm": "OC1",
+ "regionHealthReports": [
+  {
+   "regionId": "720cecff-a77f-4fe0-9c3e-6b30fa47aff4",
+   "regionName": "Australia East (Sydney)",
+   "regionCanonicalName": "ap-sydney-1",
+   "geographicAreaName": "APAC",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "96f5b747-04d4-4067-b50e-09a4cc82aed9",
+   "regionName": "Australia East(Sydney)",
+   "regionCanonicalName": "mc-ap-sydney-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "1f5dbd9f-bb30-4d05-b3c9-64edef378236",
+     "serviceName": "Oracle Database Autonomous Recovery Service@AWS",
+     "serviceCanonicalName": "aws-oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "a222f59b-2c82-4479-ad8d-929b0f466ae8",
+   "regionName": "Australia Southeast (Melbourne)",
+   "regionCanonicalName": "ap-melbourne-1",
+   "geographicAreaName": "APAC",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "d4e98d18-7bfd-4f26-a38d-dc760dffb867",
+   "regionName": "Australia Southeast(Melbourne)",
+   "regionCanonicalName": "mc-ap-melbourne-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "e3ad32fa-72cb-42c3-8287-c2b3d4bbfb57",
+     "serviceName": "Oracle Autonomous AI Database",
+     "serviceCanonicalName": "oracle-autonomous-ai-database",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "811a73da-b6cc-4458-b9d5-7256f9a857a0",
+   "regionName": "Brazil East (Rio de Janeiro)",
+   "regionCanonicalName": "sa-riodejaneiro-2",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "5e39842e-4de4-431e-80d3-5a3b8fb80c11",
+     "serviceName": "Java Management Service",
+     "serviceCanonicalName": "java-management-service",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "1257ec14-fddb-49fd-8c0c-4da711125529",
+   "regionName": "Brazil East (Sao Paulo)",
+   "regionCanonicalName": "sa-saopaulo-1",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "71d3ab88-40ba-4c42-9e0e-245c3fa7c8af",
+   "regionName": "Brazil East(Rio de Janeiro)",
+   "regionCanonicalName": "mc-sa-riodejaneiro-2",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "e3ad32fa-72cb-42c3-8287-c2b3d4bbfb57",
+     "serviceName": "Oracle Autonomous AI Database",
+     "serviceCanonicalName": "oracle-autonomous-ai-database",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "02dfebf0-9fa1-4dac-a269-0c1054ac0cd5",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure",
+     "serviceCanonicalName": "oracle-autonomous-ai-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "9e8116ef-8cbf-4342-ba1c-4c874f0239d1",
+     "serviceName": "Oracle Database Autonomous Recovery Service",
+     "serviceCanonicalName": "oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "5811bd92-aed1-4965-964c-2fc16d42f6a9",
+   "regionName": "Brazil East(Sao Paulo)",
+   "regionCanonicalName": "mc-sa-saopaulo-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "925943be-7046-4001-8b39-4b82909dd12a",
+     "serviceName": "Oracle Autonomous AI Database@Google Cloud",
+     "serviceCanonicalName": "gc-oracle-autonomous-aI-database",
+     "serviceCategoryId": "8cbcefc8-4c08-4a5b-9ed6-f60a3fb8844e",
+     "serviceCategoryName": "Oracle AI Database@Google Cloud",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "47796efe-be7c-43dd-8b31-3011e97f1913",
+     "serviceName": "Oracle Base Database Service@Google Cloud",
+     "serviceCanonicalName": "gc-oracle-base-database-service",
+     "serviceCategoryId": "8cbcefc8-4c08-4a5b-9ed6-f60a3fb8844e",
+     "serviceCategoryName": "Oracle AI Database@Google Cloud",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "9e91f127-699f-4c2f-aa85-2ee5c05758eb",
+     "serviceName": "Oracle Database Autonomous Recovery Service@Google Cloud",
+     "serviceCanonicalName": "gc-oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "8cbcefc8-4c08-4a5b-9ed6-f60a3fb8844e",
+     "serviceCategoryName": "Oracle AI Database@Google Cloud",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "31528733-e384-482d-9441-c7fdfa1302ff",
+   "regionName": "Brazil Southeast (Vinhedo)",
+   "regionCanonicalName": "sa-vinhedo-1",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "6ea68788-c519-47f0-b243-2ee808920594",
+   "regionName": "Brazil Southeast(Vinhedo)",
+   "regionCanonicalName": "mc-sa-vinhedo-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "e3ad32fa-72cb-42c3-8287-c2b3d4bbfb57",
+     "serviceName": "Oracle Autonomous AI Database",
+     "serviceCanonicalName": "oracle-autonomous-ai-database",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "47770a6d-a445-4751-b226-f1a7c0871824",
+   "regionName": "Canada Southeast (Montreal)",
+   "regionCanonicalName": "ca-montreal-1",
+   "geographicAreaName": "North America",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "3be50e02-79ef-4450-8771-0059219fec3d",
+   "regionName": "Canada Southeast (Toronto)",
+   "regionCanonicalName": "ca-toronto-1",
+   "geographicAreaName": "North America",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "58c9e78b-f201-48c9-aee0-87c638e2ecd7",
+   "regionName": "Canada Southeast(Montreal)",
+   "regionCanonicalName": "mc-ca-montreal-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "1f5dbd9f-bb30-4d05-b3c9-64edef378236",
+     "serviceName": "Oracle Database Autonomous Recovery Service@AWS",
+     "serviceCanonicalName": "aws-oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "63377c29-f7b7-4aed-9df2-aeb1bde85c3a",
+   "regionName": "Canada Southeast(Toronto)",
+   "regionCanonicalName": "mc-ca-toronto-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "e3ad32fa-72cb-42c3-8287-c2b3d4bbfb57",
+     "serviceName": "Oracle Autonomous AI Database",
+     "serviceCanonicalName": "oracle-autonomous-ai-database",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "02dfebf0-9fa1-4dac-a269-0c1054ac0cd5",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure",
+     "serviceCanonicalName": "oracle-autonomous-ai-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "371a3812-b6ae-4474-833e-4948c1390b71",
+     "serviceName": "Oracle Base Database Service",
+     "serviceCanonicalName": "oracle-base-database-service",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "a1ca4073-74a1-4ec4-87b5-289f8a2b9427",
+   "regionName": "Chile Central (Santiago)",
+   "regionCanonicalName": "sa-santiago-1",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "c8807802-b810-419a-a638-a9211772fc9f",
+   "regionName": "Chile West (Valparaiso)",
+   "regionCanonicalName": "sa-valparaiso-1",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "dc5de4c1-0724-4cca-9655-54951b6face9",
+   "regionName": "Colombia Central (Bogota)",
+   "regionCanonicalName": "sa-bogota-1",
+   "geographicAreaName": "LAD",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "d3748cbf-7cdc-4abc-b6d8-5ee3d00ac9a9",
+   "regionName": "EU Sovereign Central (Frankfurt)",
+   "regionCanonicalName": "eu-frankfurt-2",
+   "geographicAreaName": "EU Sovereign",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "a1313c36-f570-44fa-b7fc-f27c5dfc2a19",
+   "regionName": "EU Sovereign South (Madrid)",
+   "regionCanonicalName": "eu-madrid-2",
+   "geographicAreaName": "EU Sovereign",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "4274e255-0f3a-450e-9140-4e4e45977d7b",
+   "regionName": "France Central (Paris)",
+   "regionCanonicalName": "eu-paris-1",
+   "geographicAreaName": "EMEA",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "4a628a1a-f9ba-40b0-a00e-4ef4d90022ea",
+   "regionName": "France Central(Paris)",
+   "regionCanonicalName": "mc-eu-paris-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "1f5dbd9f-bb30-4d05-b3c9-64edef378236",
+     "serviceName": "Oracle Database Autonomous Recovery Service@AWS",
+     "serviceCanonicalName": "aws-oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "d500314a-b4ac-4d4a-a239-01443bfd029a",
+   "regionName": "France South (Marseille)",
+   "regionCanonicalName": "eu-marseille-1",
+   "geographicAreaName": "EMEA",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "e73508c0-af05-4205-b47e-462f86665da8",
+   "regionName": "France South(Marseille)",
+   "regionCanonicalName": "mc-eu-marseille-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "e3ad32fa-72cb-42c3-8287-c2b3d4bbfb57",
+     "serviceName": "Oracle Autonomous AI Database",
+     "serviceCanonicalName": "oracle-autonomous-ai-database",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "02dfebf0-9fa1-4dac-a269-0c1054ac0cd5",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure",
+     "serviceCanonicalName": "oracle-autonomous-ai-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "9e8116ef-8cbf-4342-ba1c-4c874f0239d1",
+     "serviceName": "Oracle Database Autonomous Recovery Service",
+     "serviceCanonicalName": "oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "5dbaf765-c1a6-4c1c-90c3-476b899340ea",
+     "serviceCategoryName": "Oracle AI Database@Azure",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "14e1491f-05fe-4f6d-8e72-b575c58d8fee",
+   "regionName": "Germany Central (Frankfurt)",
+   "regionCanonicalName": "eu-frankfurt-1",
+   "geographicAreaName": "EMEA",
+   "serviceHealthReports": [
+    {
+     "serviceId": "bcb5cf2a-f823-4252-b0c7-6ceb6e5530d9",
+     "serviceName": "Account Management and Billing",
+     "serviceCanonicalName": "account-management-and-billing",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "0c378162-9ac2-4a34-b3cc-e31710297017",
+     "serviceName": "Console",
+     "serviceCanonicalName": "console",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "af3ce7f8-f599-4e60-97e2-a0491a2bd44e",
+     "serviceName": "Developer Tools",
+     "serviceCanonicalName": "developer-tools",
+     "serviceCategoryId": "9c4f48de-a9d6-4d07-a79c-c7a9f567f4c3",
+     "serviceCategoryName": "Cloud Services",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  },
+  {
+   "regionId": "50b23df5-b066-4251-874a-af3f942ecaed",
+   "regionName": "Germany Central(Frankfurt)",
+   "regionCanonicalName": "mc-eu-frankfurt-1",
+   "geographicAreaName": "Multicloud",
+   "serviceHealthReports": [
+    {
+     "serviceId": "25911c9b-6fed-497c-a547-50fabd3cad13",
+     "serviceName": "Oracle Autonomous AI Database on Dedicated Exadata Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-autonomous-aI-database-on-dedicated-exadata-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "1f5dbd9f-bb30-4d05-b3c9-64edef378236",
+     "serviceName": "Oracle Database Autonomous Recovery Service@AWS",
+     "serviceCanonicalName": "aws-oracle-database-autonomous-recovery-service",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    },
+    {
+     "serviceId": "cedd603d-d099-4f1b-a677-02b00f8f6c61",
+     "serviceName": "Oracle Exadata Database Service on Dedicated Infrastructure@AWS",
+     "serviceCanonicalName": "aws-oracle-exadata-database-service-on-dedicated-infrastructure",
+     "serviceCategoryId": "2a8cc0f6-1fd5-4b8c-9bd9-2c75da5e2934",
+     "serviceCategoryName": "Oracle AI Database@AWS",
+     "serviceStatus": "NormalPerformance",
+     "incidents": []
+    }
+   ]
+  }
+ ]
+}
