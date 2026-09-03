@@ -6,6 +6,15 @@
 - [`just`](https://just.systems)
 - [`uv`](https://docs.astral.sh/uv/)
 
+## Running locally
+
+```bash
+just init
+just dev
+```
+
+Each worktree gets its own ports and database.
+
 ## Commands
 
 | | |
@@ -22,5 +31,3 @@
 | `just deploy` | redeploy the current image |
 
 `just` on its own lists the rest.
-
-Each worktree gets its own ports and database.
