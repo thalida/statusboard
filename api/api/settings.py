@@ -13,6 +13,7 @@ from api.defaults import (  # noqa: F401
     APP_URL,
     DEFAULT_PAGE_SIZE,
     ENVIRONMENT,
+    EVENT_CLAIM_WINDOW,
     MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,

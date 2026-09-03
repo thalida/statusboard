@@ -5,6 +5,7 @@ from django.db.models import Value
 from django.utils import timezone
 
 from catalog.models import ServiceComponent
+from polling.system_events import reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
@@ -36,6 +37,9 @@ def apply_fetch(service, components, events, source, run=None):
     _archive_vanished(service, components, author)
     _write_statuses(components, rows, source, author, run)
     _upsert_events(service, events, rows, author, run)
+    # After the provider's events, so a component they explained does
+    # not also get one of ours in the same pass.
+    reconcile_system_events(service, author)
 
 
 def _signed(author, **fields):

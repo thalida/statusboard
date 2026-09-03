@@ -119,6 +119,13 @@ POLL_MAX_INTERVAL_SECONDS = 3600
 # Long enough to read a week of failures, and no longer.
 POLL_RUN_RETENTION_DAYS = 30
 
+# How far back a provider's event may start and still claim one we
+# opened. Providers back-date `starts_at` to when an incident really
+# began, which is before our poll saw it.
+EVENT_CLAIM_WINDOW = timedelta(
+    seconds=int(os.environ.get("EVENT_CLAIM_WINDOW_SECONDS", "3600"))
+)
+
 # Who the system writes as. RFC 2606 reserves the domain. No mail leaves
 # for it, and nobody can hold the address.
 SYSTEM_EMAIL = "system@statusboard.invalid"
