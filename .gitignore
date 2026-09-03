@@ -42,3 +42,6 @@ htmlcov/
 
 # Generated local state (per-worktree ports). Never hand-edited.
 .local/
+
+# Worktrees, created inside this checkout. Each is its own git checkout.
+.worktrees/
