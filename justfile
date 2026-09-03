@@ -36,6 +36,22 @@ up:
 down *args:
     @{{wt}} ; docker compose down {{args}}
 
+# Also clears what an aborted `just check` left, under the compose
+# project that file uses. Its database is a tmpfs, so it holds nothing.
+# Add `-v` to drop this checkout's own database too.
+
+# Stop this checkout's containers and remove its networks.
+teardown *args:
+    @{{wt}} ; DIR=$(basename "$PWD") ; \
+      docker compose down --remove-orphans {{args}} ; \
+      docker compose -p "$DIR" -f docker-compose.test.yml down -v --remove-orphans ; \
+      echo "[just] cleared compose projects $COMPOSE_PROJECT_NAME and $DIR" ; \
+      if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then \
+          echo "[just] this checkout is a worktree. To drop it, from the main one:" ; \
+          echo "[just]   git worktree remove $PWD" ; \
+          echo "[just]   git branch -d $(git rev-parse --abbrev-ref HEAD)" ; \
+      fi
+
 # Install Python dependencies.
 sync:
     cd api && uv sync
