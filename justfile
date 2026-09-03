@@ -95,6 +95,81 @@ check: image
 image:
     docker build -t statusboard-api:test api
 
+# The tag triggers release.yml: build, sign, smoke test, deploy. A tag
+# left behind by a failed push is reused rather than duplicated.
+
+# Tag and push a release (v1.2.3, v1.2.3-rc.1). Ships to production.
+release VERSION:
+    @set -e ; \
+     VERSION="{{VERSION}}" ; \
+     if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-.+)?$'; then \
+         echo "[just] error: VERSION must look like v0.1.0 or v0.1.0-rc.1" >&2 ; exit 1 ; \
+     fi ; \
+     BRANCH=$(git rev-parse --abbrev-ref HEAD) ; \
+     if [ "$BRANCH" != "main" ]; then \
+         echo "[just] error: releases are tagged from main (on $BRANCH)" >&2 ; exit 1 ; \
+     fi ; \
+     if [ -n "$(git status --porcelain)" ]; then \
+         echo "[just] error: working tree is dirty; commit or stash first" >&2 ; exit 1 ; \
+     fi ; \
+     git fetch --quiet origin main ; \
+     LOCAL=$(git rev-parse main) ; \
+     REMOTE=$(git rev-parse origin/main) ; \
+     if [ "$LOCAL" != "$REMOTE" ]; then \
+         echo "[just] error: main and origin/main differ; pull or push first" >&2 ; exit 1 ; \
+     fi ; \
+     if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then \
+         echo "[just] error: tag $VERSION is already on origin" >&2 ; exit 1 ; \
+     fi ; \
+     CREATED=no ; \
+     if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then \
+         AT=$(git rev-parse "$VERSION^{commit}") ; \
+         if [ "$AT" != "$LOCAL" ]; then \
+             echo "[just] error: local tag $VERSION is at $AT, not main; git tag -d $VERSION and retry" >&2 ; exit 1 ; \
+         fi ; \
+         echo "[just] tag $VERSION already here at $LOCAL, resuming the push" ; \
+     else \
+         echo "[just] tagging $VERSION at $LOCAL" ; \
+         git tag -a "$VERSION" -m "Release $VERSION" ; \
+         CREATED=yes ; \
+     fi ; \
+     if ! git push origin "$VERSION"; then \
+         if [ "$CREATED" = "yes" ]; then \
+             echo "[just] push failed, rolling back the local tag" >&2 ; \
+             git tag -d "$VERSION" >/dev/null ; \
+         fi ; \
+         exit 1 ; \
+     fi ; \
+     REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "<owner>/<repo>") ; \
+     echo "[just] released. Builds, then deploys" ; \
+     echo "[just] watch: https://github.com/$REPO/actions/workflows/release.yml"
+
+# Credentials come from api/.env.local. No app argument, so this repo can
+# only ever deploy its own stack.
+
+# Redeploy the current image without cutting a release.
+deploy:
+    @set -e ; \
+     APP="${FORGEJO_DEPLOY_APP:-app-statusboard}" ; \
+     MISSING="" ; \
+     [ -n "${FORGEJO_HOST:-}" ]  || MISSING="$MISSING FORGEJO_HOST" ; \
+     [ -n "${FORGEJO_REPO:-}" ]  || MISSING="$MISSING FORGEJO_REPO" ; \
+     [ -n "${FORGEJO_TOKEN:-}" ] || MISSING="$MISSING FORGEJO_TOKEN" ; \
+     if [ -n "$MISSING" ]; then \
+         echo "[just] error: api/.env.local is missing$MISSING" >&2 ; exit 1 ; \
+     fi ; \
+     HOST="${FORGEJO_HOST%/}" ; \
+     URL="$HOST/api/v1/repos/${FORGEJO_REPO}/actions/workflows/deploy.yml/dispatches" ; \
+     echo "[deploy] dispatching $APP via $FORGEJO_REPO" ; \
+     CODE=$(curl -sS -o /tmp/sb-deploy-resp -w '%{http_code}' -X POST "$URL" \
+         -H "Authorization: token $FORGEJO_TOKEN" \
+         -H "Content-Type: application/json" \
+         -d "{\"ref\":\"main\",\"inputs\":{\"app\":\"$APP\"}}") ; \
+     if [ "$CODE" != "204" ] && [ "$CODE" != "201" ] && [ "$CODE" != "200" ]; then \
+         echo "[just] error: Forgejo returned $CODE" >&2 ; cat /tmp/sb-deploy-resp >&2 ; echo >&2 ; exit 1 ; \
+     fi ; \
+     echo "[deploy] queued. Watch: $HOST/${FORGEJO_REPO}/actions"
+
 # Run the app: server and poller together. Ctrl-C stops both.
 dev:
     @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \

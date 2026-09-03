@@ -81,8 +81,14 @@ A `v*` tag builds the image, signs it, smoke tests it against a real
 Postgres, and asks the deploy pipeline to bring the stack up.
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+just release v0.1.0
 ```
+
+It refuses a version that is not `v<major>.<minor>.<patch>`, a branch
+other than main, a dirty tree, a main that differs from origin, and a
+tag origin already has. `just deploy` redeploys the current image
+without cutting a release, and reads its credentials from
+`api/.env.local`.
 
 GitHub needs three secrets and one variable.
 
