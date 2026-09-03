@@ -37,7 +37,7 @@ class SalesforceAdapter(Adapter):
     def _count(raw, key):
         try:
             return int(raw.get(key) or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
 
     def fetch_status(self):

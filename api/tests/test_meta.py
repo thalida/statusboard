@@ -173,3 +173,22 @@ def test_every_code_the_handler_raises_is_one_the_contract_publishes():
 
     assert ProviderUnreachable("x").code in set(ErrorCode)
     assert NoStatusPageFound("x").code in set(ErrorCode)
+
+
+@pytest.mark.django_db
+def test_health_answers_without_a_caller():
+    # The container restarts on a failure here. So it must not need a
+    # signed-in caller, or a rate a busy deployment could exhaust.
+    response = APIClient().get(reverse("health"))
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_is_not_in_the_published_contract():
+    # It is how the deployment watches the process. No client is written
+    # against it, so it stays out of the schema clients are generated from.
+    import yaml
+
+    from tests.test_contract import CONTRACT
+
+    assert "/health/" not in yaml.safe_load(CONTRACT.read_text())["paths"]

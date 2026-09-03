@@ -78,6 +78,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # The deployment has no web server in front of Django, only a router.
+    # So the admin's own CSS is served by this process or by nothing.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -87,6 +90,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "api.urls"
+WSGI_APPLICATION = "api.wsgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -111,6 +115,18 @@ DATABASES = {
 AUTH_USER_MODEL = "authentication.User"
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Hashed names, so a changed file gets a new URL and no cache serves
+    # the old one. The manifest is written by `collectstatic`, and asking
+    # for a file missing from it raises. That is what a deployment wants
+    # and what development cannot have: the suite does not collect.
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        if DEBUG
+        else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"
@@ -373,7 +389,53 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.app>"
+# A magic link is the only way to sign in, so a deployment that cannot
+# send mail cannot be used. EMAIL_HOST decides: set, the mail is sent;
+# unset, it is printed, which is what development wants.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST
+    else "django.core.mail.backends.console.EmailBackend"
 )
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = EMAIL_PORT != 465
+EMAIL_USE_SSL = EMAIL_PORT == 465
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.dev>"
+)
+
+# The client app is on another origin, so the browser asks first. A
+# blank list refuses every origin, which is the safe way to be wrong.
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+CORS_ALLOW_CREDENTIALS = True
+
+# The admin posts forms from this host, over HTTPS. Django checks the
+# scheme too, so the host alone is not enough.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+if not DEBUG:
+    # TLS is terminated by the router in front of this process, so the
+    # request arrives on plain HTTP. Without this Django reads every
+    # request as insecure and redirects a secure one forever.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    # The container asks itself over loopback, on plain HTTP. Redirecting
+    # that answers 301. curl reads a 301 as success. The check then
+    # passes without ever reaching Django.
+    SECURE_REDIRECT_EXEMPT = [r"^health/$"]
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

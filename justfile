@@ -48,8 +48,9 @@ migrate:
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
 
-# Fill an empty local database: the admin, a small catalog, one tracked
-# service. Fetches three real status pages, so it needs the network.
+# Fetches three real status pages, so it needs the network.
+
+# Fill an empty local database: admin, a small catalog, one tracked service.
 seed-dev:
     @{{wt}} ; cd api && uv run python manage.py seed_dev
 
@@ -76,6 +77,23 @@ lint:
 # Check comments and docstrings against AGENTS.md.
 prose *args:
     @python3 bin/check_prose.py {{args}}
+
+# Slower than `just test`, and the answer that counts: it proves the
+# image rather than the host. Run it before opening a pull request.
+
+# Everything CI runs, in the containers CI runs it in.
+check: image
+    docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
+    docker compose -f docker-compose.test.yml run --rm ruff
+    docker compose -f docker-compose.test.yml run --rm docs
+    @python3 bin/check_prose.py
+    docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
+      -c 'python manage.py makemigrations --check --dry-run'
+    docker compose -f docker-compose.test.yml down -v
+
+# Build the deployment image. `check` runs against this.
+image:
+    docker build -t statusboard-api:test api
 
 # Run the app: server and poller together. Ctrl-C stops both.
 dev:

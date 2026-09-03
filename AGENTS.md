@@ -67,6 +67,24 @@ You can apply that by reading a name, which is the point. `defaults.py`
 loads `.env.local`, so nothing reads a variable before the file that
 supplies it.
 
+## Deployment
+
+- One image per component, built from that component's own directory.
+  `api/Dockerfile` builds the API, and the client app will have its own.
+  Nothing outside a component is in its build context.
+- One image, four processes. The argument picks which: `migrate`, `api`,
+  `worker`, `beat`. See `api/entrypoint.sh`.
+- Python 3.14 is a requirement. Keys default to `uuid.uuid7`, which does
+  not exist earlier.
+- A check that gates a release runs in `docker-compose.test.yml`, not on
+  the runner. What CI proves is then what ships. A stdlib-only script is
+  the exception, because a container costs more than it saves.
+- The stack lives in the `deploy-pipeline` repository, under
+  `app-statusboard/`. Nothing here describes how the server runs it.
+- Add an environment variable to that folder's `.env.example` in the
+  same change. It is the contract with the deployment, which holds the
+  values. A setting missing from it is found on the server.
+
 ## Tests
 
 Every behaviour change carries a test. The suite runs with no network:

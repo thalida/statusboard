@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import connection
 from django.urls import reverse
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
@@ -13,6 +14,26 @@ from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSour
 
 def _labels(choices):
     return {str(value): label for value, label in choices.choices}
+
+
+class HealthView(APIView):
+    """Whether this process can serve a request.
+
+    The container restarts on a failure here, so it answers what a
+    restart would fix. A reachable database is one: a pool that has lost
+    its connections recovers. A provider being down is not.
+
+    Excluded from the schema. It is how the deployment watches the
+    process, and no client is written against it.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = []
+
+    @extend_schema(exclude=True)
+    def get(self, request):
+        connection.ensure_connection()
+        return Response({"status": "ok"})
 
 
 class MetaView(APIView):

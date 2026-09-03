@@ -1,0 +1,33 @@
+# The build context is this directory, so nothing outside it is reachable
+# and nothing outside it needs listing here.
+
+# Python local
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+coverage.xml
+
+# Collected at build, from the source above. A stale copy would ship.
+staticfiles
+media
+
+# Local secrets. .env.local is development only, and a copy in the image
+# would be a published admin password.
+.env
+.env.*
+
+# The image does not build itself.
+Dockerfile
+.dockerignore
+
+# OS and editors
+**/.DS_Store
+*.swp
+*.swo
+*~
+.idea
+.vscode
