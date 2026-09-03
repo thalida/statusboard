@@ -2,6 +2,7 @@ from urllib.parse import urlparse, urlunparse
 
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVectorField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Coalesce
@@ -230,6 +231,19 @@ def _descendant_count():
 
 
 class ServiceComponentQuerySet(models.QuerySet):
+    def search(self, q):
+        """Rank a query against the stored path.
+
+        Websearch mode, so several words are an AND. A caller ordering
+        by anything else drops the rank and keeps the filter.
+        """
+        query = SearchQuery(q, search_type="websearch")
+        return (
+            self.filter(search_document=query)
+            .annotate(rank=SearchRank(models.F("search_document"), query))
+            .order_by("-rank")
+        )
+
     def for_display(self, user=None):
         """Everything `ComponentSerializer` reads, in four queries.
 
@@ -298,6 +312,10 @@ class ServiceComponent(BaseModel):
     ancestor_ids = ArrayField(
         models.UUIDField(), default=list, blank=True, editable=False
     )
+    # The whole path, weighted, written by reconcile. Searching a
+    # service's name must also reach its components. Walking `parent`
+    # at query time cannot use an index.
+    search_document = SearchVectorField(null=True, editable=False)
     objects = ServiceComponentQuerySet.as_manager()
 
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
@@ -340,6 +358,7 @@ class ServiceComponent(BaseModel):
         ]
         indexes = [
             GinIndex(fields=["ancestor_ids"], name="components_by_ancestor"),
+            GinIndex(fields=["search_document"], name="components_by_search"),
         ]
 
     def live_events(self, kind):

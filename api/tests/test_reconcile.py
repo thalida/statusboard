@@ -7,7 +7,7 @@ from polling.adapters.base import (
     NormalisedEvent,
     NormalisedUpdate,
 )
-from polling.reconcile import apply_fetch, rebuild_ancestry
+from polling.reconcile import apply_fetch, rebuild_ancestry, rebuild_search
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 from status.models import ComponentStatus, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory
@@ -304,3 +304,28 @@ def test_a_loop_in_the_parent_column_does_not_hang_the_pass():
     second.refresh_from_db()
     assert first.ancestor_ids == [second.id]
     assert second.ancestor_ids == [first.id]
+
+
+@pytest.mark.django_db
+def test_a_reparent_rewrites_every_descendants_path():
+    # Ancestry and the search vector both carry the chain. A provider
+    # moving one node must not leave its children searchable under
+    # where they used to sit.
+    service = ServiceFactory(name="Acme")
+    old = ComponentFactory(service=service, name="Legacy", external_id="old")
+    new = ComponentFactory(service=service, name="Platform", external_id="new")
+    leaf = ComponentFactory(
+        service=service, name="Queue", external_id="leaf", parent=old
+    )
+    rebuild_ancestry(service)
+    rebuild_search(service)
+
+    leaf.parent = new
+    leaf.save(update_fields=["parent"])
+    rebuild_ancestry(service)
+    rebuild_search(service)
+
+    leaf.refresh_from_db()
+    assert leaf.ancestor_ids == [new.id]
+    assert list(ServiceComponent.objects.search("legacy queue")) == []
+    assert list(ServiceComponent.objects.search("platform queue")) == [leaf]

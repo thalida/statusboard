@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.search import SearchVector
 from django.db import transaction
+from django.db.models import Value
 from django.utils import timezone
 
 from catalog.models import ServiceComponent
@@ -78,6 +80,7 @@ def _upsert_components(service, components, author):
             row.updated_by = author
             row.save(update_fields=["parent", "updated_by"])
     rebuild_ancestry(service)
+    rebuild_search(service)
     return rows
 
 
@@ -112,6 +115,31 @@ def rebuild_ancestry(service):
             row.ancestor_ids = computed
             changed.append(row)
     ServiceComponent.objects.bulk_update(changed, ["ancestor_ids"])
+
+
+def rebuild_search(service):
+    """Write each component's weighted search path.
+
+    `A` is its own name, `B` its ancestors', `C` its service's. An
+    exact hit on a rollup then outranks a leaf matched only through its
+    service.
+
+    Ancestor names are joined here, not in SQL. Postgres cannot build a
+    vector from an array of foreign keys. It must run after
+    `rebuild_ancestry`, which supplies `ancestor_ids`.
+    """
+    rows = list(
+        ServiceComponent.objects.filter(service=service).select_related("service")
+    )
+    names = {row.id: row.name for row in rows}
+    for row in rows:
+        ancestors = " ".join(names.get(a, "") for a in row.ancestor_ids)
+        row.search_document = (
+            SearchVector(Value(row.name), weight="A")
+            + SearchVector(Value(ancestors), weight="B")
+            + SearchVector(Value(row.service.name), weight="C")
+        )
+    ServiceComponent.objects.bulk_update(rows, ["search_document"])
 
 
 def _archive_vanished(service, components, author):

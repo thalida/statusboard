@@ -158,6 +158,7 @@ erDiagram
         string name
         uuid parent_id FK "self, null at top level"
         uuid[] ancestor_ids "root first, written by reconcile"
+        tsvector search_document "weighted path, written by reconcile"
         int status_page_order
         bool is_overall
         bool is_featured "first key of the suggested sort"

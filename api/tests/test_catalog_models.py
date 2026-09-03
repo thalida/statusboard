@@ -2,7 +2,7 @@ import pytest
 from django.db.utils import IntegrityError
 
 from catalog.models import Service, ServiceComponent, StatusPage
-from polling.reconcile import rebuild_ancestry
+from polling.reconcile import rebuild_ancestry, rebuild_search
 from tests.factories import (
     ComponentFactory,
     PollerFactory,
@@ -192,3 +192,49 @@ def test_for_display_counts_descendants_without_a_query_a_row(
 
     # Two below the top, one below the middle, none below the leaf.
     assert counts == [0, 1, 2]
+
+
+def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
+    # The rollup's own name is an exact, weight-A hit. A leaf matches
+    # only through its service, at weight C, so it must sort below.
+    service = ServiceFactory(name="Twilio")
+    rollup = ComponentFactory(service=service, name="Twilio", is_overall=True)
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    leaf = ComponentFactory(service=service, name="SMS", parent=parent)
+    rebuild_ancestry(service)
+    rebuild_search(service)
+
+    found = list(ServiceComponent.objects.search("twilio"))
+    assert found[0] == rollup
+    assert leaf in found
+
+    # OR semantics would let the rollup match too: it says "twilio" but
+    # never "sms".
+    assert list(ServiceComponent.objects.search("twilio sms")) == [leaf]
+
+
+def test_search_weights_a_components_own_name_over_its_ancestors_over_its_service(db):
+    # A single-service fixture cannot separate the weights. Every
+    # component in it shares one service name, so A and C score the
+    # same. Three services isolate each weight in turn.
+    own_service = ServiceFactory(name="Widgets")
+    own_name = ComponentFactory(service=own_service, name="Twilio")
+
+    ancestor_service = ServiceFactory(name="Gadgets")
+    ancestor = ComponentFactory(service=ancestor_service, name="Twilio")
+    via_ancestor = ComponentFactory(
+        service=ancestor_service, name="Portal", parent=ancestor
+    )
+    rebuild_ancestry(ancestor_service)
+    rebuild_search(ancestor_service)
+
+    via_service = ServiceFactory(name="Twilio")
+    via_service_component = ComponentFactory(service=via_service, name="Messaging")
+
+    rebuild_search(own_service)
+    rebuild_search(via_service)
+
+    ranked = {row.id: row.rank for row in ServiceComponent.objects.search("twilio")}
+    assert (
+        ranked[own_name.id] > ranked[via_ancestor.id] > ranked[via_service_component.id]
+    )
