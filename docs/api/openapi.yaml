@@ -246,6 +246,57 @@ paths:
           description: No supported status page found at that URL
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
+  /catalog/components/:
+    get:
+      tags: [catalog]
+      summary: Search and list components
+      description: |
+        One collection, four screens. Discover with no parameters, a service's parts with
+        `service`, a component's descendants with `ancestor`, an event's affected list with
+        `event`.
+
+        `q` matches a component's whole path, so `twilio` finds `SMS`. Results are then ranked by
+        relevance. Without `q` the default is `suggested`, except under `service`, where it is
+        `status_page_order`.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: service, in: query, schema: { type: string }, description: Service slug }
+        - { name: ancestor, in: query, schema: { type: string, format: uuid }, description: Every descendant, at any depth }
+        - { name: event, in: query, schema: { type: string, format: uuid }, description: The components this event affects }
+        - { name: is_overall, in: query, schema: { type: boolean }, description: '`true` is one row per service, which is signed-out Home.' }
+        - { name: is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Drives Showing All / Tracked / Untracked.' }
+        - { name: status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 } }
+        - { name: status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 } }
+        - { name: status__severity__in, in: query, schema: { type: string }, description: 'Comma separated, for a Severity filter offering every value at once.' }
+        - { name: ordering, in: query, schema: { type: string, enum: [suggested, status_page_order, -status_page_order, status__severity, -status__severity, name, -name, updated_at, -updated_at], default: suggested } }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+
+  /catalog/components/{uuid}/:
+    get:
+      tags: [catalog]
+      summary: Component detail
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Component' } } } }
+        '404': { $ref: '#/components/responses/Error' }
 
   /catalog/services/{slug}/:
     get:
