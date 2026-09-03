@@ -29,6 +29,11 @@ OVERALL_SEVERITY = Subquery(
 # only it pays for a distinct count over three joins.
 WATCHER_COUNT = Count("components__boards__owner", distinct=True)
 
+# Who tracks one component. `DashboardItem` points straight at it, so
+# this is one join. The service version needed three, and only the
+# service sort read it.
+COMPONENT_WATCHER_COUNT = Count("boards__owner", distinct=True)
+
 
 def is_tracked(field="pk"):
     """Whether anybody tracks any part of a service.

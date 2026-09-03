@@ -2,7 +2,29 @@ import pytest
 from django.db.utils import IntegrityError
 
 from catalog.models import Service, ServiceComponent, StatusPage
-from tests.factories import ComponentFactory, PollerFactory, ServiceFactory
+from tests.factories import (
+    ComponentFactory,
+    PollerFactory,
+    ServiceFactory,
+    UserFactory,
+    track,
+    watchers,
+)
+
+
+def test_a_components_watcher_count_is_distinct_users(db):
+    # Two boards holding one component is two watchers. One person
+    # holding it twice is impossible, and one holding a sibling too is
+    # still one watcher of this component.
+    component = ComponentFactory()
+    sibling = ComponentFactory(service=component.service)
+    first = UserFactory()
+    track(component, user=first)
+    track(sibling, user=first)
+    track(component, user=UserFactory())
+
+    assert watchers(component) == 2
+    assert watchers(sibling) == 1
 
 
 @pytest.mark.django_db

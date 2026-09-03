@@ -1,7 +1,15 @@
 import factory
+from django.contrib.auth import get_user_model
 
 from catalog.models import Service, ServiceComponent, StatusPage
 from polling.models import Poller
+
+
+class UserFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = get_user_model()
+
+    email = factory.Sequence(lambda n: f"watcher{n}@example.test")
 
 
 class ServiceFactory(factory.django.DjangoModelFactory):
@@ -79,8 +87,12 @@ def track(component, user=None):
     return DashboardItem.objects.create(dashboard=board, component=component)
 
 
-def watchers(service):
+def watchers(component):
     """How many people track it, counted the way the app counts."""
-    from catalog.queries import WATCHER_COUNT
+    from catalog.queries import COMPONENT_WATCHER_COUNT
 
-    return Service.objects.annotate(n=WATCHER_COUNT).get(pk=service.pk).n
+    return (
+        ServiceComponent.objects.annotate(n=COMPONENT_WATCHER_COUNT)
+        .get(pk=component.pk)
+        .n
+    )

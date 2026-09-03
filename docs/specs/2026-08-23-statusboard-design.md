@@ -159,6 +159,7 @@ erDiagram
         uuid parent_id FK "self, null at top level"
         int status_page_order
         bool is_overall
+        bool is_featured "first key of the suggested sort"
         datetime archived_at "set when it stops being published"
     }
     ComponentStatus {

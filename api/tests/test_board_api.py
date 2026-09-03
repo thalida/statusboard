@@ -179,7 +179,7 @@ def test_tracking_a_component_adds_it_and_bumps_the_watcher_count(client, board)
     response = client.post(url, {"component_id": str(component.id)}, format="json")
     assert response.status_code == 201
     assert DashboardItem.objects.filter(dashboard=board, component=component).exists()
-    assert watchers(component.service) == 1
+    assert watchers(component) == 1
 
 
 @pytest.mark.django_db
@@ -212,19 +212,19 @@ def test_a_board_belonging_to_someone_else_is_not_readable(client):
 
 @pytest.mark.django_db
 def test_watcher_count_is_distinct_users_not_tracked_items(client, board):
-    # Someone tracking five Twilio components is one watcher. Counting
-    # items would let one person outrank a crowd in the suggestion order.
-    service = ServiceFactory()
-    StatusPageFactory(service=service)
-    url = reverse("board-components", kwargs={"uuid": board.id})
-    for external_id in ("a", "b", "c"):
-        component = ComponentFactory(service=service, external_id=external_id)
+    # One person tracking a component from two boards is one watcher.
+    # Counting items would let one person outrank a crowd in the
+    # suggestion order.
+    component = ComponentFactory()
+    second_board = Dashboard.objects.create(owner=board.owner, name="Second")
+    for target in (board, second_board):
+        url = reverse("board-components", kwargs={"uuid": target.id})
         client.post(url, {"component_id": str(component.id)}, format="json")
-    assert watchers(service) == 1
+    assert watchers(component) == 1
 
 
 @pytest.mark.django_db
-def test_two_people_tracking_one_service_count_twice(client, board):
+def test_two_people_tracking_one_component_count_twice(client, board):
     service = ServiceFactory()
     StatusPageFactory(service=service)
     component = ComponentFactory(service=service)
@@ -233,21 +233,20 @@ def test_two_people_tracking_one_service_count_twice(client, board):
     other = Dashboard.objects.get(owner=User.objects.create(email="second@b.com"))
     DashboardItem.objects.create(dashboard=other, component=component)
 
-    assert watchers(service) == 2
+    assert watchers(component) == 2
 
 
 @pytest.mark.django_db
 def test_untracking_the_last_component_drops_the_watcher(client, board):
     component = _track(board)
-    service = component.service
-    assert watchers(service) == 1
+    assert watchers(component) == 1
     client.delete(
         reverse(
             "board-component-detail",
             kwargs={"uuid": board.id, "component_id": component.id},
         )
     )
-    assert watchers(service) == 0
+    assert watchers(component) == 0
 
 
 @pytest.mark.django_db
@@ -271,7 +270,7 @@ def test_the_watcher_count_is_right_however_a_row_arrives_or_goes(how):
     user = get_user_model().objects.create(email="watcher@b.com")
     board = Dashboard.objects.create(owner=user, name="B")
     DashboardItem.objects.create(dashboard=board, component=component)
-    assert watchers(service) == 1
+    assert watchers(component) == 1
 
     if how == "the admin":
         DashboardItem.objects.get(dashboard=board, component=component).delete()
@@ -283,4 +282,4 @@ def test_the_watcher_count_is_right_however_a_row_arrives_or_goes(how):
     else:
         DashboardItem.objects.all().delete()
 
-    assert watchers(service) == 0
+    assert watchers(component) == 0
