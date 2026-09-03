@@ -17,16 +17,30 @@ port. Do not move it quietly.
 
 The compose project name comes from the branch. On a detached HEAD it falls
 back to the directory basename.
+
+Each worktree answers on <slug>.localhost. A cookie ignores the port but
+not the host. One localhost jar would otherwise leak an admin session
+between branches.
+
+The client app is a separate origin, so CORS and CSRF follow that host. A
+value already in the environment wins, because someone may be running a
+client this cannot see.
+
+APP_URL is left alone. A sign-in link should fail rather than mail an
+address nothing serves. See api/.env.local.example.
 """
 
 import json
+import os
 import pathlib
 import re
 import socket
 import subprocess
 
-# The services this worktree needs a private host port for.
-KNOWN_KEYS = ("postgres", "redis", "django")
+# The services this worktree needs a private host port for. No client app
+# exists yet. Its port is reserved anyway, so the origins below never move
+# when it arrives.
+KNOWN_KEYS = ("postgres", "redis", "django", "client")
 
 DB_USER = DB_PASSWORD = DB_NAME = "statusboard"
 
@@ -84,21 +98,31 @@ def ports() -> dict[str, int]:
 
 def main() -> None:
     picked = ports()
-    project = f"statusboard-{slug()}"
+    name = slug()
+    # Postgres and Redis are reached over TCP, not from a browser, so they
+    # stay on plain localhost. The driver resolves it and gains nothing
+    # from a subdomain.
     exports = {
-        "COMPOSE_PROJECT_NAME": project,
-        "WORKTREE_SLUG": slug(),
+        "COMPOSE_PROJECT_NAME": f"statusboard-{name}",
+        "WORKTREE_SLUG": name,
         "POSTGRES_HOST_PORT": picked["postgres"],
         "REDIS_HOST_PORT": picked["redis"],
         "DJANGO_PORT": picked["django"],
+        "CLIENT_PORT": picked["client"],
         "DATABASE_URL": (
             f"postgres://{DB_USER}:{DB_PASSWORD}"
             f"@localhost:{picked['postgres']}/{DB_NAME}"
         ),
         "REDIS_URL": f"redis://localhost:{picked['redis']}/0",
     }
-    for name, value in exports.items():
-        print(f"export {name}={value}")
+    # Settings read both as plain environment variables, so a worktree
+    # needs no edit to answer its own client.
+    client = f"http://{name}.localhost:{picked['client']}"
+    for key in ("CORS_ALLOWED_ORIGINS", "CSRF_TRUSTED_ORIGINS"):
+        if not os.environ.get(key):
+            exports[key] = client
+    for key, value in exports.items():
+        print(f"export {key}={value}")
 
 
 if __name__ == "__main__":

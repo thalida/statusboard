@@ -25,7 +25,8 @@ info:
       echo "compose    $COMPOSE_PROJECT_NAME" ; \
       echo "postgres   localhost:$POSTGRES_HOST_PORT" ; \
       echo "redis      localhost:$REDIS_HOST_PORT" ; \
-      echo "server     http://localhost:$DJANGO_PORT/"
+      echo "server     http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
+      echo "client     http://$WORKTREE_SLUG.localhost:$CLIENT_PORT (reserved)"
 
 # Start Postgres and Redis for this worktree, waiting until they are healthy.
 up:
@@ -190,7 +191,7 @@ deploy:
 # Run the app: server and poller together. Ctrl-C stops both.
 dev:
     @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
-      echo "http://localhost:$DJANGO_PORT/" ; \
+      echo "http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
       cd api ; \
       uv run celery -A api worker -B -l info & \
       uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
