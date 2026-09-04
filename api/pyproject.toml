@@ -44,4 +44,4 @@ ignore = ["RUF012"]
 DJANGO_SETTINGS_MODULE = "api.settings"
 python_files = ["test_*.py"]
 addopts = "--cov=. --cov-report=term-missing"
-# The gate is in `just test-cov`. Here it fails every run until the last task.
+# The gate is in `just check`. Here it would fail on every partial run.

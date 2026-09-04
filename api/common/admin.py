@@ -343,7 +343,7 @@ class PollerWrittenAdmin(BaseModelAdmin):
     Only the three permissions are refused. Django still renders the
     detail page read-only, so a poll error stays readable.
 
-    Seed a database with `just seed-dev`, which polls for real.
+    Seed a database with `just seed-live`, which polls for real.
     """
 
     def has_add_permission(self, request, obj=None):
