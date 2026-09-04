@@ -14,12 +14,16 @@ def related_count(queryset, group_by, ref="pk"):
     Several counts on one row multiply into one another. Each is a
     join, so a service is read once per component per event. Each count
     asks its own question instead.
+
+    Distinct, because the caller may hand in a queryset that already
+    joins. A component on two of one person's boards is one component,
+    and it arrived twice.
     """
     counted = (
         queryset.filter(**{group_by: OuterRef(ref)})
         .order_by()
         .values(group_by)
-        .annotate(total=Count("pk"))
+        .annotate(total=Count("pk", distinct=True))
         .values("total")
     )
     return Coalesce(Subquery(counted, output_field=IntegerField()), 0)

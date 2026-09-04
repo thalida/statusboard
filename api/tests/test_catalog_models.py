@@ -370,6 +370,23 @@ def test_a_services_tracked_count_leaves_out_an_archived_row(db):
     assert prepared.tracked_component_count == 0
 
 
+def test_a_services_tracked_count_counts_a_component_once_per_owner(db):
+    # A person may own several boards. The count says how many of this
+    # service's components are on them. Counting the join rows makes one
+    # component held twice read as two, above a tab listing one.
+    from dashboards.models import Dashboard, DashboardItem
+
+    user = UserFactory()
+    service = ServiceFactory()
+    component = ComponentFactory(service=service)
+    track(component, user=user)
+    second = Dashboard.objects.create(owner=user)
+    DashboardItem.objects.create(dashboard=second, component=component)
+
+    prepared = Service.objects.for_display(user).get(pk=service.pk)
+    assert prepared.tracked_component_count == 1
+
+
 def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
     # The rollup's own name is an exact, weight-A hit. A leaf matches
     # only through its service, at weight C, so it must sort below.
