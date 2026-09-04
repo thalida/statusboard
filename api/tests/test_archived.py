@@ -9,6 +9,12 @@ Three readers have forgotten to call it: the Affects badge,
 `tracked_component_count` and the board write. Each was caught by hand
 in review. Remembering has failed three times, so the suite asks
 instead.
+
+The last test derives its list of paths from the contract. So it fails
+on an operation that serves a component and has no probe. It says
+nothing about a new reader on a path a probe already covers. Another
+query parameter, or a nested component on a schema that path returns,
+adds no path and trips nothing.
 """
 
 from pathlib import Path

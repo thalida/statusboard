@@ -322,8 +322,6 @@ def test_the_descendant_count_leaves_out_an_archived_row(db):
     middle = ComponentFactory(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
     rebuild_ancestry(service)
-    # `update_fields`, because this row is stale: `rebuild_ancestry`
-    # wrote its ancestry after the factory made it.
     leaf.is_archived = True
     leaf.save(update_fields=["is_archived"])
 
