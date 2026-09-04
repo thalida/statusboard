@@ -105,6 +105,8 @@ tags:
   - name: me
   - name: catalog
     description: Public. Services, their components, and incidents.
+  - name: status
+    description: Public. The event feed, one collection for Home, a service and a component.
   - name: board
 
 paths:
@@ -367,6 +369,40 @@ paths:
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/EventAggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
+
+  /events/:
+    get:
+      tags: [status]
+      summary: The event feed
+      description: |
+        One feed, three scopes. Home with `dashboard`, a service with `service`, a component
+        with `component`.
+
+        `phase` takes `open` or `closed`. The line between them is `CLOSED_PHASES` in the
+        code, so a client never restates which phases are terminal.
+      security: [{}, { bearer: [] }]
+      parameters:
+        - { name: dashboard, in: query, schema: { type: string, format: uuid }, description: Requires auth, and must be your own }
+        - { name: service, in: query, schema: { type: string }, description: Service slug }
+        - { name: component, in: query, schema: { type: string, format: uuid } }
+        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] } }
+        - { name: phase, in: query, schema: { type: string, enum: [open, closed] } }
+        - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/PageSize' }
       responses:
         '200':
           description: OK

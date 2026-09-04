@@ -386,6 +386,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "auth"},
         {"name": "me"},
         {"name": "catalog"},
+        {"name": "status"},
         {"name": "board"},
     ],
 }

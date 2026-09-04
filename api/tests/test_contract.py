@@ -114,6 +114,19 @@ def _service_events_probe():
     return APIClient(), url, "id"
 
 
+def _event_list_probe():
+    service = ServiceFactory()
+    ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    return APIClient(), reverse("event-list"), "id"
+
+
 def _component_list_probe():
     service = ServiceFactory()
     ComponentFactory(service=service, is_overall=True)
@@ -138,8 +151,7 @@ def _board_components_probe():
 
 
 # One builder per documented GET path: a client, a live URL, and a field
-# to keep. `/events/` and its children are not here. They are not in
-# the contract yet, so this test does not cover them until they land.
+# to keep.
 FIELDS_PROBES = {
     "/meta/": _meta_probe,
     "/me/": _me_probe,
@@ -150,6 +162,7 @@ FIELDS_PROBES = {
     "/catalog/components/": _component_list_probe,
     "/catalog/components/{uuid}/": _component_detail_probe,
     "/dashboards/{uuid}/components/": _board_components_probe,
+    "/events/": _event_list_probe,
 }
 
 

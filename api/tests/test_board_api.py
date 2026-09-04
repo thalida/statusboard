@@ -22,20 +22,11 @@ from tests.factories import (
 
 
 @pytest.fixture
-def board(db):
-    user = User.objects.create(email="a@b.com")
-    return user.default_dashboard
-
-
-@pytest.fixture
-def client(board):
-    from rest_framework_simplejwt.tokens import RefreshToken
-
-    api = APIClient()
-    api.credentials(
-        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(board.owner).access_token}"
-    )
-    return api
+def client(authenticated_client):
+    # Every test in this module reads or writes one board as its
+    # owner. The plain `client` fixture stays anonymous everywhere
+    # else, so this override is local to this module.
+    return authenticated_client
 
 
 def _track(board, severity=Severity.OPERATIONAL, slug=None):
