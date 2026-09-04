@@ -367,6 +367,11 @@ UNFOLD = {
                         "icon": "person",
                         "link": reverse_lazy("admin:authentication_user_changelist"),
                     },
+                    {
+                        "title": _("Service requests"),
+                        "icon": "playlist_add",
+                        "link": reverse_lazy("admin:catalog_servicerequest_changelist"),
+                    },
                 ],
             },
         ],

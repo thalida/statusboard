@@ -661,6 +661,28 @@ def test_service_requests_are_listed_by_demand(admin_client, db):
     assert response.content.index(b"b.example") < response.content.index(b"a.example")
 
 
+def test_the_sidebar_names_every_top_level_destination():
+    # A changelist that answers is not one anyone can find. The sidebar
+    # is the only listing browsed without a URL. Every top-level page
+    # needs a title in it.
+    from django.conf import settings
+
+    titles = {
+        str(item["title"])
+        for group in settings.UNFOLD["SIDEBAR"]["navigation"]
+        for item in group["items"]
+    }
+    for title in (
+        "Dashboard",
+        "Services",
+        "Polling",
+        "Boards",
+        "Users",
+        "Service requests",
+    ):
+        assert title in titles, f"{title} has no sidebar entry"
+
+
 @pytest.mark.django_db
 def test_the_component_list_offers_the_featured_checkbox(admin_client, db):
     # list_editable renders the flag as a checkbox in the row. Without
