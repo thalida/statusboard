@@ -131,10 +131,11 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
 
 
 class EventUpdateInline(TabularInline):
-    """The provider's update log, read only.
+    """The event's update log, read only.
 
-    These are the provider's words, written by a poll. Editing them here
-    would make the admin disagree with the status page it mirrors.
+    A poll writes these. Most are the provider's words. A claimed event
+    also holds ours. Editing any of them here would make the admin
+    disagree with the status page it mirrors.
     """
 
     model = EventUpdate
@@ -145,9 +146,15 @@ class EventUpdateInline(TabularInline):
     # Read only, but still worth opening: the row is a summary.
     show_change_link = True
     per_page = 10
-    fields = ["phase", "body", "posted_at"]
+    # A claimed event interleaves our updates with the provider's.
+    # Without the source the timeline reads as one author.
+    fields = ["phase", "display_source", "body", "posted_at"]
     readonly_fields = fields
     ordering = ["-posted_at"]
+
+    @display(description=_("Source"))
+    def display_source(self, obj):
+        return obj.get_source_display()
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -161,6 +168,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_when",
         "display_kind",
         "display_phase",
+        "display_detected_by",
         "display_related",
     ]
     date_hierarchy = "starts_at"
@@ -172,6 +180,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         ("affected_components", AutocompleteSelectFilter),
         ("poll_run", AutocompleteSelectFilter),
         ("kind", ChoicesDropdownFilter),
+        ("detected_by", ChoicesDropdownFilter),
         PhaseFilter,
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),
@@ -254,7 +263,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
                     ]
                 },
             ),
-            (_("Classification"), {"fields": ["kind", "phase"]}),
+            (_("Classification"), {"fields": ["kind", "phase", "detected_by"]}),
             (_("Span"), {"fields": ["starts_at", "ends_at"]}),
             audit_section(),
         ]
@@ -321,6 +330,12 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     def display_kind(self, obj):
         return EventKind(obj.kind).label
 
+    @display(description=_("Detected by"), ordering="detected_by")
+    def display_detected_by(self, obj):
+        # `external_id IS NULL` cannot answer this. A claim fills the
+        # column in, which destroys the fact that we found it first.
+        return obj.get_detected_by_display()
+
     @display(description=_("Phase"), label=True, ordering="phase")
     def display_phase(self, obj):
         # A closed phase means the event is over.
@@ -338,6 +353,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_event",
         "display_service",
         "phase",
+        "display_source",
         "posted_at",
     ]
     display_update = record_column(_("Update"))
@@ -352,13 +368,19 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     list_filter = [
         ("event__service", AutocompleteSelectFilter),
         ("event", AutocompleteSelectFilter),
+        ("source", ChoicesDropdownFilter),
         ("posted_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
     fieldsets = [
-        (None, {"fields": ["event", "phase", "posted_at", "body"]}),
+        (None, {"fields": ["event", "phase", "source", "posted_at", "body"]}),
         audit_section(),
     ]
+
+    @display(description=_("Source"), ordering="source")
+    def display_source(self, obj):
+        # Who wrote the post. A claimed event holds both, one per update.
+        return obj.get_source_display()
 
     @display(description=_("Service"), ordering="event__service__name")
     def display_service(self, obj):

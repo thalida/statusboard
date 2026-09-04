@@ -769,3 +769,123 @@ def test_the_polling_schedule_page_opens(staff_client):
     url = reverse("admin:django_celery_beat_periodictask_change", args=[task.pk])
 
     assert staff_client.get(url).status_code == 200
+
+
+@pytest.fixture
+def claimed_event():
+    """An outage we found first, later claimed by the provider.
+
+    Both updates hang off one event. That interleaving is what the
+    claim mechanism produces, and what the admin has to tell apart.
+    """
+    from status.choices import EventKind, EventSource, IncidentPhase
+    from status.models import EventUpdate, ServiceEvent
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+    ours = ServiceEvent.objects.create(
+        service=service,
+        kind=EventKind.INCIDENT,
+        title="We saw it first",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+        detected_by=EventSource.SYSTEM,
+    )
+    theirs = ServiceEvent.objects.create(
+        service=service,
+        external_id="their-1",
+        kind=EventKind.INCIDENT,
+        title="They saw it first",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+        detected_by=EventSource.PROVIDER,
+    )
+    EventUpdate.objects.create(
+        event=ours,
+        phase=IncidentPhase.DETECTED,
+        body="Our detection",
+        posted_at=timezone.now(),
+        source=EventSource.SYSTEM,
+    )
+    EventUpdate.objects.create(
+        event=ours,
+        phase=IncidentPhase.INVESTIGATING,
+        body="Their first post",
+        posted_at=timezone.now(),
+        source=EventSource.PROVIDER,
+    )
+    return ours, theirs
+
+
+@pytest.mark.django_db
+def test_the_event_list_says_who_found_the_outage(staff_client, claimed_event):
+    # `detected_by` answers "did we find this first". It was on no
+    # changelist, so the table could not be read for it.
+    body = staff_client.get(
+        reverse("admin:status_serviceevent_changelist")
+    ).content.decode()
+    assert "field-display_detected_by" in body
+    assert ">Statusboard</td>" in body
+
+
+@pytest.mark.django_db
+def test_events_can_be_filtered_by_who_detected_them(staff_client, claimed_event):
+    # Two halves. The option has to be offered, and picking it has to
+    # narrow. Django allows a local-field lookup whether or not a filter
+    # declares it, so the queryset alone proves nothing.
+    from status.choices import EventSource
+
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_changelist")
+    assert 'id="id_detected_by__exact"' in staff_client.get(url).content.decode()
+
+    response = staff_client.get(url, {"detected_by__exact": EventSource.SYSTEM})
+    assert list(response.context["cl"].queryset) == [ours]
+
+
+@pytest.mark.django_db
+def test_the_event_page_says_who_found_the_outage(staff_client, claimed_event):
+    # A claim fills `external_id` in, so the record alone cannot say who
+    # opened the event. Only this field can.
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_change", args=[ours.pk])
+    body = staff_client.get(url).content.decode()
+    assert "Detected by" in body
+    assert ">Statusboard</div>" in body
+
+
+@pytest.mark.django_db
+def test_an_events_timeline_says_who_wrote_each_update(staff_client, claimed_event):
+    # We opened this event, so the only Provider on the page is an
+    # update the provider wrote. Without the source the timeline reads
+    # as one author.
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_change", args=[ours.pk])
+    assert ">Provider</div>" in staff_client.get(url).content.decode()
+
+
+@pytest.mark.django_db
+def test_the_update_list_says_who_wrote_each_post(staff_client, claimed_event):
+    # The same question on the updates table, where a person arrives
+    # from a filtered link rather than from the event.
+    body = staff_client.get(
+        reverse("admin:status_eventupdate_changelist")
+    ).content.decode()
+    assert "field-display_source" in body
+    assert ">Statusboard</td>" in body
+    assert ">Provider</td>" in body
+
+
+@pytest.mark.django_db
+def test_updates_can_be_filtered_by_who_wrote_them(staff_client, claimed_event):
+    # Offered and narrowing, for the same reason as the event filter.
+    from status.choices import EventSource
+    from status.models import EventUpdate
+
+    url = reverse("admin:status_eventupdate_changelist")
+    assert 'id="id_source__exact"' in staff_client.get(url).content.decode()
+
+    response = staff_client.get(url, {"source__exact": EventSource.SYSTEM})
+    assert list(response.context["cl"].queryset) == [
+        EventUpdate.objects.get(source=EventSource.SYSTEM)
+    ]
