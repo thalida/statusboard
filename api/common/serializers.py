@@ -49,9 +49,14 @@ class MetaSerializer(FieldsMixin, serializers.Serializer):
         `FieldsMixin` cannot prune inside it on its own. This reads the
         branch under "enums" and filters by hand instead. `MetaView`
         still names every enum in the one place it always has.
+
+        `reject_unknown` is the same refusal `_prune` makes. Without it
+        a typed enum name answered `200 {"enums": {}}`, which is the
+        empty payload the 400 exists to prevent.
         """
         enums = obj["enums"]
         wanted = self.child_tree("enums")
         if not wanted:
             return enums
+        self.reject_unknown(wanted, enums)
         return {name: labels for name, labels in enums.items() if name in wanted}

@@ -53,12 +53,20 @@ class FieldsMixin:
                 branch.add(tail)
         return tree
 
-    def _prune(self, tree):
-        unknown = sorted(set(tree) - set(self.fields))
+    def reject_unknown(self, names, known):
+        """Refuse a path that names nothing, for a reader that prunes itself.
+
+        A name nothing serves used to pop every field and answer
+        `200 {}`. A typo, or a field a later change renames, then read
+        as a server with nothing to say.
+
+        `_prune` recurses into a nested serializer. A plain dict and a
+        method field hold no `fields`, so the recursion stops before
+        them. Such a reader filters by hand and calls this. One rule
+        then answers for every place a dotted path is accepted.
+        """
+        unknown = sorted(set(names) - set(known))
         if unknown:
-            # A name nothing serves used to pop every field and answer
-            # `200 {}`. A typo, or a field a later change renames, then
-            # read as a server with nothing to say.
             raise ValidationError(
                 {
                     self.fields_param or "fields": [
@@ -66,6 +74,9 @@ class FieldsMixin:
                     ]
                 }
             )
+
+    def _prune(self, tree):
+        self.reject_unknown(tree, self.fields)
         for name in set(self.fields) - set(tree):
             self.fields.pop(name)
         for name, children in tree.items():

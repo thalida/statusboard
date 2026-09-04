@@ -97,6 +97,16 @@ def test_fields_keeps_two_dotted_paths_under_enums():
 
 
 @pytest.mark.django_db
+def test_fields_refuses_an_unknown_name_under_enums():
+    # `enums` is a plain dict, filtered by hand, so `_prune` never saw
+    # this name. It answered `200 {"enums": {}}`, which is the silent
+    # empty payload the 400 exists to prevent.
+    response = APIClient().get(reverse("meta") + "?fields=enums.nonsense")
+    assert response.status_code == 400
+    assert response.json() == {"fields": ["Unknown field: nonsense."]}
+
+
+@pytest.mark.django_db
 def test_meta_publishes_the_deployment_defaults():
     body = APIClient().get(reverse("meta")).json()
     assert body["poll_interval_seconds"] == 300

@@ -292,6 +292,36 @@ def test_a_path_carries_enough_to_link_to_each_step():
 
 
 @pytest.mark.django_db
+def test_fields_prunes_inside_a_path_step():
+    # `path` is a method field, so `_prune` cannot reach the step
+    # serializer. A dotted path into it was ignored, and the contract
+    # promises a dotted path prunes wherever it is accepted.
+    service = ServiceFactory(name="Twilio")
+    overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
+    child = ComponentFactory(service=service, name="SMS", parent=overall)
+
+    url = reverse("component-detail", args=[child.id])
+    body = APIClient().get(url, {"fields": "path.name"}).json()
+
+    assert body["path"] == [{"name": "Twilio"}]
+
+
+@pytest.mark.django_db
+def test_fields_refuses_an_unknown_name_under_a_path_step():
+    # Nothing pruned and nothing refused. A typo read as a step that
+    # holds every field, which is the opposite of what was asked for.
+    service = ServiceFactory(name="Twilio")
+    overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
+    child = ComponentFactory(service=service, name="SMS", parent=overall)
+
+    url = reverse("component-detail", args=[child.id])
+    response = APIClient().get(url, {"fields": "path.nonsense"})
+
+    assert response.status_code == 400
+    assert response.json() == {"fields": ["Unknown field: nonsense."]}
+
+
+@pytest.mark.django_db
 def test_a_finished_maintenance_window_is_not_live():
     # A provider often leaves the phase behind when a window ends, so
     # the end matters as much as the phase.

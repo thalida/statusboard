@@ -38,7 +38,7 @@ class ServiceRefSerializer(FieldsMixin, serializers.ModelSerializer):
         fields = ["id", "slug", "name", "logo"]
 
 
-class PathNodeSerializer(serializers.ModelSerializer):
+class PathNodeSerializer(FieldsMixin, serializers.ModelSerializer):
     """One step above a component, enough to link to it.
 
     A joined string named the ancestors and gave a client nothing to
@@ -105,7 +105,12 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         # did not.
         if row.is_overall:
             return []
-        return PathNodeSerializer(row.ancestors, many=True).data
+        return PathNodeSerializer(
+            row.ancestors,
+            many=True,
+            context=self.context,
+            fields_tree=self.child_tree("path"),
+        ).data
 
     @extend_schema_field(serializers.IntegerField())
     def get_descendant_count(self, row):
