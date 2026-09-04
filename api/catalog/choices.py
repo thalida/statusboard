@@ -33,5 +33,5 @@ class ServiceSource(models.TextChoices):
     as a shell or a migration, reads manual. It was not imported.
     """
 
-    MANUAL = "manual", "Added by hand"
+    MANUAL = "manual", "Manual"
     IMPORT = "import", "Imported from a status page"
