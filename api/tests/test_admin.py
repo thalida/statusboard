@@ -626,21 +626,6 @@ def test_a_person_cannot_open_somebody_elses_board():
 
 
 @pytest.mark.django_db
-def test_the_service_admin_features_through_the_overall_component(admin_client, db):
-    # is_featured moved to the component. An admin asks "feature this
-    # service", so the service page has to answer it.
-    from tests.factories import ComponentFactory, ServiceFactory
-
-    service = ServiceFactory()
-    ComponentFactory(service=service, is_overall=True)
-    response = admin_client.get(
-        reverse("admin:catalog_service_change", args=[service.pk])
-    )
-    assert response.status_code == 200
-    assert b"is_featured" in response.content
-
-
-@pytest.mark.django_db
 def test_the_component_list_shows_watchers(admin_client, db):
     # The count is an annotation. A column that forgets to annotate it
     # raises rather than showing a wrong number. A column with no
@@ -695,7 +680,7 @@ def test_the_feature_action_flips_the_flag(admin_client, db):
 @pytest.mark.django_db
 def test_the_unfeature_action_flips_it_back(admin_client, db):
     # The reverse has to exist too. Otherwise featuring by mistake is
-    # permanent, short of editing the row through the service's inline.
+    # permanent, short of editing the row on its change page.
     from tests.factories import ComponentFactory
 
     component = ComponentFactory(is_featured=True, is_overall=True)
@@ -708,48 +693,55 @@ def test_the_unfeature_action_flips_it_back(admin_client, db):
 
 
 @pytest.mark.django_db
-def test_the_feature_action_skips_a_non_overall_component(admin_client, db):
-    # `suggested` sorts every component on `-is_featured` first, rollups
-    # included. Featuring a leaf would win Discover outright. Nothing in
-    # the design intends that, so the action must refuse it and say why.
+def test_the_feature_action_features_a_leaf(admin_client, db):
+    # Discover lists every component, and `suggested` reads the flag on
+    # every row. Featuring one part of a service is an editorial choice
+    # an admin is allowed to make.
     from tests.factories import ComponentFactory
 
     leaf = ComponentFactory(is_featured=False, is_overall=False)
-    response = admin_client.post(
+    admin_client.post(
         reverse("admin:catalog_servicecomponent_changelist"),
         {"action": "feature_selected", "_selected_action": [str(leaf.pk)]},
-        follow=True,
     )
     leaf.refresh_from_db()
-    assert leaf.is_featured is False
-    assert b"skipped" in response.content
+    assert leaf.is_featured is True
 
 
 @pytest.mark.django_db
-def test_a_mixed_selection_features_the_overall_one_and_skips_the_leaf(
-    admin_client, db
-):
-    # A selection an admin makes by hand is not guaranteed to be clean.
-    # The overall row still gets featured; the leaf does not, silently
-    # or otherwise.
+def test_the_feature_action_takes_a_mixed_selection_whole(admin_client, db):
+    # A rollup and a leaf are both featurable, so a selection holding
+    # one of each leaves nothing behind.
     from tests.factories import ComponentFactory, ServiceFactory
 
     service = ServiceFactory()
     overall = ComponentFactory(service=service, is_overall=True, is_featured=False)
     leaf = ComponentFactory(service=service, is_overall=False, is_featured=False)
-    response = admin_client.post(
+    admin_client.post(
         reverse("admin:catalog_servicecomponent_changelist"),
         {
             "action": "feature_selected",
             "_selected_action": [str(overall.pk), str(leaf.pk)],
         },
-        follow=True,
     )
     overall.refresh_from_db()
     leaf.refresh_from_db()
     assert overall.is_featured is True
-    assert leaf.is_featured is False
-    assert b"skipped" in response.content
+    assert leaf.is_featured is True
+
+
+@pytest.mark.django_db
+def test_the_component_form_features_a_leaf(staff_client):
+    # The change page is where an admin already is when they decide to
+    # feature something. Without the field the form cannot set it.
+    from tests.factories import ComponentFactory
+
+    leaf = ComponentFactory(is_overall=False, is_featured=False)
+    url, data = component_form_data(staff_client, leaf, is_featured="on")
+    assert staff_client.post(url, data).status_code == 302
+
+    leaf.refresh_from_db()
+    assert leaf.is_featured is True
 
 
 @pytest.mark.django_db

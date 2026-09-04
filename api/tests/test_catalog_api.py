@@ -250,6 +250,24 @@ def test_a_featured_component_still_leads():
 
 
 @pytest.mark.django_db
+def test_a_featured_leaf_leads_as_well_as_a_featured_rollup():
+    # Discover lists every component, and the sort reads the flag on
+    # every row. Featuring one part of a service surfaces that part.
+    service = ServiceFactory(name="Twilio")
+    StatusPageFactory(service=service)
+    _with_status(service, Severity.MAJOR_OUTAGE, is_overall=True, external_id="roll")
+    leaf = _with_status(service, Severity.OPERATIONAL, external_id="leaf")
+    leaf.name = "SMS"
+    leaf.is_featured = True
+    leaf.save(update_fields=["name", "is_featured"])
+
+    names = [
+        r["name"] for r in APIClient().get(reverse("component-list")).json()["results"]
+    ]
+    assert names[0] == "SMS"
+
+
+@pytest.mark.django_db
 def test_a_component_with_no_reading_sorts_last_not_first():
     # Never seen is not the same as healthy, and it must not pose as
     # broken either.

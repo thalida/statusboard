@@ -304,35 +304,6 @@ class ComponentSeverityFilter(DropdownFilter):
         )
 
 
-class OverallComponentInline(StackedInline):
-    """Featuring lives on the rollup, and an admin asks about the service.
-
-    `is_featured` is the first key of the suggested sort. Ticking it on
-    a service's overall component is what surfaces that service, so
-    that is the question this answers.
-
-    `ServiceComponentInline` also edits `ServiceComponent`, through the
-    same FK. `ModelAdmin._create_formsets` auto-suffixes a repeated
-    prefix, so the two never collide even though both derive the same
-    default one.
-    """
-
-    model = ServiceComponent
-    fields = ["is_featured"]
-    extra = 0
-    max_num = 1
-    can_delete = False
-    verbose_name = "Featuring"
-    verbose_name_plural = "Featuring"
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).filter(is_overall=True)
-
-    def has_add_permission(self, request, obj):
-        # Reconcile makes the rollup. An admin ticks its flag.
-        return False
-
-
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
@@ -369,7 +340,6 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     # What the service is, then what is happening to it. Then how it
     # is configured, then the log of us reading it.
     inlines = [
-        OverallComponentInline,
         ServiceComponentInline,
         ServiceEventInline,
         StatusPageInline,
@@ -526,8 +496,9 @@ class ServiceComponentAdmin(
         "display_archived",
         "display_related",
         "watchers",
-        # Only the overall component's flag surfaces its service. The
-        # flag is real on any row, but only that one row does anything.
+        # `suggested` reads this flag on every component. Ticking it on
+        # a rollup surfaces the service. Ticking it on a leaf surfaces
+        # that part.
         "is_featured",
     ]
     search_fields = [
@@ -572,6 +543,16 @@ class ServiceComponentAdmin(
         (
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
+        ),
+        (
+            _("Featuring"),
+            {
+                "fields": ["is_featured"],
+                "description": _(
+                    "Leads the suggested sort on the catalog. Tick it on a "
+                    "service's overall component to surface the service."
+                ),
+            },
         ),
         audit_section(),
     ]
@@ -668,40 +649,33 @@ class ServiceComponentAdmin(
     def watchers(self, obj):
         return obj.watcher_count
 
-    def _skip_note(self, queryset):
-        """How many of the selection the action would not touch, and why.
-
-        `suggested` sorts on `-is_featured` first, over every component,
-        rollups included. Featuring a leaf would win Discover outright,
-        which nothing intends. Only the overall component may hold the
-        flag, so a silent skip would look like nothing happened.
-        """
-        skipped = queryset.exclude(is_overall=True).count()
-        if not skipped:
-            return ""
-        return " " + _(
-            "%(skipped)d selected component(s) skipped: not an overall component."
-        ) % {"skipped": skipped}
-
     @admin.action(description=_("Feature selected components"))
     def feature_selected(self, request, queryset):
+        """Feature every selected component, rollup or leaf.
+
+        The change form above sets the same flag one row at a time.
+        Both are unrestricted, because `suggested` reads the flag on
+        every component and a featured leaf is a real editorial choice.
+        """
         count = 0
-        for component in queryset.filter(is_overall=True, is_featured=False):
+        for component in queryset.filter(is_featured=False):
             component.is_featured = True
             component.save(update_fields=["is_featured"])
             count += 1
-        message = _("Featured %(count)d component(s).") % {"count": count}
-        self.message_user(request, message + self._skip_note(queryset))
+        self.message_user(
+            request, _("Featured %(count)d component(s).") % {"count": count}
+        )
 
     @admin.action(description=_("Unfeature selected components"))
     def unfeature_selected(self, request, queryset):
         count = 0
-        for component in queryset.filter(is_overall=True, is_featured=True):
+        for component in queryset.filter(is_featured=True):
             component.is_featured = False
             component.save(update_fields=["is_featured"])
             count += 1
-        message = _("Unfeatured %(count)d component(s).") % {"count": count}
-        self.message_user(request, message + self._skip_note(queryset))
+        self.message_user(
+            request, _("Unfeatured %(count)d component(s).") % {"count": count}
+        )
 
 
 @admin.register(ServiceRequest)
