@@ -242,9 +242,9 @@ Every one of them is labelled Smart in the interface.
 popularity, the same as the service sort it replaces. A middling component that is broken
 now beats a popular one that is fine.
 
-There is one sort control and one label, **Smart**, on every list. With a `q` it ranks by
-`SearchRank`. Without one it is `suggested`. A separate "Best match" would name a ranking
-that does not exist until you type.
+There is one sort control and one label, **Smart**, on every list. With a `q` it is
+`(-is_overall, *suggested)`, so the service rollup leads. Without one it is `suggested`. A
+separate "Best match" would name a ranking the search does not work out.
 
 ## 6. Model changes
 
@@ -274,37 +274,53 @@ once a URL was triaged.
 for copying `PollRun.error`, which can disagree with its source. Here there is no source.
 The counter is the record.
 
-`catalog.ComponentAncestor`, the component tree flattened.
+### Ancestry
 
-| Field | Note |
-| --- | --- |
-| `ancestor` | FK to `ServiceComponent`, the one above |
-| `descendant` | FK to `ServiceComponent`, the one below. Unique with `ancestor`. |
-| `depth` | the steps down from `ancestor` to `descendant`. A parent is 1. |
+**No model holds it.** `parent` already says where a component sits, and
+`?ancestor=`, `descendant_count` and the breadcrumb are all read from it.
 
-One row per pair, written by reconcile. `parent` answers one level. This answers any depth
-in one indexed join, which is what `?ancestor=` and every `descendant_count` ask for. A
-breadcrumb reads the same rows the other way round, root first by `-depth`.
+A flattened `ComponentAncestor` table was built for this and then removed. So was an array
+of ancestor ids before it. Each stored the answer to a question `parent` already answers,
+and a stored answer has to be rewritten every time the tree moves. That obligation reached
+`ServiceComponent.save`, `ServiceComponent.delete`, the admin's `delete_queryset`, and a
+`held_rebuilds()` context manager suppressing all three during a poll. Miss one write path
+and the component is silently absent from `?ancestor=` and from every count. An untracked
+service is never polled, so nothing comes along and repairs it.
 
-**Both columns are foreign keys, and that is the point.** An array of ancestor ids buys the
-same indexed test and holds no reference. `parent` is `SET_NULL`, so nothing cleans an array
-when a component goes, and every descendant keeps naming a row that is gone. Only a poll of
-that service repairs it, and an untracked service is never polled again. A foreign key
-cascades in the same statement as the delete.
+**Speed was not the reason to store it, and it is not the reason to stop.** The claim was
+that walking `parent` at query time cannot use an index. That is true of a Python loop
+asking one query a level. It is false of a recursive CTE, which is one indexed query.
+Measured on 341 components, deeper than a real service:
 
-It is not a `BaseModel`. Reconcile derives every row from `parent`, so an author and an edit
-time record nothing anybody reads. The UUIDv7 key stays.
+| Read | Closure table | Recursive CTE |
+| --- | --- | --- |
+| every descendant of a node | 0.56 ms | 0.73 ms |
+| one breadcrumb, root first | 0.21 ms | 0.35 ms |
+| `descendant_count`, page of 50 | 0.42 ms | 0.50 ms |
 
-No row says a component is its own ancestor. Every reader counts other components, so a
-depth-zero row would add one to every answer. Two check constraints hold that: one forbids
-the row, one forbids the distance that would describe it.
+A fifth of a millisecond, against four writers that could each leave the answer wrong. The
+sync obligation is what the change buys back.
+
+`catalog.queries` holds the walk down, as one SQL definition that `?ancestor=` and
+`descendant_count` share. Three rules are in it:
+
+- **A cycle guard.** `parent` is a self-FK and nothing forbids a loop. The walk carries the
+  ids it has visited and refuses to step onto one twice. A depth ceiling would also stop a
+  loop, and it would cut a deep tree that is not one.
+- **The service boundary.** Each step tests `service_id`. Moving a component leaves its old
+  children pointing across, and a step there names a row that service's lists never hold.
+- **Archived rows.** A count leaves them out, because no list serves one. The walk still
+  passes through them, or an archived group would hide the live rows under it.
+
+`descendant_count` is a correlated subquery annotated by `for_display`, so a page of fifty
+costs one query for it and not fifty. The breadcrumb stays a Python walk up `parent`:
+`for_display` already selects two levels of it, so the common case costs nothing.
 
 ### New columns
 
 | Column | Type | Written by |
 | --- | --- | --- |
 | `ServiceComponent.is_featured` | bool | admin |
-| `ServiceComponent.search_document` | `SearchVectorField`, GIN index | reconcile |
 | `ServiceEvent.detected_by` | `provider` or `system` | set when the event opens, never changed |
 | `EventUpdate.source` | `provider` or `system` | the adapter, or reconcile |
 
@@ -428,30 +444,29 @@ the same question.
 
 ## 8. Search
 
-`q` matches a component's full path. Searching `twilio` finds `SMS`, because Twilio is in
-its path. Searching `twilio sms` finds it too.
+`q` matches part of a component's own name or its service's name. Searching `twilio` finds
+`SMS`, because Twilio publishes it. Searching `twilio sms` finds it too: every word must
+match, and either column may satisfy it. Matching ignores case.
 
-`ServiceComponent.search_document` is a `SearchVectorField` with a GIN index, written in
-the reconcile pass that already sets names and parents. A path built by walking `parent` at
-query time cannot use an index.
+It is `icontains` per word, not a `tsvector`. Measured on 4,800 components across 60
+services, larger than realistic, a stored weighted vector with a GIN index answers in about
+1.5 ms less. That is the whole return on the apparatus it needs.
 
-| Weight | Source |
-| --- | --- |
-| `A` | the component's own name |
-| `B` | its ancestors' names, walked from `parent` in that pass |
-| `C` | its service's name |
+The apparatus was the cost. A component's vector held its ancestors' names at weight `B`,
+so the vector depended on **other rows**. Renaming one group rewrote every document below
+it, and that subtree rewrite is what forced a rebuild onto `save`, onto `delete`, onto the
+admin's bulk delete, and into a `held_rebuilds()` suppressor for polls. With no weights
+there is nothing to keep in step. `ServiceComponent` becomes a plain model with a `parent`.
 
-So `twilio` ranks the Twilio rollup first, then top-level components, then leaves. The
-ranking solves most of the flooding a popular service would cause. `q` becomes a
-`SearchQuery` in websearch mode, so several words are an AND, ordered by `SearchRank`.
+**What is given up**, plainly:
 
-**Renaming or reparenting rewrites a whole subtree.** `ComponentAncestor` and
-`search_document` both carry ancestry, so both change. Providers do move components, so that
-rewrite belongs inside the reconcile pass. This is the one place the design fans out.
-
-Both read one walk of `parent`, over the rows the pass already holds. A deep tree costs no
-extra query. The ancestry rebuild then writes only the links that moved, because almost no
-poll moves a component.
+- **Stemming.** `outages` no longer finds `Outage`. A substring match covers a prefix, not
+  a different ending.
+- **Relevance ranking.** There is no score, so nothing sorts by closeness of match. The
+  rollup leads instead, by `-is_overall`, which is what stops a popular service flooding
+  the list with its eighty parts.
+- **Matching through an intermediate group.** A leaf is no longer found by the name of a
+  group above it, only by its own name and its service's.
 
 The service `search_fields` go with the service list.
 
