@@ -409,8 +409,8 @@ Unique on `(dashboard, component)`.
 ### Every service has an overall component
 
 Statusboard creates one component per service, `is_overall = true`, `parent = null`, named
-"All services". `path` is null, since it has no ancestry, and `descendant_count` is 0 — it is a peer of
-the top-level components rather than their parent.
+"All services". `path` is empty, since it has no ancestry, and `descendant_count` is 0. It is a peer of
+the top-level components rather than their parent, and no adapter nests anything under it.
 
 **`component_count` excludes it.** The number equals what the provider's own status page claims,
 which is the number a user can check. The components list returns the overall row first and does

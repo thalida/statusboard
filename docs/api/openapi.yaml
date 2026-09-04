@@ -827,9 +827,9 @@ components:
             rather than a copy of its fields. One FK, one nested serializer.
 
             It is a plain `Component`, the same shape a component has anywhere else, so one
-            renderer draws every row. Five of its fields are fixed by what an overall component is:
-            `parent` and `path` are null, `descendant_count` is 0, `is_overall` is true, and `name`
-            is the service name. They are returned rather than omitted. A client that
+            renderer draws every row. Five of its fields follow from what an overall component is:
+            `parent` is null, `path` is empty, `descendant_count` is 0, `is_overall` is true, and
+            `name` is the service name. They are returned rather than omitted. A client that
             special-cased them would need a second renderer to gain nothing.
 
             This is the one place an archived component is served. A provider can stop publishing
@@ -888,8 +888,9 @@ components:
             How many components sit anywhere under this one. A component is a group when this
             is above zero. There is no is_group flag.
 
-            Always 0 on the overall component. It is a peer of the top-level components, not their
-            parent.
+            0 on the overall component. The rollup is a peer of the top-level components, not
+            their parent, and no adapter nests anything under it. The number is counted rather
+            than fixed, so a component parented under the rollup would raise it.
         is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
         archived_at: { type: string, format: date-time, nullable: true, description: 'When the provider stopped publishing the component. An archived component is not served, so this is null everywhere but `Service.overall_component`.' }
         status: { $ref: '#/components/schemas/Status' }
