@@ -53,3 +53,30 @@ def test_the_system_account_exists_before_anything_writes():
     assert account.is_active is False
     # It signed itself, so no row the system wrote is left unsigned.
     assert account.created_by_id == account.pk
+
+
+def test_a_column_with_two_defaults_declares_one_value():
+    """`default` and `db_default` do different jobs, on the same column.
+
+    Without `default` an unsaved instance holds a sentinel rather than
+    the value. Without `db_default` the column carries no default, and
+    a writer that predates it fails the insert.
+
+    A field needs both. If the two ever disagree, a row Python makes
+    and a row SQL makes differ on one column. Nothing would say so.
+    """
+    from django.apps import apps
+    from django.db.models import NOT_PROVIDED
+
+    both = {
+        f"{model._meta.label}.{field.name}": (field.default, field.db_default)
+        for model in apps.get_models()
+        for field in model._meta.concrete_fields
+        if field.default is not NOT_PROVIDED and field.db_default is not NOT_PROVIDED
+    }
+    # Nothing declaring both would make the check below vacuous.
+    assert both
+    disagreeing = {
+        name: values for name, values in both.items() if values[0] != values[1]
+    }
+    assert not disagreeing, f"two defaults, two values: {disagreeing}"
