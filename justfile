@@ -95,6 +95,10 @@ lint:
 prose *args:
     @python3 bin/check_prose.py {{args}}
 
+# Test bin/ scripts. Stdlib only, so it needs no venv and no Django.
+test-bin:
+    @python3 -m unittest discover -s bin/tests -v
+
 # Slower than `just test`, and the answer that counts: it proves the
 # image rather than the host. Run it before opening a pull request.
 
@@ -104,6 +108,7 @@ check: image
     docker compose -f docker-compose.test.yml run --rm ruff
     docker compose -f docker-compose.test.yml run --rm docs
     @python3 bin/check_prose.py
+    @just test-bin
     docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
       -c 'python manage.py makemigrations --check --dry-run'
     docker compose -f docker-compose.test.yml down -v
