@@ -69,6 +69,10 @@ class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
         DRF reads `ordering` as an attribute, so a method cannot supply
         it. It does not check a default against `ordering_fields`
         either, so neither branch below needs an entry there.
+
+        There is one sort control and one label, Smart, on every list. A
+        separate "best match" would name a ranking the search does not
+        work out.
         """
         super().initial(request, *args, **kwargs)
         if request.query_params.get("q"):
@@ -79,17 +83,6 @@ class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
         elif request.query_params.get("service"):
             # A service tab reads down the provider's own page.
             self.ordering = ["status_page_order"]
-
-    def filter_queryset(self, queryset):
-        """Narrow to what the caller typed, before the backends run.
-
-        One control and one label, Smart, on every list. A separate
-        "best match" would name a ranking the search does not work out.
-        """
-        q = self.request.query_params.get("q")
-        if q:
-            queryset = queryset.search(q)
-        return super().filter_queryset(queryset)
 
 
 @extend_schema_view(

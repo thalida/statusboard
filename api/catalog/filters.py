@@ -13,6 +13,7 @@ from common.filters import SeverityFilterMixin
 
 
 class ComponentFilter(SeverityFilterMixin):
+    q = filters.CharFilter(method="filter_q")
     service = filters.CharFilter(field_name="service__slug")
     # Every descendant, not one level. `parent` would name a query this
     # does not run.
@@ -25,6 +26,15 @@ class ComponentFilter(SeverityFilterMixin):
     class Meta:
         model = ServiceComponent
         fields = {"is_overall": ["exact"]}
+
+    def filter_q(self, queryset, name, value):
+        """Narrow to what the caller typed, beside the other parameters.
+
+        `ServiceComponentQuerySet.search` is the one definition of what a
+        word matches. The view read `q` out of the request instead. A
+        documented parameter then sat outside the filter set.
+        """
+        return queryset.search(value)
 
     def filter_ancestor(self, queryset, name, value):
         """Ask the tree for the ids below, then narrow to them.
