@@ -526,6 +526,20 @@ class ServiceComponent(BaseModel):
         return list(reversed(chain))
 
     @property
+    def visible_ancestors(self):
+        """The ancestors a caller is served, top down.
+
+        `ServiceComponentQuerySet.visible` is the same rule in SQL.
+        `ancestors` has already loaded these rows, so asking the
+        database again would cost a query a row.
+
+        A dropped step makes the chain shorter, never broken. Every
+        other reader answers "not served" by leaving the row out. A
+        marker node would carry an id nothing can fetch.
+        """
+        return [row for row in self.ancestors if not row.is_archived]
+
+    @property
     def path(self):
         """Where the component sits, read from the service down."""
         names = [self.service.name, *(a.name for a in self.ancestors), self.name]

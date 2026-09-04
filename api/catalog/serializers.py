@@ -103,10 +103,13 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         # `ancestors` walks the chain and guards the loop a self
         # referencing column allows. This walked it a second time and
         # did not.
+        #
+        # Archived steps are left out. Each node carries an id a client
+        # links to, and an archived component answers 404.
         if row.is_overall:
             return []
         return PathNodeSerializer(
-            row.ancestors,
+            row.visible_ancestors,
             many=True,
             context=self.context,
             fields_tree=self.child_tree("path"),

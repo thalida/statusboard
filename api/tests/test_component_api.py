@@ -220,3 +220,22 @@ def test_a_ranked_search_pages_without_repeating_a_row(client):
 
     assert seen == list(dict.fromkeys(seen)), "a row came back on two pages"
     assert len(seen) == 7, "a row was never reached"
+
+
+def test_the_path_leaves_out_an_archived_ancestor(client):
+    # Each node carries an id a client links to, and the detail answers
+    # 404 for an archived component. A breadcrumb step pointing at one
+    # is a link to a page nothing serves.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service, name="Messaging")
+    middle = ComponentFactory(service=service, name="Programmable", parent=top)
+    leaf = ComponentFactory(service=service, name="SMS", parent=middle)
+    middle.is_archived = True
+    middle.save(update_fields=["is_archived"])
+
+    body = client.get(reverse("component-detail", args=[leaf.id])).json()
+
+    assert [node["name"] for node in body["path"]] == ["Messaging"]
+    # Shorter, not broken. `parent` is the raw column and still names
+    # the archived row, so the two disagree by design.
+    assert body["parent"] == str(middle.id)

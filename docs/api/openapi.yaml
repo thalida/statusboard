@@ -26,8 +26,9 @@ info:
 
     Three consequences follow. A tracked component that is archived leaves the board with no
     notice. An event names the components it affected, and a link to an archived one answers
-    `404`. `Component.path` and `Component.parent` name ancestors without checking them, so a
-    breadcrumb step can answer `404` too. Render a node you cannot fetch as plain text.
+    `404`. `Component.path` lists the ancestors that are served, so a breadcrumb can skip a
+    level, and its last node is not always `Component.parent`. `parent` is the raw column and
+    still names an archived row, so fetch a breadcrumb from `path`.
 
     ## Severity is the state
 
@@ -873,9 +874,12 @@ components:
         path:
           type: array
           description: |
-            Every component above this one, top down. Each step carries its own id, so a client
-            builds a breadcrumb it can click. Empty on the overall component, which is under
-            nothing.
+            Every component above this one that is served, top down. Each step carries its own
+            id, so a client builds a breadcrumb it can click and every node here is fetchable.
+            Empty on the overall component, which is under nothing.
+
+            An archived ancestor is left out. The chain is then shorter than the real tree, and
+            its last node is not `parent`. It is never broken, so nothing needs a placeholder.
           items: { $ref: '#/components/schemas/PathNode' }
         parent: { type: string, format: uuid, nullable: true }
         descendant_count:
