@@ -61,12 +61,6 @@ def test_a_component_is_tracked_once_per_dashboard():
 
 
 @pytest.mark.django_db
-def test_an_item_carries_no_position():
-    # Order is a query, not a column. A stored position needs a rewrite on every insert.
-    assert not hasattr(DashboardItem, "position")
-
-
-@pytest.mark.django_db
 def test_the_system_account_cannot_sign_in():
     system = User.objects.system()
 

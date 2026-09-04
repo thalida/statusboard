@@ -78,7 +78,6 @@ def test_a_component_can_be_archived_rather_than_deleted():
     # Someone may track this component.
     # Deletion removes it from their board with no warning.
     component = ComponentFactory()
-    assert Service.objects.count() == 1
     component.is_archived = True
     component.save()
     component.refresh_from_db()

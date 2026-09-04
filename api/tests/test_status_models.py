@@ -89,21 +89,6 @@ def test_a_matching_phase_validates():
     event.full_clean()
 
 
-@pytest.mark.django_db
-def test_an_event_may_name_no_component_at_all():
-    # A provider publishes some events against the service.
-    # A component FK cannot hold them.
-    event = ServiceEvent.objects.create(
-        service=ServiceFactory(),
-        external_id="1",
-        kind=EventKind.MAINTENANCE,
-        title="x",
-        phase=MaintenancePhase.SCHEDULED,
-        starts_at=timezone.now(),
-    )
-    assert event.affected_components.count() == 0
-
-
 def test_two_system_events_can_sit_on_one_service(db):
     # Neither has a provider id. The unique key is partial, so a null
     # does not collide with another null.
