@@ -920,7 +920,7 @@ def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
     by `?q=`. An untracked service is never polled to repair it.
     """
     from catalog.models import ServiceComponent
-    from tests.factories import ComponentFactory, ServiceFactory
+    from tests.factories import ComponentFactory, ServiceFactory, ancestry
 
     service = ServiceFactory(name="Twilio")
     parent = ComponentFactory(service=service, name="Programmable Messaging")
@@ -930,5 +930,5 @@ def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
     assert staff_client.post(url, data).status_code == 302
 
     child.refresh_from_db()
-    assert child.ancestor_ids == [parent.pk]
+    assert ancestry(child) == [parent.pk]
     assert list(ServiceComponent.objects.search("programmable sms")) == [child]

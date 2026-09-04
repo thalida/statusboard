@@ -15,7 +15,7 @@ class ComponentFilter(SeverityFilterMixin):
     service = filters.CharFilter(field_name="service__slug")
     # Every descendant, not one level. `parent` would name a query this
     # does not run.
-    ancestor = filters.UUIDFilter(method="filter_ancestor")
+    ancestor = filters.UUIDFilter(field_name="ancestor_links__ancestor")
     event = filters.UUIDFilter(field_name="events__id")
     # `for_display` annotates this per viewer. It is not a column, so
     # there is nothing to generate the filter from.
@@ -24,14 +24,6 @@ class ComponentFilter(SeverityFilterMixin):
     class Meta:
         model = ServiceComponent
         fields = {"is_overall": ["exact"]}
-
-    def filter_ancestor(self, queryset, name, value):
-        """Match the stored chain, which the GIN index answers.
-
-        `ancestor_ids` holds every step above a row. A containment test
-        on it reaches any depth in one comparison.
-        """
-        return queryset.filter(ancestor_ids__contains=[value])
 
     def filter_is_tracked(self, queryset, name, value):
         """Answer it here, because nobody signed out tracks anything.

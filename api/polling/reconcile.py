@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Value
 from django.utils import timezone
 
-from catalog.models import ServiceComponent, held_rebuilds
+from catalog.models import ComponentAncestor, ServiceComponent, held_rebuilds
 from polling.system_events import claim, reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
@@ -92,16 +92,12 @@ def _upsert_components(service, components, author):
     return rows
 
 
-def rebuild_ancestry(service):
-    """Write every component's chain of ancestors, root first.
+def _chains(rows):
+    """Each row's ancestors, root first, keyed by id.
 
-    A rename does not touch this. A reparent moves a whole subtree, so
-    the pass rewrites the service rather than one row. A service holds
-    hundreds of components, not millions.
+    The walk reads the rows in hand, not the database. A deep tree costs
+    no extra query, and both rebuilds ask the same question once.
     """
-    rows = list(ServiceComponent.objects.filter(service=service))
-    # The walk reads this map, not the database. A deep tree costs no
-    # extra query.
     parents = {row.id: row.parent_id for row in rows}
 
     def chain(node):
@@ -119,15 +115,42 @@ def rebuild_ancestry(service):
             up = parents.get(up)
         return list(reversed(walked))
 
-    # Only the rows that moved. Most polls change no parent, and this
-    # runs on every poll of every service.
-    changed = []
-    for row in rows:
-        computed = chain(row.id)
-        if row.ancestor_ids != computed:
-            row.ancestor_ids = computed
-            changed.append(row)
-    ServiceComponent.objects.bulk_update(changed, ["ancestor_ids"])
+    return {row.id: chain(row.id) for row in rows}
+
+
+def rebuild_ancestry(service):
+    """Write one link per pair of components, one above the other.
+
+    A rename does not touch this. A reparent moves a whole subtree, so
+    the pass rewrites the service rather than one row. A service holds
+    hundreds of components, not millions.
+
+    Only the rows that moved are written. A delete and a re-insert
+    would rewrite every link of the service on every poll. Almost no
+    poll moves a component.
+    """
+    rows = list(ServiceComponent.objects.filter(service=service))
+    # Root first, so the last step is the parent and depth counts down.
+    wanted = {
+        (up, row_id, len(chain) - step)
+        for row_id, chain in _chains(rows).items()
+        for step, up in enumerate(chain)
+    }
+    held = {
+        (link.ancestor_id, link.descendant_id, link.depth): link.pk
+        for link in ComponentAncestor.objects.filter(descendant__service=service)
+    }
+    stale = [pk for link, pk in held.items() if link not in wanted]
+    if stale:
+        # Before the insert. A pair whose depth changed holds the unique
+        # constraint until its old row goes.
+        ComponentAncestor.objects.filter(pk__in=stale).delete()
+    ComponentAncestor.objects.bulk_create(
+        [
+            ComponentAncestor(ancestor_id=up, descendant_id=row_id, depth=depth)
+            for up, row_id, depth in wanted - held.keys()
+        ]
+    )
 
 
 def rebuild_search(service):
@@ -138,15 +161,15 @@ def rebuild_search(service):
     service.
 
     Ancestor names are joined here, not in SQL. Postgres cannot build a
-    vector from an array of foreign keys. It must run after
-    `rebuild_ancestry`, which supplies `ancestor_ids`.
+    vector from a set of foreign keys.
     """
     rows = list(
         ServiceComponent.objects.filter(service=service).select_related("service")
     )
     names = {row.id: row.name for row in rows}
+    chains = _chains(rows)
     for row in rows:
-        ancestors = " ".join(names.get(a, "") for a in row.ancestor_ids)
+        ancestors = " ".join(names[up] for up in chains[row.id])
         row.search_document = (
             SearchVector(Value(row.name), weight="A")
             + SearchVector(Value(ancestors), weight="B")

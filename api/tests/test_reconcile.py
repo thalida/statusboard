@@ -16,7 +16,7 @@ from status.choices import (
     StatusSource,
 )
 from status.models import ComponentStatus, ServiceEvent
-from tests.factories import ComponentFactory, ServiceFactory
+from tests.factories import ComponentFactory, ServiceFactory, ancestry
 
 
 def _component(external_id="a", name="SMS", severity=Severity.OPERATIONAL, **kw):
@@ -310,8 +310,8 @@ def test_a_poll_writes_the_ancestor_chain():
 
     top = ServiceComponent.objects.get(external_id="a")
     child = ServiceComponent.objects.get(external_id="b")
-    assert top.ancestor_ids == []
-    assert child.ancestor_ids == [top.id]
+    assert ancestry(top) == []
+    assert ancestry(child) == [top.id]
 
 
 @pytest.mark.django_db
@@ -358,7 +358,7 @@ def test_a_reparent_rewrites_the_subtree():
     ]
     apply_fetch(service, moved, [], StatusSource.PROVIDER)
 
-    assert ServiceComponent.objects.get(external_id="c").ancestor_ids == [
+    assert ancestry(ServiceComponent.objects.get(external_id="c")) == [
         ServiceComponent.objects.get(external_id="b").id
     ]
 
@@ -376,10 +376,8 @@ def test_a_loop_in_the_parent_column_does_not_hang_the_pass():
 
     rebuild_ancestry(service)
 
-    first.refresh_from_db()
-    second.refresh_from_db()
-    assert first.ancestor_ids == [second.id]
-    assert second.ancestor_ids == [first.id]
+    assert ancestry(first) == [second.id]
+    assert ancestry(second) == [first.id]
 
 
 @pytest.mark.django_db
@@ -401,7 +399,6 @@ def test_a_reparent_rewrites_every_descendants_path():
     rebuild_ancestry(service)
     rebuild_search(service)
 
-    leaf.refresh_from_db()
-    assert leaf.ancestor_ids == [new.id]
+    assert ancestry(leaf) == [new.id]
     assert list(ServiceComponent.objects.search("legacy queue")) == []
     assert list(ServiceComponent.objects.search("platform queue")) == [leaf]

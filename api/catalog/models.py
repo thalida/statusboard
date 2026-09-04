@@ -1,13 +1,12 @@
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import urlparse, urlunparse
 
-from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVectorField
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.text import slugify
 from simple_history.models import HistoricalRecords
@@ -235,28 +234,11 @@ class ServiceRequest(BaseModel):
 def _descendant_count():
     """How many components sit under each row, in one query for the page.
 
-    `related_count` cannot express this. It compares a column to the
-    outer key. `ancestor_ids` holds an array, so the outer key goes in
-    as a one element array of its own.
-
-    The constant in `values` is what makes this one aggregate. Without
-    it Django counts per row and returns one row a component, which a
-    subquery in a SELECT list refuses.
+    Archived rows are left out. A caller is not served one anywhere
+    else, so a count that included them would name components no list
+    returns.
     """
-    key = models.Func(
-        models.OuterRef("pk"),
-        template="ARRAY[%(expressions)s]",
-        output_field=ArrayField(models.UUIDField()),
-    )
-    counted = (
-        ServiceComponent.objects.visible()
-        .filter(ancestor_ids__contains=key)
-        .order_by()
-        .values(one_group=models.Value(1))
-        .annotate(total=models.Count("pk"))
-        .values("total")
-    )
-    return Coalesce(models.Subquery(counted, output_field=models.IntegerField()), 0)
+    return related_count(ComponentAncestor.objects.to_visible(), "ancestor")
 
 
 _rebuilds_held = ContextVar("catalog_rebuilds_held", default=False)
@@ -371,13 +353,6 @@ class ServiceComponent(BaseModel):
         on_delete=models.SET_NULL,
         related_name="children",
     )
-    # The chain above this one, root first, written by reconcile. A
-    # component's Components tab lists every descendant, and a self-FK
-    # lookup returns one level. Walking the chain per row cannot use an
-    # index either.
-    ancestor_ids = ArrayField(
-        models.UUIDField(), default=list, blank=True, editable=False
-    )
     # The whole path, weighted, written by reconcile. Searching a
     # service's name must also reach its components. Walking `parent`
     # at query time cannot use an index.
@@ -423,7 +398,6 @@ class ServiceComponent(BaseModel):
             ),
         ]
         indexes = [
-            GinIndex(fields=["ancestor_ids"], name="components_by_ancestor"),
             GinIndex(fields=["search_document"], name="components_by_search"),
         ]
 
@@ -451,11 +425,7 @@ class ServiceComponent(BaseModel):
             return 0
         prepared = getattr(self, "_descendant_count", None)
         if prepared is None:
-            return (
-                ServiceComponent.objects.visible()
-                .filter(ancestor_ids__contains=[self.pk])
-                .count()
-            )
+            return self.descendant_links.to_visible().count()
         return prepared
 
     def is_tracked_by(self, user):
@@ -467,8 +437,8 @@ class ServiceComponent(BaseModel):
             return self.boards.filter(owner=user).exists()
         return prepared
 
-    # `ancestor_ids` and `search_document` are built from these. A save
-    # touching none of them leaves both true.
+    # The ancestry links and `search_document` are built from these. A
+    # save touching none of them leaves both true.
     REBUILD_TRIGGERS = frozenset(
         {"name", "parent", "parent_id", "service", "service_id"}
     )
@@ -531,8 +501,8 @@ class ServiceComponent(BaseModel):
             return ()
         if was[2] == self.service_id:
             return (self.service,)
-        # A move between services leaves the old one still naming this
-        # row in its `ancestor_ids` and in its search documents.
+        # A move between services leaves the old one behind. Its
+        # ancestry links and its search documents still name this row.
         return (self.service, Service.objects.get(pk=was[2]))
 
     def clean(self):
@@ -575,3 +545,85 @@ class ServiceComponent(BaseModel):
 
     def __str__(self):
         return self.path
+
+
+class ComponentAncestorQuerySet(models.QuerySet):
+    def to_visible(self):
+        """The links a caller is served, anywhere.
+
+        `ServiceComponentQuerySet.visible` is the one definition of
+        which components a reader sees. Naming the archive flag here
+        would give a descendant count a second answer to that.
+        """
+        return self.filter(descendant__in=ServiceComponent.objects.visible())
+
+
+class ComponentAncestor(models.Model):
+    """One component sits above another, at a known distance.
+
+    Read the two names off the row, not off the component you hold.
+    They swap sides depending on where you stand. So a component's own
+    ancestors are `component.ancestor_links`, and everything under it is
+    `component.descendant_links`.
+
+    `depth` counts the steps down from `ancestor` to `descendant`. A
+    parent is 1 and a grandparent is 2. A breadcrumb reads root first
+    with `order_by("-depth")`, and `depth=1` is the direct children.
+
+    A component is not its own ancestor. Every reader counts other
+    components, so a depth 0 row would add one to every answer.
+
+    This is not a `BaseModel`. Reconcile derives every row from
+    `parent`, so an author and an edit time record nothing anybody
+    reads. The key still follows the house rule.
+
+    The pair replaces an array of ancestor ids. The array held no
+    reference. Deleting a component left its id in every descendant,
+    until the next poll of that service. An untracked service is never
+    polled again.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    # The delete rule is the reason this table exists. A component that
+    # goes takes every claim about where it sat with it.
+    #
+    # `db_index=False` because the unique constraint already indexes
+    # this column first. That index answers the descendant direction:
+    # `?ancestor=`, and the count on every component row.
+    ancestor = models.ForeignKey(
+        ServiceComponent,
+        on_delete=models.CASCADE,
+        related_name="descendant_links",
+        db_index=False,
+    )
+    # The foreign key index answers the ancestor direction: one
+    # component's own chain, which a breadcrumb reads.
+    descendant = models.ForeignKey(
+        ServiceComponent,
+        on_delete=models.CASCADE,
+        related_name="ancestor_links",
+    )
+    depth = models.PositiveIntegerField()
+    objects = ComponentAncestorQuerySet.as_manager()
+
+    class Meta:
+        # Root first, which is how a breadcrumb reads.
+        ordering = ["-depth"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ancestor", "descendant"], name="one_link_per_component_pair"
+            ),
+            # Both hold "no component is its own ancestor", which every
+            # count depends on. One forbids the row, one forbids the
+            # distance that would describe it.
+            models.CheckConstraint(
+                condition=~models.Q(ancestor=models.F("descendant")),
+                name="ancestry_excludes_self",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(depth__gte=1), name="ancestry_depth_starts_at_one"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.ancestor} > {self.descendant} ({self.depth})"

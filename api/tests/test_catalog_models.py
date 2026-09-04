@@ -1,13 +1,15 @@
 import pytest
+from django.db.models import Q
 from django.db.utils import IntegrityError
 
-from catalog.models import Service, ServiceComponent, StatusPage
+from catalog.models import ComponentAncestor, Service, ServiceComponent, StatusPage
 from polling.reconcile import rebuild_ancestry, rebuild_search
 from tests.factories import (
     ComponentFactory,
     PollerFactory,
     ServiceFactory,
     UserFactory,
+    ancestry,
     track,
     watchers,
 )
@@ -171,13 +173,13 @@ def test_a_reparent_in_plain_python_rebuilds_the_derived_columns(db):
     child.save()
 
     child.refresh_from_db()
-    assert child.ancestor_ids == [parent.pk]
+    assert ancestry(child) == [parent.pk]
     assert list(ServiceComponent.objects.search("programmable sms")) == [child]
 
 
 def test_a_move_between_services_rebuilds_the_service_left_behind(db):
     # Only the new service was rebuilt. The old one kept rows naming
-    # this component in `ancestor_ids` and in their search documents.
+    # this component in their ancestry and in their search documents.
     old = ServiceFactory(name="Twilio")
     new = ServiceFactory(name="Vonage")
     top = ComponentFactory(service=old, name="Programmable Messaging")
@@ -191,7 +193,7 @@ def test_a_move_between_services_rebuilds_the_service_left_behind(db):
     top.save()
 
     leaf.refresh_from_db()
-    assert leaf.ancestor_ids == []
+    assert ancestry(leaf) == []
     assert list(ServiceComponent.objects.search("programmable sms")) == []
 
 
@@ -212,8 +214,8 @@ def test_a_save_that_moves_nothing_rebuilds_nothing(db, monkeypatch):
     assert calls == []
 
 
-def test_ancestor_ids_are_stored_top_down(db):
-    # A descendant query reads this array. Walking `parent` per row
+def test_ancestry_records_one_link_a_step_with_the_distance(db):
+    # A descendant query joins this table. Walking `parent` per row
     # cannot use an index, and `for_display` only selects two levels up.
     service = ServiceFactory()
     top = ComponentFactory(service=service)
@@ -221,11 +223,42 @@ def test_ancestor_ids_are_stored_top_down(db):
     leaf = ComponentFactory(service=service, parent=middle)
     rebuild_ancestry(service)
 
-    leaf.refresh_from_db()
-    assert leaf.ancestor_ids == [top.id, middle.id]
+    # Root first, which is the order a breadcrumb reads.
+    assert ancestry(leaf) == [top.id, middle.id]
+    # The distance, so one query can ask for the direct children alone.
+    # A parent is 1. Counting from the root instead would make `depth=1`
+    # name the top of the tree.
+    assert {link.ancestor_id: link.depth for link in leaf.ancestor_links.all()} == {
+        top.id: 2,
+        middle.id: 1,
+    }
 
     # Every descendant, not the direct children. `top` has two below it.
-    assert ServiceComponent.objects.filter(ancestor_ids__contains=[top.id]).count() == 2
+    assert ServiceComponent.objects.filter(ancestor_links__ancestor=top).count() == 2
+
+
+def test_deleting_a_component_takes_its_ancestry_with_it(db):
+    # An array of ids held no reference. Deleting a component left its
+    # id in every descendant, and only a poll of that service cleared
+    # it. An untracked service is never polled again.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    leaf = ComponentFactory(service=service, parent=middle)
+    rebuild_ancestry(service)
+
+    # Read the key first. A delete clears it on the instance, so a
+    # filter written afterwards matches nothing and proves nothing.
+    gone = middle.pk
+    middle.delete()
+
+    assert not ComponentAncestor.objects.filter(
+        Q(ancestor=gone) | Q(descendant=gone)
+    ).exists()
+    # `parent` is SET_NULL, so the leaf is now a root. The link to its
+    # grandparent outlives the delete, and the next rebuild drops it.
+    rebuild_ancestry(service)
+    assert ancestry(leaf) == []
 
 
 def test_for_display_counts_descendants_without_a_query_a_row(

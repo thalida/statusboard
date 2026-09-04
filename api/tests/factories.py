@@ -88,6 +88,19 @@ def track(component, user=None):
     return DashboardItem.objects.create(dashboard=board, component=component)
 
 
+def ancestry(component):
+    """The ids above it, root first, read from the closure table.
+
+    `depth` counts the steps down to the component, so the largest is
+    the root. A breadcrumb reads the same order.
+    """
+    return list(
+        component.ancestor_links.order_by("-depth").values_list(
+            "ancestor_id", flat=True
+        )
+    )
+
+
 def watchers(component):
     """How many people track it, counted the way the app counts."""
     from catalog.queries import COMPONENT_WATCHER_COUNT
