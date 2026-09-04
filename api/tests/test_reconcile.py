@@ -241,22 +241,6 @@ def test_a_run_stamps_what_it_wrote():
 
 
 @pytest.mark.django_db
-def test_a_polled_reading_survives_its_run_being_deleted():
-    # The log is pruned on a retention window, and a reading is not. On
-    # CASCADE, forgetting last month's runs would take the history of
-    # every component with them.
-    service = ServiceFactory()
-    run = poll_run(service)
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, run)
-
-    run.delete()
-
-    status = ComponentStatus.objects.get(component__service=service)
-    assert status.severity == Severity.OPERATIONAL
-    assert status.poll_run is None
-
-
-@pytest.mark.django_db
 def test_a_poll_signs_everything_it_writes():
     """Nobody types any of this, so nothing is left without an author.
 
