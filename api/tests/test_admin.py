@@ -889,3 +889,54 @@ def test_updates_can_be_filtered_by_who_wrote_them(staff_client, claimed_event):
     assert list(response.context["cl"].queryset) == [
         EventUpdate.objects.get(source=EventSource.SYSTEM)
     ]
+
+
+def component_form_data(staff_client, component, **fields):
+    """The component change form, with a management form per inline.
+
+    The prefixes are read off the rendered page. A browser posts what
+    the page asks for, and a missing management form is a 200 that
+    saved nothing.
+    """
+    import re
+
+    url = reverse("admin:catalog_servicecomponent_change", args=[component.pk])
+    body = staff_client.get(url).content.decode()
+    data = {
+        "service": str(component.service_id),
+        "name": component.name,
+        "external_id": component.external_id,
+        "is_archived": "",
+        "parent": "",
+        "status_page_order": str(component.status_page_order),
+        "is_overall": "",
+        **fields,
+    }
+    for prefix in set(re.findall(r'name="([\w-]+)-TOTAL_FORMS"', body)):
+        for key in ("TOTAL_FORMS", "INITIAL_FORMS", "MIN_NUM_FORMS", "MAX_NUM_FORMS"):
+            data[f"{prefix}-{key}"] = "0"
+    return url, data
+
+
+@pytest.mark.django_db
+def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
+    """The admin is the only writer outside reconcile.
+
+    `rebuild_ancestry` and `rebuild_search` run on a poll. A component
+    reparented here held no ancestry and no search vector. It was then
+    invisible to `?ancestor=` and unfindable by `?q=`. An untracked
+    service is never polled, so nothing would repair it.
+    """
+    from catalog.models import ServiceComponent
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS")
+
+    url, data = component_form_data(staff_client, child, parent=str(parent.pk))
+    assert staff_client.post(url, data).status_code == 302
+
+    child.refresh_from_db()
+    assert child.ancestor_ids == [parent.pk]
+    assert list(ServiceComponent.objects.search("programmable sms")) == [child]
