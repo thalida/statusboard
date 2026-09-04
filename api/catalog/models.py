@@ -212,16 +212,6 @@ class ServiceRequest(BaseModel):
         return self.url
 
 
-def _descendant_count():
-    """How many components sit under each row, in one query for the page.
-
-    Archived rows are left out. A caller is not served one anywhere
-    else, so a count that included them would name components no list
-    returns.
-    """
-    return related_count(ComponentAncestor.objects.to_visible(), "ancestor")
-
-
 _rebuilds_held = ContextVar("catalog_rebuilds_held", default=False)
 
 
@@ -285,6 +275,7 @@ class ServiceComponentQuerySet(models.QuerySet):
         """
         from django.contrib.auth.models import AnonymousUser
 
+        from catalog.queries import descendant_count
         from status.models import ComponentStatus, ServiceEvent
 
         tracked = models.Value(None, output_field=models.BooleanField())
@@ -300,7 +291,7 @@ class ServiceComponentQuerySet(models.QuerySet):
         return (
             self.select_related("service", "parent", "parent__parent")
             .annotate(
-                descendant_count=_descendant_count(),
+                descendant_count=descendant_count(),
                 is_tracked=tracked,
             )
             .prefetch_related(

@@ -1,8 +1,7 @@
-"""What a caller reads about a service, as SQL.
+"""What a caller reads about the catalog, as SQL.
 
-A service's own severity is its overall component's. Who watches a
-component is counted through the boards it sits on. Both are questions
-about the catalog, so they live here.
+Each one is a bare expression, handed to `annotate()`. Chainable
+vocabulary is a queryset method, and lives on the queryset instead.
 
 These lived in `common.ordering`, which made the base layer import the
 app it describes.
@@ -10,6 +9,7 @@ app it describes.
 
 from django.db.models import Count, Exists, OuterRef, Subquery
 
+from common.queries import related_count
 from status.models import ComponentStatus
 
 # A service's own status is the open row of its overall component. That
@@ -38,3 +38,15 @@ def is_tracked(field="pk"):
     from dashboards.models import DashboardItem
 
     return Exists(DashboardItem.objects.filter(component__service=OuterRef(field)))
+
+
+def descendant_count():
+    """How many components sit under each row, in one query for the page.
+
+    Archived rows are left out. A caller is not served one anywhere
+    else, so a count that included them would name components no list
+    returns.
+    """
+    from catalog.models import ComponentAncestor
+
+    return related_count(ComponentAncestor.objects.to_visible(), "ancestor")
