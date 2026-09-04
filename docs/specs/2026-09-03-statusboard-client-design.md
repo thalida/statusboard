@@ -233,7 +233,7 @@ level, and `parent` would name a query this does not run.
 | --- | --- |
 | `GET /catalog/components/` with no `q` | `suggested` |
 | `GET /catalog/components/?service=` | `status_page_order` |
-| `GET /catalog/components/` with `q` | `SearchRank` |
+| `GET /catalog/components/` with `q` | `(-is_overall, *suggested)` |
 | `GET /events/` | `-starts_at` |
 
 Every one of them is labelled Smart in the interface.
@@ -444,9 +444,15 @@ the same question.
 
 ## 8. Search
 
-`q` matches part of a component's own name or its service's name. Searching `twilio` finds
-`SMS`, because Twilio publishes it. Searching `twilio sms` finds it too: every word must
-match, and either column may satisfy it. Matching ignores case.
+`q` matches part of a component's own name, its service's name, or its parent's. Searching
+`twilio` finds `SMS`, because Twilio publishes it. Searching `messaging` finds it too,
+because Programmable Messaging is the group above it. Searching `twilio sms` finds it as
+well: every word must match, and any of the three names may satisfy it. Matching ignores
+case.
+
+The parent is one level, and no further. A component three deep is not found by its
+grandparent's name. `parent__name` is a join read at query time, against the live row, so a
+rename keeps itself in step. That is what separates it from the stored ancestry below.
 
 It is `icontains` per word, not a `tsvector`. Measured on 4,800 components across 60
 services, larger than realistic, a stored weighted vector with a GIN index answers in about
@@ -465,8 +471,8 @@ there is nothing to keep in step. `ServiceComponent` becomes a plain model with 
 - **Relevance ranking.** There is no score, so nothing sorts by closeness of match. The
   rollup leads instead, by `-is_overall`, which is what stops a popular service flooding
   the list with its eighty parts.
-- **Matching through an intermediate group.** A leaf is no longer found by the name of a
-  group above it, only by its own name and its service's.
+- **Matching through the whole ancestry.** A leaf is found by its parent's name, but no
+  higher. A group two or more levels above it no longer reaches it.
 
 The service `search_fields` go with the service list.
 

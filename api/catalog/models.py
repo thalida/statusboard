@@ -232,9 +232,15 @@ class ServiceComponentQuerySet(models.QuerySet):
     def search(self, q):
         """Narrow to what every typed word describes.
 
-        A word matches the component's own name or its service's, so
-        `twilio` reaches Twilio's SMS row. Several words are an AND, so
-        `twilio sms` reaches that row and not its siblings.
+        A word matches the component's own name, its service's or its
+        parent's. So `twilio` reaches Twilio's SMS row, and `messaging`
+        reaches it through the group above it. Several words are an AND,
+        so `twilio sms` reaches that row and not its siblings.
+
+        One level up, and no further. A component three deep is not
+        found by its grandparent's name. `parent__name` is a join read
+        at query time, so a rename needs nothing rewritten. Storing the
+        ancestry is what forced a subtree rewrite on every rename.
 
         The result is unordered. The list view decides what leads a
         search. An ordering backend runs after this and would discard
@@ -243,7 +249,9 @@ class ServiceComponentQuerySet(models.QuerySet):
         rows = self
         for term in q.split():
             rows = rows.filter(
-                models.Q(name__icontains=term) | models.Q(service__name__icontains=term)
+                models.Q(name__icontains=term)
+                | models.Q(service__name__icontains=term)
+                | models.Q(parent__name__icontains=term)
             )
         return rows
 

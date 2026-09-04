@@ -309,9 +309,10 @@ paths:
         `service`, a component's descendants with `ancestor`, an event's affected list with
         `event`.
 
-        `q` matches part of a component's name or its service's name, so `twilio` finds `SMS`.
-        Several words are an AND. The service rollup leads the results. Without `q` the default
-        is `suggested`, except under `service`, where it is `status_page_order`.
+        `q` matches part of a component's name, its service's name, or its parent's. So `twilio`
+        finds `SMS`, and so does `messaging`. The parent is one level: a grandparent's name does
+        not reach it. Several words are an AND. The service rollup leads the results. Without `q`
+        the default is `suggested`, except under `service`, where it is `status_page_order`.
 
         Archived components are never listed. An event whose only affected component was archived
         returns an empty page.

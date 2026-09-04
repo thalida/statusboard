@@ -64,6 +64,32 @@ def test_q_reaches_a_component_through_its_services_name(client, tree):
     assert [r["name"] for r in response.json()["results"]] == ["SMS"]
 
 
+def test_q_reaches_a_component_through_its_parents_name(client, tree):
+    # Searching "messaging" must find SMS as well as the group above
+    # it. A part is named for what it does, not for what it sits under.
+    response = client.get(reverse("component-list"), {"q": "messaging"})
+    assert {r["name"] for r in response.json()["results"]} == {
+        "Programmable Messaging",
+        "SMS",
+    }
+
+
+def test_q_combines_a_parents_name_with_the_components_own(client, tree):
+    # Every word must match, and any of the three names may satisfy it.
+    # "messaging sms" is how a person narrows to one part of a group.
+    response = client.get(reverse("component-list"), {"q": "messaging sms"})
+    assert [r["name"] for r in response.json()["results"]] == ["SMS"]
+
+
+def test_q_does_not_reach_past_one_level(client, tree):
+    # The honest limit. A grandparent's name is not stored on the row,
+    # and matching it would need the ancestry back.
+    service, _, _, leaf = tree
+    ComponentFactory(service=service, name="Verify", parent=leaf)
+    response = client.get(reverse("component-list"), {"q": "programmable verify"})
+    assert response.json()["results"] == []
+
+
 def test_service_narrows_to_one_services_parts(client, tree):
     # A service's Components tab. The rollup is excluded there,
     # because the header already carries the service's status.
