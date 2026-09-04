@@ -1,10 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.contrib.postgres.search import SearchVector
 from django.db import transaction
-from django.db.models import Value
 from django.utils import timezone
 
-from catalog.models import ComponentAncestor, ServiceComponent, held_rebuilds
+from catalog.models import ServiceComponent
 from polling.system_events import claim, reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
@@ -56,123 +54,34 @@ def _signed(author, **fields):
 
 def _upsert_components(service, components, author):
     rows = {}
-    # `ServiceComponent.save` rebuilds the whole service. This pass
-    # saves every component of it, twice over, so the hook would make
-    # one poll quadratic. It runs once at the end instead.
-    with held_rebuilds():
-        for incoming in components:
-            row, _ = ServiceComponent.objects.update_or_create(
-                service=service,
-                external_id=incoming.external_id,
-                **_signed(
-                    author,
-                    name=incoming.name,
-                    status_page_order=incoming.order,
-                    is_overall=incoming.is_overall,
-                    is_archived=False,
-                    archived_at=None,
-                ),
-            )
-            rows[incoming.external_id] = row
-
-        # Parents second: a child may arrive before its parent exists.
-        for incoming in components:
-            parent = (
-                rows.get(incoming.parent_external_id)
-                if incoming.parent_external_id
-                else None
-            )
-            row = rows[incoming.external_id]
-            if row.parent_id != (parent.id if parent else None):
-                row.parent = parent
-                row.updated_by = author
-                row.save(update_fields=["parent", "updated_by"])
-    rebuild_ancestry(service)
-    rebuild_search(service)
-    return rows
-
-
-def _chains(rows):
-    """Each row's ancestors, root first, keyed by id.
-
-    The walk reads the rows in hand, not the database. A deep tree costs
-    no extra query, and both rebuilds ask the same question once.
-    """
-    parents = {row.id: row.parent_id for row in rows}
-
-    def chain(node):
-        # `seen` and `up in parents` are the loop guard and the service
-        # boundary. `ServiceComponent.ancestors` says why each ends the
-        # walk. The rows in hand are one service, so membership is the
-        # boundary here.
-        walked, seen, up = [], {node}, parents.get(node)
-        while up is not None and up not in seen and up in parents:
-            seen.add(up)
-            walked.append(up)
-            up = parents.get(up)
-        return list(reversed(walked))
-
-    return {row.id: chain(row.id) for row in rows}
-
-
-def rebuild_ancestry(service):
-    """Write one link per pair of components, one above the other.
-
-    A rename does not touch this. A reparent moves a whole subtree, so
-    the pass rewrites the service rather than one row. A service holds
-    hundreds of components, not millions.
-
-    Only the rows that moved are written. A delete and a re-insert
-    would rewrite every link of the service on every poll. Almost no
-    poll moves a component.
-    """
-    rows = list(ServiceComponent.objects.filter(service=service))
-    # Root first, so the last step is the parent and depth counts down.
-    wanted = {
-        (up, row_id, len(chain) - step)
-        for row_id, chain in _chains(rows).items()
-        for step, up in enumerate(chain)
-    }
-    held = {
-        (link.ancestor_id, link.descendant_id, link.depth): link.pk
-        for link in ComponentAncestor.objects.filter(descendant__service=service)
-    }
-    stale = [pk for link, pk in held.items() if link not in wanted]
-    if stale:
-        # Before the insert. A pair whose depth changed holds the unique
-        # constraint until its old row goes.
-        ComponentAncestor.objects.filter(pk__in=stale).delete()
-    ComponentAncestor.objects.bulk_create(
-        [
-            ComponentAncestor(ancestor_id=up, descendant_id=row_id, depth=depth)
-            for up, row_id, depth in wanted - held.keys()
-        ]
-    )
-
-
-def rebuild_search(service):
-    """Write each component's weighted search path.
-
-    `A` is its own name, `B` its ancestors', `C` its service's. An
-    exact hit on a rollup then outranks a leaf matched only through its
-    service.
-
-    Ancestor names are joined here, not in SQL. Postgres cannot build a
-    vector from a set of foreign keys.
-    """
-    rows = list(
-        ServiceComponent.objects.filter(service=service).select_related("service")
-    )
-    names = {row.id: row.name for row in rows}
-    chains = _chains(rows)
-    for row in rows:
-        ancestors = " ".join(names[up] for up in chains[row.id])
-        row.search_document = (
-            SearchVector(Value(row.name), weight="A")
-            + SearchVector(Value(ancestors), weight="B")
-            + SearchVector(Value(row.service.name), weight="C")
+    for incoming in components:
+        row, _ = ServiceComponent.objects.update_or_create(
+            service=service,
+            external_id=incoming.external_id,
+            **_signed(
+                author,
+                name=incoming.name,
+                status_page_order=incoming.order,
+                is_overall=incoming.is_overall,
+                is_archived=False,
+                archived_at=None,
+            ),
         )
-    ServiceComponent.objects.bulk_update(rows, ["search_document"])
+        rows[incoming.external_id] = row
+
+    # Parents second: a child may arrive before its parent exists.
+    for incoming in components:
+        parent = (
+            rows.get(incoming.parent_external_id)
+            if incoming.parent_external_id
+            else None
+        )
+        row = rows[incoming.external_id]
+        if row.parent_id != (parent.id if parent else None):
+            row.parent = parent
+            row.updated_by = author
+            row.save(update_fields=["parent", "updated_by"])
+    return rows
 
 
 def _archive_vanished(service, components, author):

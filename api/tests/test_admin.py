@@ -911,16 +911,14 @@ def component_form_data(staff_client, component, **fields):
 
 
 @pytest.mark.django_db
-def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
+def test_reparenting_in_the_admin_moves_the_component(staff_client):
     """The admin posts a form, so it reaches the model by another road.
 
-    `ServiceComponent.save` rebuilds the derived columns. A component
-    reparented here must come out of it with ancestry and a search
-    vector. Without them it is invisible to `?ancestor=` and unfindable
-    by `?q=`. An untracked service is never polled to repair it.
+    A component reparented here has to answer `?ancestor=` under its
+    new parent at once. An untracked service is never polled, so
+    nothing else would come along and correct it.
     """
-    from catalog.models import ServiceComponent
-    from tests.factories import ComponentFactory, ServiceFactory, ancestry
+    from tests.factories import ComponentFactory, ServiceFactory, ancestry, descendants
 
     service = ServiceFactory(name="Twilio")
     parent = ComponentFactory(service=service, name="Programmable Messaging")
@@ -931,7 +929,7 @@ def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
 
     child.refresh_from_db()
     assert ancestry(child) == [parent.pk]
-    assert list(ServiceComponent.objects.search("programmable sms")) == [child]
+    assert descendants(parent) == {child.pk}
 
 
 @pytest.mark.django_db
@@ -976,67 +974,22 @@ def bulk_delete(admin_client, components):
 
 
 @pytest.mark.django_db
-def test_the_bulk_delete_rebuilds_the_ancestry(admin_client):
-    # `parent` is SET_NULL, so the leaf becomes a root. The cascade
-    # clears the deleted row's own links only. Without a rebuild the
-    # grandparent keeps a link to a grandchild it no longer sits above.
-    from polling.reconcile import rebuild_ancestry
+def test_the_bulk_delete_leaves_no_stale_ancestry(admin_client):
+    # `parent` is SET_NULL, so the leaf becomes a root. A stored tree
+    # needed an admin override here. Without it the grandparent kept a
+    # link to a grandchild it no longer sits above. A computed one
+    # passes this trivially, which is why the override went.
     from tests.factories import ComponentFactory, ServiceFactory, ancestry
 
     service = ServiceFactory()
     top = ComponentFactory(service=service)
     middle = ComponentFactory(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
 
     bulk_delete(admin_client, [middle])
 
+    leaf.refresh_from_db()
     assert ancestry(leaf) == []
-
-
-@pytest.mark.django_db
-def test_the_bulk_delete_rebuilds_the_search_path(admin_client):
-    # `search_document` holds each ancestor's name. Left stale, a
-    # deleted parent's name still finds a component under nothing.
-    from catalog.models import ServiceComponent
-    from polling.reconcile import rebuild_ancestry, rebuild_search
-    from tests.factories import ComponentFactory, ServiceFactory
-
-    service = ServiceFactory(name="Twilio")
-    top = ComponentFactory(service=service, name="Programmable Messaging")
-    leaf = ComponentFactory(service=service, name="SMS", parent=top)
-    rebuild_ancestry(service)
-    rebuild_search(service)
-
-    bulk_delete(admin_client, [top])
-
-    assert list(ServiceComponent.objects.search("messaging")) == []
-    # The leaf still answers its own name. A rebuild that dropped the
-    # whole vector would pass the line above and serve nothing.
-    assert list(ServiceComponent.objects.search("sms")) == [leaf]
-
-
-@pytest.mark.django_db
-def test_the_bulk_delete_rebuilds_a_service_once(admin_client, monkeypatch):
-    # A rebuild rewrites every row of the service. Once per deleted row
-    # makes a selection of fifty cost fifty passes over the whole tree.
-    from catalog import admin as catalog_admin
-    from tests.factories import ComponentFactory, ServiceFactory
-
-    service = ServiceFactory()
-    top = ComponentFactory(service=service)
-    first = ComponentFactory(service=service, parent=top)
-    second = ComponentFactory(service=service, parent=top)
-
-    rebuilt = []
-    monkeypatch.setattr(
-        catalog_admin, "rebuild_ancestry", lambda s: rebuilt.append(s.pk)
-    )
-    monkeypatch.setattr(catalog_admin, "rebuild_search", lambda s: None)
-
-    bulk_delete(admin_client, [first, second])
-
-    assert rebuilt == [service.pk]
 
 
 def related_item(admin_user, service, label):

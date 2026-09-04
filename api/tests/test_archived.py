@@ -28,7 +28,6 @@ from rest_framework.test import APIClient
 
 from authentication.models import User
 from dashboards.models import DashboardItem
-from polling.reconcile import rebuild_ancestry
 from status.choices import EventKind, IncidentPhase
 from status.models import ServiceEvent
 from tests.conftest import jwt_client
@@ -76,7 +75,6 @@ def descendants_of_a_component():
     service = ServiceFactory()
     top = ComponentFactory(service=service)
     archived(service=service, parent=top)
-    rebuild_ancestry(service)
     url = reverse("component-list")
     return APIClient().get(url, {"ancestor": str(top.id)}).json()["results"]
 
@@ -100,7 +98,6 @@ def a_components_path():
     top = ComponentFactory(service=service)
     middle = archived(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
     body = APIClient().get(reverse("component-detail", args=[leaf.id])).json()
     return [node for node in body["path"] if node["id"] == str(middle.id)]
 
@@ -109,7 +106,6 @@ def a_components_descendant_count():
     service = ServiceFactory()
     top = ComponentFactory(service=service)
     archived(service=service, parent=top)
-    rebuild_ancestry(service)
     body = APIClient().get(reverse("component-detail", args=[top.id])).json()
     return body["descendant_count"]
 

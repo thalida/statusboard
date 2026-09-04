@@ -89,15 +89,22 @@ def track(component, user=None):
 
 
 def ancestry(component):
-    """The ids above it, root first, read from the closure table.
+    """The ids above it, root first, worked out from `parent`.
 
-    `depth` counts the steps down to the component, so the largest is
-    the root. A breadcrumb reads the same order.
+    `ServiceComponent.ancestors` is the one walk up the tree, and a
+    breadcrumb reads the same order.
     """
-    return list(
-        component.ancestor_links.order_by("-depth").values_list(
-            "ancestor_id", flat=True
-        )
+    return [row.pk for row in component.ancestors]
+
+
+def descendants(component):
+    """The ids under it, at any depth, the way `?ancestor=` asks."""
+    from catalog.queries import descendant_ids
+
+    return set(
+        ServiceComponent.objects.filter(
+            pk__in=descendant_ids(component.pk)
+        ).values_list("pk", flat=True)
     )
 
 

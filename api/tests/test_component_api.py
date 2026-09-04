@@ -3,7 +3,6 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from polling.reconcile import rebuild_ancestry, rebuild_search
 from status.choices import EventKind, IncidentPhase, Severity, StatusSource
 from status.models import ComponentStatus, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory, track
@@ -33,8 +32,6 @@ def tree():
     leaf = ComponentFactory(
         service=service, name="SMS", parent=parent, status_page_order=1
     )
-    rebuild_ancestry(service)
-    rebuild_search(service)
     return service, rollup, parent, leaf
 
 
@@ -126,10 +123,10 @@ def test_the_detail_refuses_an_archived_component(client, tree):
     assert client.get(reverse("component-detail", args=[leaf.id])).status_code == 404
 
 
-def test_a_query_keeps_the_rank_the_search_worked_out(client, tree):
-    # The rollup carries the word in its own name. The other two match
-    # only through their service. A default sort applied after the
-    # search discards the rank, and then the list reads alphabetically.
+def test_a_query_leads_with_the_service_rollup(client, tree):
+    # Typing a service's name matches every part of it. Without the
+    # rollup first, eighty rows bury the one row that answers the
+    # question the reader asked.
     response = client.get(reverse("component-list"), {"q": "twilio"})
     assert response.json()["results"][0]["name"] == "Twilio"
 
@@ -191,35 +188,6 @@ def test_event_narrows_to_the_components_one_event_affects(client, tree):
     event.affected_components.add(parent)
     response = client.get(reverse("component-list"), {"event": str(event.id)})
     assert [r["name"] for r in response.json()["results"]] == ["Programmable Messaging"]
-
-
-def test_a_ranked_search_pages_without_repeating_a_row(client):
-    """`?q=` is Discover's default path, and `rank` ties heavily.
-
-    Identical documents rank identically. A page boundary inside a run
-    of ties is where a cursor repeats a row or skips one. Infinite
-    scroll then shows the fault.
-    """
-    service = ServiceFactory(name="Twilio")
-    for _ in range(7):
-        ComponentFactory(service=service, name="SMS")
-    rebuild_ancestry(service)
-    rebuild_search(service)
-
-    seen, pages = [], 0
-    url = reverse("component-list")
-    params = {"q": "twilio sms", "page_size": 2}
-    while url:
-        pages += 1
-        # Seven rows, two a page. A cursor that repeats a page would
-        # otherwise hang the suite rather than fail it.
-        assert pages <= 4, "paging did not reach the end"
-        body = client.get(url, params).json()
-        seen += [row["id"] for row in body["results"]]
-        url, params = body["next"], {}
-
-    assert seen == list(dict.fromkeys(seen)), "a row came back on two pages"
-    assert len(seen) == 7, "a row was never reached"
 
 
 def test_the_path_leaves_out_an_archived_ancestor(client):

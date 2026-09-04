@@ -7,7 +7,7 @@ from polling.adapters.base import (
     NormalisedEvent,
     NormalisedUpdate,
 )
-from polling.reconcile import apply_fetch, rebuild_ancestry, rebuild_search
+from polling.reconcile import apply_fetch
 from status.choices import (
     EventKind,
     EventSource,
@@ -297,52 +297,10 @@ def test_a_second_poll_does_not_rewrite_who_made_the_row():
 
 
 @pytest.mark.django_db
-def test_a_poll_writes_the_ancestor_chain():
-    # Nothing else writes the column. Without this pass a component's
-    # Components tab lists no descendant, whatever the provider nests.
-    service = ServiceFactory()
-    apply_fetch(
-        service,
-        [_component(external_id="a"), _component(external_id="b", parent="a")],
-        [],
-        StatusSource.PROVIDER,
-    )
-
-    top = ServiceComponent.objects.get(external_id="a")
-    child = ServiceComponent.objects.get(external_id="b")
-    assert ancestry(top) == []
-    assert ancestry(child) == [top.id]
-
-
-@pytest.mark.django_db
-def test_a_poll_rebuilds_the_service_once_not_once_a_component(monkeypatch):
-    # `ServiceComponent.save` rebuilds the whole service, and this pass
-    # saves every component of it. Unsuppressed, a hundred components
-    # cost a hundred rebuilds of a hundred rows, on every poll.
-    from polling import reconcile
-
-    calls = []
-    real = reconcile.rebuild_ancestry
-    monkeypatch.setattr(
-        reconcile,
-        "rebuild_ancestry",
-        lambda service: calls.append(service) or real(service),
-    )
-
-    service = ServiceFactory()
-    rows = [_component(external_id=str(n)) for n in range(5)]
-    apply_fetch(service, rows, [], StatusSource.PROVIDER)
-    assert len(calls) == 1
-
-    calls.clear()
-    apply_fetch(service, rows, [], StatusSource.PROVIDER)
-    assert len(calls) == 1
-
-
-@pytest.mark.django_db
-def test_a_reparent_rewrites_the_subtree():
-    # The chain of a grandchild changes when its parent moves, and
-    # nothing tells the grandchild. The pass rewrites the service.
+def test_a_reparent_moves_the_whole_subtree():
+    # A provider can lift a group out from under another. The poll
+    # writes one parent, and the grandchild below it has to read its
+    # new place without a second write.
     service = ServiceFactory()
     nested = [
         _component(external_id="a"),
@@ -361,44 +319,3 @@ def test_a_reparent_rewrites_the_subtree():
     assert ancestry(ServiceComponent.objects.get(external_id="c")) == [
         ServiceComponent.objects.get(external_id="b").id
     ]
-
-
-@pytest.mark.django_db
-def test_a_loop_in_the_parent_column_does_not_hang_the_pass():
-    # The column points at its own table, so bad data can make a cycle.
-    # Without the guard the walk never reaches a root, and the worker
-    # never finishes the poll that called it.
-    service = ServiceFactory()
-    first = ComponentFactory(service=service)
-    second = ComponentFactory(service=service, parent=first)
-    # `update` skips `clean`, which is the only thing refusing this.
-    ServiceComponent.objects.filter(pk=first.pk).update(parent=second)
-
-    rebuild_ancestry(service)
-
-    assert ancestry(first) == [second.id]
-    assert ancestry(second) == [first.id]
-
-
-@pytest.mark.django_db
-def test_a_reparent_rewrites_every_descendants_path():
-    # Ancestry and the search vector both carry the chain. A provider
-    # moving one node must not leave its children searchable under
-    # where they used to sit.
-    service = ServiceFactory(name="Acme")
-    old = ComponentFactory(service=service, name="Legacy", external_id="old")
-    new = ComponentFactory(service=service, name="Platform", external_id="new")
-    leaf = ComponentFactory(
-        service=service, name="Queue", external_id="leaf", parent=old
-    )
-    rebuild_ancestry(service)
-    rebuild_search(service)
-
-    leaf.parent = new
-    leaf.save(update_fields=["parent"])
-    rebuild_ancestry(service)
-    rebuild_search(service)
-
-    assert ancestry(leaf) == [new.id]
-    assert list(ServiceComponent.objects.search("legacy queue")) == []
-    assert list(ServiceComponent.objects.search("platform queue")) == [leaf]

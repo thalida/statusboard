@@ -1,15 +1,14 @@
 import pytest
-from django.db.models import Q
 from django.db.utils import IntegrityError
 
-from catalog.models import ComponentAncestor, Service, ServiceComponent, StatusPage
-from polling.reconcile import rebuild_ancestry, rebuild_search
+from catalog.models import Service, ServiceComponent, StatusPage
 from tests.factories import (
     ComponentFactory,
     PollerFactory,
     ServiceFactory,
     UserFactory,
     ancestry,
+    descendants,
     track,
     watchers,
 )
@@ -194,46 +193,10 @@ def test_the_database_refuses_a_rollup_that_already_has_children():
         parent.save()
 
 
-def test_a_reparent_in_plain_python_rebuilds_the_derived_columns(db):
-    # An admin-only hook left every other writer stale: a shell session,
-    # a data migration, a later API write. The symptom is invisible. The
-    # row is missing from `?ancestor=`, from `?q=` and from every count.
-    service = ServiceFactory(name="Twilio")
-    parent = ComponentFactory(service=service, name="Programmable Messaging")
-    child = ComponentFactory(service=service, name="SMS")
-
-    child.parent = parent
-    child.save()
-
-    child.refresh_from_db()
-    assert ancestry(child) == [parent.pk]
-    assert list(ServiceComponent.objects.search("programmable sms")) == [child]
-
-
-def test_a_move_between_services_rebuilds_the_service_left_behind(db):
-    # Only the new service was rebuilt. The old one kept rows naming
-    # this component in their ancestry and in their search documents.
-    old = ServiceFactory(name="Twilio")
-    new = ServiceFactory(name="Vonage")
-    top = ComponentFactory(service=old, name="Programmable Messaging")
-    leaf = ComponentFactory(service=old, name="SMS", parent=top)
-    rebuild_ancestry(old)
-    rebuild_search(old)
-    assert list(ServiceComponent.objects.search("programmable sms")) == [leaf]
-
-    top.parent = None
-    top.service = new
-    top.save()
-
-    leaf.refresh_from_db()
-    assert ancestry(leaf) == []
-    assert list(ServiceComponent.objects.search("programmable sms")) == []
-
-
 def test_a_parent_in_another_service_is_not_a_step_in_the_path(db):
-    # The closure table stops at the service boundary. A breadcrumb that
-    # walked past it names a component of another service. The same
-    # response then says the row has no ancestors.
+    # The walk stops at the service boundary. A breadcrumb that went
+    # past it names a component of another service. The same response
+    # then says the row has no ancestors.
     old = ServiceFactory(name="Twilio")
     top = ComponentFactory(service=old, name="Programmable Messaging")
     leaf = ComponentFactory(service=old, name="SMS", parent=top)
@@ -247,85 +210,70 @@ def test_a_parent_in_another_service_is_not_a_step_in_the_path(db):
     assert leaf.path == "Twilio / SMS"
 
 
-def test_a_save_that_moves_nothing_rebuilds_nothing(db, monkeypatch):
-    # A rebuild rewrites every row of the service. A save of an
-    # unrelated column must not pay for it, or one poll goes quadratic.
-    from polling import reconcile
-
-    component = ComponentFactory()
-    calls = []
-    monkeypatch.setattr(
-        reconcile, "rebuild_search", lambda service: calls.append(service)
-    )
-
-    component.is_featured = True
-    component.save()
-
-    assert calls == []
-
-
-def test_ancestry_records_one_link_a_step_with_the_distance(db):
-    # A descendant query joins this table. Walking `parent` per row
-    # cannot use an index, and `for_display` only selects two levels up.
+def test_the_tree_reads_every_step_not_one_level(db):
+    # A component's Components tab lists everything under it, and its
+    # breadcrumb names every step above it. One level either way would
+    # hide the grandchild and shorten the path.
     service = ServiceFactory()
     top = ComponentFactory(service=service)
     middle = ComponentFactory(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
 
     # Root first, which is the order a breadcrumb reads.
     assert ancestry(leaf) == [top.id, middle.id]
-    # The distance, so one query can ask for the direct children alone.
-    # A parent is 1. Counting from the root instead would make `depth=1`
-    # name the top of the tree.
-    assert {link.ancestor_id: link.depth for link in leaf.ancestor_links.all()} == {
-        top.id: 2,
-        middle.id: 1,
-    }
+    assert descendants(top) == {middle.id, leaf.id}
+    # Nothing counts a component among the rows below it.
+    assert descendants(leaf) == set()
 
-    # Every descendant, not the direct children. `top` has two below it.
-    assert ServiceComponent.objects.filter(ancestor_links__ancestor=top).count() == 2
+
+def test_the_tree_stops_at_the_service_boundary(db):
+    # Moving a component to another service leaves its old children
+    # pointing across. Counting them under the mover names rows that
+    # service's lists never hold.
+    old = ServiceFactory()
+    top = ComponentFactory(service=old)
+    leaf = ComponentFactory(service=old, parent=top)
+
+    top.service = ServiceFactory()
+    top.save()
+
+    assert descendants(top) == set()
+    leaf.refresh_from_db()
+    assert ancestry(leaf) == []
+
+
+def test_a_loop_in_the_parent_column_does_not_hang_the_tree(db):
+    # The column points at its own table, so bad data can make a cycle.
+    # Unguarded, the walk down never ends and the request never answers.
+    service = ServiceFactory()
+    first = ComponentFactory(service=service)
+    second = ComponentFactory(service=service, parent=first)
+    # `update` skips `clean`, which is the only thing refusing this.
+    ServiceComponent.objects.filter(pk=first.pk).update(parent=second)
+
+    assert descendants(first) == {second.id}
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert ancestry(first) == [second.id]
+    assert ancestry(second) == [first.id]
 
 
 def test_deleting_a_component_takes_its_ancestry_with_it(db):
-    # An array of ids held no reference. Deleting a component left its
-    # id in every descendant, and only a poll of that service cleared
-    # it. An untracked service is never polled again.
+    # An array of ids held no reference, and a closure table needed a
+    # rebuild hook on four write paths. A computed answer passes this
+    # trivially, which is why the table went.
     service = ServiceFactory()
     top = ComponentFactory(service=service)
     middle = ComponentFactory(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
 
-    # Read the key first. A delete clears it on the instance, so a
-    # filter written afterwards matches nothing and proves nothing.
-    gone = middle.pk
     middle.delete()
 
-    assert not ComponentAncestor.objects.filter(
-        Q(ancestor=gone) | Q(descendant=gone)
-    ).exists()
-    # `parent` is SET_NULL, so the leaf is now a root. The cascade
-    # clears the deleted row's own links only. Without the rebuild the
-    # leaf keeps a grandparent it no longer sits under.
+    # `parent` is SET_NULL, so the leaf is now a root. Nothing may
+    # still claim it sits under the grandparent.
+    leaf.refresh_from_db()
     assert ancestry(leaf) == []
-
-
-def test_deleting_a_component_takes_its_name_out_of_the_search_path(db):
-    # `search_document` holds each ancestor's name. Left stale, a
-    # deleted parent's name still finds a component under nothing.
-    service = ServiceFactory(name="Twilio")
-    top = ComponentFactory(service=service, name="Programmable Messaging")
-    leaf = ComponentFactory(service=service, name="SMS", parent=top)
-    rebuild_ancestry(service)
-    rebuild_search(service)
-
-    top.delete()
-
-    assert list(ServiceComponent.objects.search("messaging")) == []
-    # The leaf still answers its own name. A rebuild that dropped the
-    # whole vector would pass the line above and serve nothing.
-    assert list(ServiceComponent.objects.search("sms")) == [leaf]
+    assert descendants(top) == set()
 
 
 def test_for_display_counts_descendants_without_a_query_a_row(
@@ -337,7 +285,6 @@ def test_for_display_counts_descendants_without_a_query_a_row(
     top = ComponentFactory(service=service)
     middle = ComponentFactory(service=service, parent=top)
     ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
 
     rows = list(ServiceComponent.objects.for_display())
     with django_assert_num_queries(0):
@@ -354,9 +301,23 @@ def test_the_descendant_count_leaves_out_an_archived_row(db):
     top = ComponentFactory(service=service)
     middle = ComponentFactory(service=service, parent=top)
     leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
     leaf.is_archived = True
     leaf.save(update_fields=["is_archived"])
+
+    row = ServiceComponent.objects.for_display().get(pk=top.pk)
+    assert row.descendant_count == 1
+
+
+def test_the_descendant_count_walks_through_an_archived_row(db):
+    # An archived group is not counted, and it does not hide what sits
+    # under it either. A walk that stopped there would drop live rows
+    # the Components tab still lists.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    ComponentFactory(service=service, parent=middle)
+    middle.is_archived = True
+    middle.save(update_fields=["is_archived"])
 
     row = ServiceComponent.objects.for_display().get(pk=top.pk)
     assert row.descendant_count == 1
@@ -418,55 +379,26 @@ def test_a_services_tracked_count_counts_a_component_once_per_owner(db):
     assert prepared.tracked_component_count == 1
 
 
-def test_the_audit_log_holds_no_search_vector():
-    # `rebuild_search` writes the column in a bulk update, which records
-    # no history. Every old row would carry the vector of the last
-    # ordinary save. That describes neither the row nor the edit.
-    columns = {field.name for field in ServiceComponent.history.model._meta.fields}
-    assert "search_document" not in columns
-
-
-def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
-    # The rollup's own name is an exact, weight-A hit. A leaf matches
-    # only through its service, at weight C, so it must sort below.
+def test_search_reaches_a_component_through_its_services_name(db):
+    # "twilio" has to find SMS. Its own name says nothing about which
+    # service publishes it. A name-only match returns an empty page for
+    # the word people actually type.
     service = ServiceFactory(name="Twilio")
     rollup = ComponentFactory(service=service, name="Twilio", is_overall=True)
     parent = ComponentFactory(service=service, name="Programmable Messaging")
     leaf = ComponentFactory(service=service, name="SMS", parent=parent)
-    rebuild_ancestry(service)
-    rebuild_search(service)
 
-    found = list(ServiceComponent.objects.search("twilio"))
-    assert found[0] == rollup
-    assert leaf in found
+    assert set(ServiceComponent.objects.search("twilio")) == {rollup, parent, leaf}
 
     # OR semantics would let the rollup match too: it says "twilio" but
     # never "sms".
     assert list(ServiceComponent.objects.search("twilio sms")) == [leaf]
 
 
-def test_search_weights_a_components_own_name_over_its_ancestors_over_its_service(db):
-    # A single-service fixture cannot separate the weights. Every
-    # component in it shares one service name, so A and C score the
-    # same. Three services isolate each weight in turn.
-    own_service = ServiceFactory(name="Widgets")
-    own_name = ComponentFactory(service=own_service, name="Twilio")
+def test_search_ignores_the_case_and_matches_part_of_a_word(db):
+    # People type a fragment in lower case. An exact match would answer
+    # nothing until the whole name was typed the provider's way.
+    service = ServiceFactory(name="Twilio")
+    leaf = ComponentFactory(service=service, name="Programmable Messaging")
 
-    ancestor_service = ServiceFactory(name="Gadgets")
-    ancestor = ComponentFactory(service=ancestor_service, name="Twilio")
-    via_ancestor = ComponentFactory(
-        service=ancestor_service, name="Portal", parent=ancestor
-    )
-    rebuild_ancestry(ancestor_service)
-    rebuild_search(ancestor_service)
-
-    via_service = ServiceFactory(name="Twilio")
-    via_service_component = ComponentFactory(service=via_service, name="Messaging")
-
-    rebuild_search(own_service)
-    rebuild_search(via_service)
-
-    ranked = {row.id: row.rank for row in ServiceComponent.objects.search("twilio")}
-    assert (
-        ranked[own_name.id] > ranked[via_ancestor.id] > ranked[via_service_component.id]
-    )
+    assert list(ServiceComponent.objects.search("messag")) == [leaf]

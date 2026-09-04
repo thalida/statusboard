@@ -1,10 +1,5 @@
-import uuid
-from contextlib import contextmanager
-from contextvars import ContextVar
 from urllib.parse import urlparse, urlunparse
 
-from django.contrib.postgres.indexes import GinIndex
-from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVectorField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -211,30 +206,6 @@ class ServiceRequest(BaseModel):
         return self.url
 
 
-_rebuilds_held = ContextVar("catalog_rebuilds_held", default=False)
-
-
-@contextmanager
-def held_rebuilds():
-    """Hold back the per-save rebuild, for a caller doing its own.
-
-    `ServiceComponent.save` rewrites the whole service. A caller that
-    saves many components of one service pays that per row. A poll of a
-    hundred components then costs a hundred passes over a hundred rows.
-
-    A caller that holds the rebuild owes the service one afterwards.
-    `polling.reconcile._upsert_components` is the only one.
-
-    A `ContextVar` rather than a flag, so one worker thread cannot hold
-    back another's rebuild.
-    """
-    token = _rebuilds_held.set(True)
-    try:
-        yield
-    finally:
-        _rebuilds_held.reset(token)
-
-
 class ServiceComponentQuerySet(models.QuerySet):
     def visible(self):
         """The components a caller is served, anywhere.
@@ -250,17 +221,22 @@ class ServiceComponentQuerySet(models.QuerySet):
         return self.filter(is_archived=False)
 
     def search(self, q):
-        """Rank a query against the stored path.
+        """Narrow to what every typed word describes.
 
-        Websearch mode, so several words are an AND. A caller ordering
-        by anything else drops the rank and keeps the filter.
+        A word matches the component's own name or its service's, so
+        `twilio` reaches Twilio's SMS row. Several words are an AND, so
+        `twilio sms` reaches that row and not its siblings.
+
+        The result is unordered. The list view decides what leads a
+        search. An ordering backend runs after this and would discard
+        any order set here.
         """
-        query = SearchQuery(q, search_type="websearch")
-        return (
-            self.filter(search_document=query)
-            .annotate(rank=SearchRank(models.F("search_document"), query))
-            .order_by("-rank")
-        )
+        rows = self
+        for term in q.split():
+            rows = rows.filter(
+                models.Q(name__icontains=term) | models.Q(service__name__icontains=term)
+            )
+        return rows
 
     def for_display(self, user=None):
         """Everything `ComponentSerializer` reads, in four queries.
@@ -328,10 +304,6 @@ class ServiceComponent(BaseModel):
         on_delete=models.SET_NULL,
         related_name="children",
     )
-    # The whole path, weighted, written by reconcile. Searching a
-    # service's name must also reach its components. Walking `parent`
-    # at query time cannot use an index.
-    search_document = SearchVectorField(null=True, editable=False)
     objects = ServiceComponentQuerySet.as_manager()
 
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
@@ -355,10 +327,7 @@ class ServiceComponent(BaseModel):
         verbose_name="Archived on", null=True, blank=True, editable=False
     )
 
-    # `search_document` is derived and `rebuild_search` writes it in a
-    # bulk update, which records no history. A kept column would hold
-    # the vector of the last ordinary save on every old row.
-    history = HistoricalRecords(excluded_fields=["search_document"])
+    history = HistoricalRecords()
 
     # The rollup is never a parent, but `is_overall` belongs to the
     # parent row, not this one. A `CheckConstraint` sees one row, so it
@@ -381,9 +350,6 @@ class ServiceComponent(BaseModel):
                 | models.Q(is_archived=False, archived_at__isnull=True),
                 name="archived_flag_and_date_agree",
             ),
-        ]
-        indexes = [
-            GinIndex(fields=["search_document"], name="components_by_search"),
         ]
 
     def live_events(self, kind):
@@ -414,24 +380,12 @@ class ServiceComponent(BaseModel):
             return self.boards.filter(owner=user).exists()
         return prepared
 
-    # The ancestry links and `search_document` are built from these. A
-    # save touching none of them leaves both true.
-    REBUILD_TRIGGERS = frozenset(
-        {"name", "parent", "parent_id", "service", "service_id"}
-    )
-
     def save(self, *args, **kwargs):
-        """Keep the archive date in step with the flag, and the tree true.
+        """Keep the archive date in step with the flag.
 
         A bulk update does not come through here, so anything writing
         the flag that way sets the date itself. The constraint is what
         makes that a failure rather than a quiet disagreement.
-
-        The rebuild was on the admin alone. Every other writer left the
-        derived columns stale. The symptom is silence: the component is
-        absent from `?ancestor=`, from `?q=` and from every
-        `descendant_count`. A poll repairs a tracked service, so a
-        paused or untracked one stayed wrong forever.
         """
         if self.is_archived and self.archived_at is None:
             self.archived_at = timezone.now()
@@ -440,68 +394,7 @@ class ServiceComponent(BaseModel):
         fields = kwargs.get("update_fields")
         if fields is not None and "is_archived" in fields:
             kwargs["update_fields"] = [*fields, "archived_at"]
-        stale = self._services_to_rebuild(kwargs.get("update_fields"))
         super().save(*args, **kwargs)
-        if stale:
-            from polling.reconcile import rebuild_ancestry, rebuild_search
-
-            for service in stale:
-                rebuild_ancestry(service)
-                rebuild_search(service)
-
-    def delete(self, *args, **kwargs):
-        """Rebuild the service, because a delete moves the rows below.
-
-        The cascade drops this row's own links. `parent` is SET_NULL,
-        so a child of this row becomes a root. The link from this row's
-        parent down to that child survives. It names a tree nobody
-        sits in.
-
-        A queryset delete does not come through here. Nothing removes a
-        component that way. A poll archives instead.
-
-        Read the service before the write. Django clears the key.
-        """
-        service = self.service
-        result = super().delete(*args, **kwargs)
-        from polling.reconcile import rebuild_ancestry, rebuild_search
-
-        rebuild_ancestry(service)
-        rebuild_search(service)
-        return result
-
-    def _services_to_rebuild(self, update_fields):
-        """Whose derived columns this save is about to invalidate.
-
-        Empty is the normal answer. A poll saves every row of a service
-        and usually moves none of them. So the check costs no query when
-        nothing the columns are built from changed.
-
-        A create counts. A component made in a shell otherwise holds no
-        ancestry and no search vector.
-
-        Call this before the write. It reads the row as it still stands.
-        """
-        if _rebuilds_held.get():
-            return ()
-        if self._state.adding:
-            return (self.service,)
-        if update_fields is not None and self.REBUILD_TRIGGERS.isdisjoint(
-            update_fields
-        ):
-            return ()
-        was = (
-            ServiceComponent.objects.filter(pk=self.pk)
-            .values_list("name", "parent_id", "service_id")
-            .first()
-        )
-        if was is None or was == (self.name, self.parent_id, self.service_id):
-            return ()
-        if was[2] == self.service_id:
-            return (self.service,)
-        # A move between services leaves the old one behind. Its
-        # ancestry links and its search documents still name this row.
-        return (self.service, Service.objects.get(pk=was[2]))
 
     def clean(self):
         """A component sits under one of its own service's components.
@@ -538,8 +431,8 @@ class ServiceComponent(BaseModel):
         Moving a component leaves its old children pointing across. A
         step there names a row this service's lists never hold.
 
-        `polling.reconcile._chains` walks a whole service by the same
-        rules, and the backfill in migration 0008 repeats them.
+        `catalog.queries` walks the other direction under the same two
+        rules. The rows here are already loaded, so this stays Python.
         """
         chain, node, seen = [], self.parent, {self.pk}
         while (
@@ -574,85 +467,3 @@ class ServiceComponent(BaseModel):
 
     def __str__(self):
         return self.path
-
-
-class ComponentAncestorQuerySet(models.QuerySet):
-    def to_visible(self):
-        """The links a caller is served, anywhere.
-
-        `ServiceComponentQuerySet.visible` is the one definition of
-        which components a reader sees. Naming the archive flag here
-        would give a descendant count a second answer to that.
-        """
-        return self.filter(descendant__in=ServiceComponent.objects.visible())
-
-
-class ComponentAncestor(models.Model):
-    """One component sits above another, at a known distance.
-
-    Read the two names off the row, not off the component you hold.
-    They swap sides depending on where you stand. So a component's own
-    ancestors are `component.ancestor_links`, and everything under it is
-    `component.descendant_links`.
-
-    `depth` counts the steps down from `ancestor` to `descendant`. A
-    parent is 1 and a grandparent is 2. A breadcrumb reads root first
-    with `order_by("-depth")`, and `depth=1` is the direct children.
-
-    A component is not its own ancestor. Every reader counts other
-    components, so a depth 0 row would add one to every answer.
-
-    This is not a `BaseModel`. Reconcile derives every row from
-    `parent`, so an author and an edit time record nothing anybody
-    reads. The key still follows the house rule.
-
-    The pair replaces an array of ancestor ids. The array held no
-    reference. Deleting a component left its id in every descendant,
-    until the next poll of that service. An untracked service is never
-    polled again.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
-    # The delete rule is the reason this table exists. A component that
-    # goes takes every claim about where it sat with it.
-    #
-    # `db_index=False` because the unique constraint already indexes
-    # this column first. That index answers the descendant direction:
-    # `?ancestor=`, and the count on every component row.
-    ancestor = models.ForeignKey(
-        ServiceComponent,
-        on_delete=models.CASCADE,
-        related_name="descendant_links",
-        db_index=False,
-    )
-    # The foreign key index answers the ancestor direction: one
-    # component's own chain, which a breadcrumb reads.
-    descendant = models.ForeignKey(
-        ServiceComponent,
-        on_delete=models.CASCADE,
-        related_name="ancestor_links",
-    )
-    depth = models.PositiveIntegerField()
-    objects = ComponentAncestorQuerySet.as_manager()
-
-    class Meta:
-        # Root first, which is how a breadcrumb reads.
-        ordering = ["-depth"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["ancestor", "descendant"], name="one_link_per_component_pair"
-            ),
-            # Both hold "no component is its own ancestor", which every
-            # count depends on. One forbids the row, one forbids the
-            # distance that would describe it.
-            models.CheckConstraint(
-                condition=~models.Q(ancestor=models.F("descendant")),
-                name="ancestry_excludes_self",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(depth__gte=1), name="ancestry_depth_starts_at_one"
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.ancestor} > {self.descendant} ({self.depth})"

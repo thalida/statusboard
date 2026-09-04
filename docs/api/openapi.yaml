@@ -88,7 +88,7 @@ info:
 
     Query parameters are declared in a `FilterSet`. Almost none is generated from a column of
     the same name. `is_overall` and `kind` are the two that are. `q` is no filter at all.
-    `ComponentListView.filter_queryset` ranks on it before the backends run.
+    `ComponentListView.filter_queryset` narrows on it before the backends run.
 
     So a parameter is not an ORM path, and a field's path in the response body does not build
     its filter. `service` takes a slug where the body carries a nested `ServiceRef`. `component`
@@ -306,9 +306,9 @@ paths:
         `service`, a component's descendants with `ancestor`, an event's affected list with
         `event`.
 
-        `q` matches a component's whole path, so `twilio` finds `SMS`. Results are then ranked by
-        relevance. Without `q` the default is `suggested`, except under `service`, where it is
-        `status_page_order`.
+        `q` matches part of a component's name or its service's name, so `twilio` finds `SMS`.
+        Several words are an AND. The service rollup leads the results. Without `q` the default
+        is `suggested`, except under `service`, where it is `status_page_order`.
 
         Archived components are never listed. An event whose only affected component was archived
         returns an empty page.

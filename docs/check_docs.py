@@ -62,7 +62,7 @@ DERIVED = {
     "Poller.cooldown_seconds": "own override or /meta/ default",
     "Service.poller": "OneToOneField",
     "Component.path": "walk of parent",
-    "Component.descendant_count": "Count of ComponentAncestor where ancestor is this id",
+    "Component.descendant_count": "recursive walk down parent, archived rows left out",
     "Component.is_tracked": "per-user annotation over DashboardItem",
     "Component.upcoming_maintenance": "soonest unfinished maintenance event across that M2M",
     "Component.upcoming_maintenance_count": "Count of unfinished maintenance across that M2M",

@@ -64,19 +64,19 @@ class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
         """
         super().initial(request, *args, **kwargs)
         if request.query_params.get("q"):
-            # `search` already ranked the rows. A sort applied after it
-            # throws the ranking away.
-            self.ordering = ["-rank"]
+            # The rollup leads, then the suggested keys. Typing a
+            # service's name matches every part of it. Without this,
+            # eighty rows bury the one that answers the question.
+            self.ordering = ["-is_overall", *self.SUGGESTED]
         elif request.query_params.get("service"):
             # A service tab reads down the provider's own page.
             self.ordering = ["status_page_order"]
 
     def filter_queryset(self, queryset):
-        """Rank by relevance when the caller typed something.
+        """Narrow to what the caller typed, before the backends run.
 
         One control and one label, Smart, on every list. A separate
-        "best match" would name a ranking that does not exist until
-        somebody types.
+        "best match" would name a ranking the search does not work out.
         """
         q = self.request.query_params.get("q")
         if q:
