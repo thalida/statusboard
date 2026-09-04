@@ -62,12 +62,16 @@ class BoardComponentListView(generics.ListCreateAPIView):
                 response=ComponentSerializer,
                 description="Already tracked. Tracking twice is not an error.",
             ),
+            404: OpenApiResponse(description="No such board, or no such component."),
         },
     )
     def create(self, request, *args, **kwargs):
         board = _board(request, self.kwargs["uuid"])
+        # `visible`, so a write agrees with the reads. An archived id
+        # already answers 404 on the component detail. Accepting it here
+        # made a board row that no list renders.
         component = get_object_or_404(
-            ServiceComponent, id=request.data.get("component_id")
+            ServiceComponent.objects.visible(), id=request.data.get("component_id")
         )
         _, created = DashboardItem.objects.get_or_create(
             dashboard=board,

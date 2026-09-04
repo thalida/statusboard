@@ -28,7 +28,8 @@ class ServiceQuerySet(models.QuerySet):
         tracked = models.Value(0, output_field=models.IntegerField())
         if user is not None and not isinstance(user, AnonymousUser):
             tracked = related_count(
-                ServiceComponent.objects.filter(boards__owner=user), "service"
+                ServiceComponent.objects.visible().filter(boards__owner=user),
+                "service",
             )
         return (
             self.select_related("status_page", "poller")
@@ -101,7 +102,8 @@ class Service(BaseModel):
         if prepared is not None:
             return prepared
         return (
-            ServiceComponent.objects.filter(service=self, boards__owner=user)
+            ServiceComponent.objects.visible()
+            .filter(service=self, boards__owner=user)
             .distinct()
             .count()
         )
@@ -260,8 +262,8 @@ class ServiceComponentQuerySet(models.QuerySet):
         """The components a caller is served, anywhere.
 
         The provider stopped publishing an archived one. Every list,
-        every count and the detail read this, so no two of them can
-        answer the same question differently.
+        every count, the detail and the track write read this. So no two
+        of them can answer the same question differently.
 
         It is not part of `for_display`. That queryset also prefetches a
         service's rollup, and a service whose rollup is archived still

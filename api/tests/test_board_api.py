@@ -164,6 +164,18 @@ def test_tracking_the_same_component_twice_is_not_an_error(client, board):
 
 
 @pytest.mark.django_db
+def test_tracking_an_archived_component_is_refused(client, board):
+    # `Service.overall_component` still hands a client an archived
+    # rollup, so this needs no stale id. Accepting it made a board row
+    # that no list renders and nothing can offer to untrack.
+    component = ComponentFactory(service=ServiceFactory(), is_archived=True)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    response = client.post(url, {"component_id": str(component.id)}, format="json")
+    assert response.status_code == 404
+    assert not DashboardItem.objects.filter(dashboard=board).exists()
+
+
+@pytest.mark.django_db
 def test_stopping_tracking_removes_the_item(client, board):
     component = _track(board)
     url = reverse(

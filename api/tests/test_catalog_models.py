@@ -239,6 +239,22 @@ def test_a_services_component_count_leaves_out_an_archived_row(db):
     assert Service.objects.get(pk=service.pk).component_count() == 1
 
 
+def test_a_services_tracked_count_leaves_out_an_archived_row(db):
+    # The client reads a count above zero as "this service is on your
+    # board". The board list leaves an archived row out. A count that
+    # held one promised a row the board never returns.
+    user = UserFactory()
+    service = ServiceFactory()
+    gone = ComponentFactory(service=service)
+    track(gone, user=user)
+    gone.is_archived = True
+    gone.save()
+
+    prepared = Service.objects.for_display(user).get(pk=service.pk)
+    assert prepared.tracked_component_count(user) == 0
+    assert Service.objects.get(pk=service.pk).tracked_component_count(user) == 0
+
+
 def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
     # The rollup's own name is an exact, weight-A hit. A leaf matches
     # only through its service, at weight C, so it must sort below.

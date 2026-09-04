@@ -19,14 +19,15 @@ info:
     somebody may be tracking it.
 
     Archived components are left out of every list, every count and the detail. The detail
-    answers `404`. Nothing points at a row no list holds.
+    answers `404`, and so does tracking one.
 
     The one exception is `Service.overall_component`. A service whose rollup is archived still
     needs a status in its header.
 
-    Two consequences follow. A tracked component that is archived leaves the board with no
+    Three consequences follow. A tracked component that is archived leaves the board with no
     notice. An event names the components it affected, and a link to an archived one answers
-    `404`.
+    `404`. `Component.path` and `Component.parent` name ancestors without checking them, so a
+    breadcrumb step can answer `404` too. Render a node you cannot fetch as plain text.
 
     ## Severity is the state
 
@@ -457,7 +458,8 @@ paths:
             schema: { type: object, required: [component_id], properties: { component_id: { type: string, format: uuid } } }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Component' } } } }
-        '409': { description: Already tracked }
+        '200': { description: 'Already tracked. Tracking twice is not an error.', content: { application/json: { schema: { $ref: '#/components/schemas/Component' } } } }
+        '404': { description: 'No such board, or no such component. An archived component is not tracked.' }
 
   /dashboards/{uuid}/components/{component_id}/:
     delete:
