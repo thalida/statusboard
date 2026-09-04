@@ -179,6 +179,7 @@ def test_an_event_keeps_a_component_the_provider_stopped_listing(two_services):
             )
         ],
         StatusSource.PROVIDER,
+        _run(mine),
     )
 
     event = ServiceEvent.objects.get(external_id="inc-1")
@@ -205,6 +206,7 @@ def test_a_poll_invents_no_component(two_services):
             )
         ],
         StatusSource.PROVIDER,
+        _run(mine),
     )
 
     assert not ServiceComponent.objects.filter(external_id="never-seen").exists()

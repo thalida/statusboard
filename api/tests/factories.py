@@ -73,6 +73,21 @@ class ComponentFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Component {n}")
 
 
+def poll_run(service, **kwargs):
+    """The fetch that a test says wrote its rows.
+
+    `apply_fetch` takes one, and refuses a run from another service's
+    poller. The run has to belong to the service being reconciled.
+
+    The status page supplies the url and the provider. A test about the
+    reconciliation does not have to make one.
+    """
+    from polling.models import PollRun
+
+    page = getattr(service, "status_page", None) or StatusPageFactory(service=service)
+    return PollRun.open(service.poller, page.url, page.provider, **kwargs)
+
+
 def track(component, user=None):
     """Track a component, the way somebody using the app would.
 

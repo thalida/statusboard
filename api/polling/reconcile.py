@@ -8,7 +8,7 @@ from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
 @transaction.atomic
-def apply_fetch(service, components, events, source, run=None):
+def apply_fetch(service, components, events, source, run):
     """Write one adapter fetch to the database.
 
     A poll is a reconciliation, not a status read.
@@ -16,7 +16,8 @@ def apply_fetch(service, components, events, source, run=None):
     An unchanged severity leaves the open status row alone.
 
     `run` is the PollRun that produced this data. Stamping it makes a
-    reading traceable back to the fetch that wrote it.
+    reading traceable back to the fetch that wrote it. Every fetch has
+    one, so nothing here writes a reading with no provenance.
 
     Nobody types any of this, so the system account signs every row. A
     blank author reads the same as one that was lost, and a component
@@ -25,7 +26,7 @@ def apply_fetch(service, components, events, source, run=None):
     # A poll writes to the service it read. Nothing in the arguments
     # ties them together. A run from another poller would file one
     # service's readings under another.
-    if run is not None and run.poller.service_id != service.pk:
+    if run.poller.service_id != service.pk:
         raise ValueError(
             f"{run} polled {run.poller.service}, not {service}. "
             "A poll writes to the service it read."
@@ -93,7 +94,7 @@ def _archive_vanished(service, components, author):
     ).update(is_archived=True, archived_at=timezone.now(), updated_by=author)
 
 
-def _write_statuses(components, rows, source, author, run=None):
+def _write_statuses(components, rows, source, author, run):
     now = timezone.now()
     for incoming in components:
         row = rows[incoming.external_id]
@@ -139,7 +140,7 @@ def _affected(service, rows, external_ids):
     return named
 
 
-def _upsert_events(service, events, rows, author, run=None):
+def _upsert_events(service, events, rows, author, run):
     for incoming in events:
         event, _ = ServiceEvent.objects.update_or_create(
             service=service,

@@ -16,7 +16,7 @@ from status.choices import (
     StatusSource,
 )
 from status.models import ComponentStatus, ServiceEvent
-from tests.factories import ComponentFactory, ServiceFactory, ancestry
+from tests.factories import ComponentFactory, ServiceFactory, ancestry, poll_run
 
 
 def _component(external_id="a", name="SMS", severity=Severity.OPERATIONAL, **kw):
@@ -33,7 +33,7 @@ def _component(external_id="a", name="SMS", severity=Severity.OPERATIONAL, **kw)
 @pytest.mark.django_db
 def test_a_new_component_is_created():
     service = ServiceFactory()
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     assert (
         ServiceComponent.objects.filter(service=service, external_id="a").count() == 1
     )
@@ -44,7 +44,11 @@ def test_a_rename_updates_the_existing_row_rather_than_creating_one():
     service = ServiceFactory()
     ComponentFactory(service=service, external_id="a", name="SMS")
     apply_fetch(
-        service, [_component(name="Programmable Messaging")], [], StatusSource.PROVIDER
+        service,
+        [_component(name="Programmable Messaging")],
+        [],
+        StatusSource.PROVIDER,
+        poll_run(service),
     )
     rows = ServiceComponent.objects.filter(service=service)
     assert rows.count() == 1
@@ -56,7 +60,7 @@ def test_a_vanished_component_is_archived_not_deleted():
     # Someone may be tracking it. Deleting would silently remove it from their board.
     service = ServiceFactory()
     ComponentFactory(service=service, external_id="gone", name="Old")
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     old = ServiceComponent.objects.get(service=service, external_id="gone")
     assert old.archived_at is not None
     assert ServiceComponent.objects.filter(service=service).count() == 2
@@ -66,7 +70,7 @@ def test_a_vanished_component_is_archived_not_deleted():
 def test_a_component_that_reappears_is_unarchived():
     service = ServiceFactory()
     ComponentFactory(service=service, external_id="a", archived_at=timezone.now())
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     assert (
         ServiceComponent.objects.get(service=service, external_id="a").archived_at
         is None
@@ -81,6 +85,7 @@ def test_the_parent_child_structure_is_refreshed():
         [_component("parent", "Group"), _component("child", "SMS", parent="parent")],
         [],
         StatusSource.PROVIDER,
+        poll_run(service),
     )
     child = ServiceComponent.objects.get(service=service, external_id="child")
     assert child.parent.external_id == "parent"
@@ -89,8 +94,8 @@ def test_the_parent_child_structure_is_refreshed():
 @pytest.mark.django_db
 def test_an_unchanged_severity_does_not_open_a_second_status_row():
     service = ServiceFactory()
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     component = ServiceComponent.objects.get(service=service, external_id="a")
     assert ComponentStatus.objects.filter(component=component).count() == 1
 
@@ -98,9 +103,13 @@ def test_an_unchanged_severity_does_not_open_a_second_status_row():
 @pytest.mark.django_db
 def test_a_changed_severity_closes_the_old_row_and_opens_a_new_one():
     service = ServiceFactory()
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     apply_fetch(
-        service, [_component(severity=Severity.MAJOR_OUTAGE)], [], StatusSource.PROVIDER
+        service,
+        [_component(severity=Severity.MAJOR_OUTAGE)],
+        [],
+        StatusSource.PROVIDER,
+        poll_run(service),
     )
     component = ServiceComponent.objects.get(service=service, external_id="a")
     rows = ComponentStatus.objects.filter(component=component).order_by("started_at")
@@ -120,7 +129,7 @@ def test_an_event_is_upserted_on_its_provider_id():
         phase=IncidentPhase.INVESTIGATING,
         starts_at=timezone.now(),
     )
-    apply_fetch(service, [], [event], StatusSource.PROVIDER)
+    apply_fetch(service, [], [event], StatusSource.PROVIDER, poll_run(service))
     apply_fetch(
         service,
         [],
@@ -134,6 +143,7 @@ def test_an_event_is_upserted_on_its_provider_id():
             )
         ],
         StatusSource.PROVIDER,
+        poll_run(service),
     )
     rows = ServiceEvent.objects.filter(service=service)
     assert rows.count() == 1
@@ -158,6 +168,7 @@ def test_an_event_is_linked_to_the_components_it_names():
             )
         ],
         StatusSource.PROVIDER,
+        poll_run(service),
     )
     event = ServiceEvent.objects.get(service=service)
     assert [c.external_id for c in event.affected_components.all()] == ["a"]
@@ -173,6 +184,7 @@ def test_a_later_provider_post_joins_the_event_the_poll_opened():
         [_component("a", severity=Severity.DEGRADED)],
         [],
         StatusSource.PROVIDER,
+        poll_run(service),
     )
     ours = ServiceEvent.objects.get(service=service)
     assert ours.detected_by == EventSource.SYSTEM
@@ -198,6 +210,7 @@ def test_a_later_provider_post_joins_the_event_the_poll_opened():
             )
         ],
         StatusSource.PROVIDER,
+        poll_run(service),
     )
 
     event = ServiceEvent.objects.get(service=service)
@@ -212,17 +225,8 @@ def test_a_later_provider_post_joins_the_event_the_poll_opened():
 def test_a_run_stamps_what_it_wrote():
     # A wrong or stale reading is otherwise untraceable: you can see what
     # it says and not where it came from.
-    from polling.models import PollRun
-    from tests.factories import PollerFactory, StatusPageFactory
-
     service = ServiceFactory()
-    page = StatusPageFactory(service=service)
-    run = PollRun.objects.create(
-        poller=PollerFactory(service=service),
-        url=page.url,
-        provider=page.provider,
-        started_at=timezone.now(),
-    )
+    run = poll_run(service)
     event = NormalisedEvent(
         external_id="inc-1",
         kind=EventKind.INCIDENT,
@@ -237,11 +241,19 @@ def test_a_run_stamps_what_it_wrote():
 
 
 @pytest.mark.django_db
-def test_a_hand_seeded_row_has_no_run():
-    # apply_fetch is called without one when nothing polled.
+def test_a_polled_reading_survives_its_run_being_deleted():
+    # The log is pruned on a retention window, and a reading is not. On
+    # CASCADE, forgetting last month's runs would take the history of
+    # every component with them.
     service = ServiceFactory()
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
-    assert ComponentStatus.objects.get(component__service=service).poll_run is None
+    run = poll_run(service)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, run)
+
+    run.delete()
+
+    status = ComponentStatus.objects.get(component__service=service)
+    assert status.severity == Severity.OPERATIONAL
+    assert status.poll_run is None
 
 
 @pytest.mark.django_db
@@ -271,7 +283,9 @@ def test_a_poll_signs_everything_it_writes():
             )
         ],
     )
-    apply_fetch(service, [_component()], [event], StatusSource.PROVIDER)
+    apply_fetch(
+        service, [_component()], [event], StatusSource.PROVIDER, poll_run(service)
+    )
 
     system = get_user_model().objects.system()
     for model in (ServiceComponent, ComponentStatus, ServiceEvent, EventUpdate):
@@ -286,10 +300,16 @@ def test_a_second_poll_does_not_rewrite_who_made_the_row():
     # A row records who made it once. Re-signing it on every poll would
     # make `created_at` and `created_by` disagree.
     service = ServiceFactory()
-    apply_fetch(service, [_component()], [], StatusSource.PROVIDER)
+    apply_fetch(service, [_component()], [], StatusSource.PROVIDER, poll_run(service))
     first = ServiceComponent.objects.get()
 
-    apply_fetch(service, [_component(name="Renamed")], [], StatusSource.PROVIDER)
+    apply_fetch(
+        service,
+        [_component(name="Renamed")],
+        [],
+        StatusSource.PROVIDER,
+        poll_run(service),
+    )
 
     again = ServiceComponent.objects.get()
     assert again.created_by_id == first.created_by_id
@@ -307,14 +327,14 @@ def test_a_reparent_moves_the_whole_subtree():
         _component(external_id="b", parent="a"),
         _component(external_id="c", parent="b"),
     ]
-    apply_fetch(service, nested, [], StatusSource.PROVIDER)
+    apply_fetch(service, nested, [], StatusSource.PROVIDER, poll_run(service))
 
     moved = [
         _component(external_id="a"),
         _component(external_id="b"),
         _component(external_id="c", parent="b"),
     ]
-    apply_fetch(service, moved, [], StatusSource.PROVIDER)
+    apply_fetch(service, moved, [], StatusSource.PROVIDER, poll_run(service))
 
     assert ancestry(ServiceComponent.objects.get(external_id="c")) == [
         ServiceComponent.objects.get(external_id="b").id
