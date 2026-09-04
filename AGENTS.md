@@ -176,6 +176,30 @@ does not help answer it does not belong there.
 One theme, dark. `UNFOLD["THEME"]` forces it, so a class with no `dark:`
 variant still lands on the right ground.
 
+**A column on the list has a place on the form.** Anything the changelist
+shows, the change view shows too. A value computed from related rows —
+a severity, a count — lands as a readonly field, not nowhere. Severity
+and watchers were on the component list and on no form, so opening the
+row answered less than the list did.
+
+**A column the list shows, the list filters.** If it is worth a column,
+it is worth narrowing by. The converse does not hold: a filter may
+narrow by something no column shows.
+
+**Every field reaches a form.** A model field missing from every
+fieldset is invisible and unreachable. `Service.source` recorded how a
+service arrived and appeared on no form for two releases.
+
+**Provenance is readonly.** A field the writer sets to record what
+happened — how a row arrived, which run wrote it — is shown and never
+typed. An editable one can be made to lie.
+
+**A name, once chosen, stays.** A column header, a field label and a
+`verbose_name` are how somebody finds a thing again. Never rename one to
+make it agree with another. Where the list says `State` and the form
+says `Is archived`, both stay. Close a gap by adding what is absent,
+never by relabelling what is already there.
+
 ## Commits
 
 A lowercase conventional prefix, then a declarative clause.
