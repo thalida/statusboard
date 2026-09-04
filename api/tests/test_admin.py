@@ -1,9 +1,76 @@
+import re
+
 import pytest
+from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
 from django.utils import timezone
 
 from authentication.models import User
+
+# The apps this project owns. A third-party admin, such as
+# auth.Group or a simplejwt token table, is not ours to place.
+# It sits outside what this test requires reachable.
+OUR_APPS = {"catalog", "status", "authentication", "dashboards", "polling"}
+
+CHANGELIST_PATH = re.compile(r"^/admin/(?P<app_label>[^/]+)/(?P<model_name>[^/]+)/$")
+
+
+def _changelist_target(link):
+    """The registered model a changelist link opens, or None.
+
+    A link to something other than a changelist, such as the
+    dashboard, names no model. It is not a gap to report.
+    """
+    match = CHANGELIST_PATH.match(str(link))
+    if not match:
+        return None
+    app_label, model_name = match.group("app_label"), match.group("model_name")
+    for model in admin.site._registry:
+        if model._meta.app_label == app_label and model._meta.model_name == model_name:
+            return model._meta.label
+    return None
+
+
+def _sidebar_reachable():
+    return {
+        label
+        for group in settings.UNFOLD["SIDEBAR"]["navigation"]
+        for item in group["items"]
+        if (label := _changelist_target(item["link"]))
+    }
+
+
+def _tab_reachable():
+    labels = set()
+    for group in settings.UNFOLD["TABS"]:
+        for dotted in group["models"]:
+            app_label, model_name = dotted.split(".")
+            for model in admin.site._registry:
+                if (
+                    model._meta.app_label == app_label
+                    and model._meta.model_name == model_name
+                ):
+                    labels.add(model._meta.label)
+    return labels
+
+
+def _inline_reachable(top_level):
+    """A model reachable only as an inline on an already-reachable page.
+
+    An inline on a page nothing else reaches does not count. Reachable
+    describes a page a person can open, not a class attribute nobody
+    links to.
+    """
+    labels = set()
+    for model, site_admin in admin.site._registry.items():
+        if model._meta.label not in top_level:
+            continue
+        for inline in getattr(site_admin, "inlines", []):
+            inline_model = getattr(inline, "model", None)
+            if inline_model is not None:
+                labels.add(inline_model._meta.label)
+    return labels
 
 
 @pytest.fixture
@@ -698,19 +765,21 @@ def test_service_requests_are_listed_by_demand(admin_client, db):
     assert response.content.index(b"b.example") < response.content.index(b"a.example")
 
 
-def test_the_sidebar_names_every_top_level_destination():
-    # A changelist that answers is not one anyone can find. The sidebar
-    # is the only listing browsed without a URL. Every top-level page
-    # needs a title in it.
-    from django.conf import settings
-
-    titles = {
-        str(item["title"])
-        for group in settings.UNFOLD["SIDEBAR"]["navigation"]
-        for item in group["items"]
+def test_every_registered_admin_is_reachable():
+    # A registered admin nothing links to is a page nobody finds, the
+    # way magic links once shipped. Reachable means named in the
+    # sidebar, named in a tab group, or shown as a parent's inline.
+    # A hardcoded title list cannot tell that apart from an admin
+    # reachable by nothing at all.
+    registered = {
+        model._meta.label
+        for model in admin.site._registry
+        if model._meta.app_label in OUR_APPS
     }
-    for title in ("Dashboard", "Catalog", "Polling", "Boards", "Users"):
-        assert title in titles, f"{title} has no sidebar entry"
+    top_level = _sidebar_reachable() | _tab_reachable()
+    reachable = top_level | _inline_reachable(top_level)
+    missing = registered - reachable
+    assert not missing, f"registered but unreachable: {sorted(missing)}"
 
 
 def _tab_strip(body):
