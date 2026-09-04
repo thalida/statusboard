@@ -562,8 +562,9 @@ class ServiceComponentAdmin(
             {
                 "fields": ["is_featured"],
                 "description": _(
-                    "Leads the suggested sort on the catalog. Tick it on a "
-                    "service's overall component to surface the service."
+                    "Leads the suggested sort on the catalog. Tick it on any "
+                    "component. A rollup surfaces its service, and a leaf "
+                    "surfaces that part."
                 ),
             },
         ),

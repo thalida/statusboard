@@ -341,10 +341,13 @@ The service version needed three.
 
 ### Admin
 
-`ServiceComponent.is_featured` is how a service is featured, ticked on its overall
-component. So the component admin gains that column, a list filter and a bulk action. The
-service admin edits its overall component's flag inline, because "feature this service" is
-the question an admin actually has.
+`ServiceComponent.is_featured` is how anything is featured, and any component may carry
+it. A featured rollup surfaces its service. A featured leaf surfaces that part.
+
+Featuring is viewed and managed on the component admin, and nowhere else. That admin gains
+the column, a list filter, the field on the change form, and two bulk actions for a
+selection. The service admin has no featuring control: one flag edited from two screens is
+one question with two answers.
 
 `ServiceComponent.watcher_count` joins the same list, read-only.
 

@@ -336,9 +336,10 @@ class ServiceComponent(BaseModel):
 
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
     is_overall = models.BooleanField(verbose_name="Overall", default=False)
-    # Ticked on the overall component to feature a whole service. It is
-    # the first key of the suggested sort. On day one that is the whole
-    # sort: every watcher count starts at zero.
+    # Ticked on any component. The suggested sort leads with it. A
+    # featured rollup surfaces its service, and a featured leaf
+    # surfaces that part. Severity is the next key, so it breaks the
+    # tie among the featured rows.
     is_featured = models.BooleanField(verbose_name="Featured", default=False)
     # Archiving is the flag. The date is kept because `updated_at`
     # moves on every save, so a later rename would erase it. `save` sets
