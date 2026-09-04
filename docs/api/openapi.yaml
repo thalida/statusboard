@@ -356,7 +356,7 @@ paths:
         - { name: service, in: query, schema: { type: string }, description: Service slug }
         - { name: component, in: query, schema: { type: string, format: uuid } }
         - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] } }
-        - { name: phase, in: query, schema: { type: string, enum: [open, closed] } }
+        - { name: phase, in: query, schema: { type: string, enum: [open, closed] }, description: 'Render the label from `/meta/` `enums.event_phase_state`.' }
         - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
         - { $ref: '#/components/parameters/Fields' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -564,6 +564,13 @@ components:
               description: |
                 Both sets, keyed by kind:
                 `{"incident": {"detected": "Detected", …}, "maintenance": {"scheduled": "Scheduled", …}}`
+            event_phase_state:
+              type: object
+              additionalProperties: { type: string }
+              description: |
+                What the `phase` filter on `/events/` takes:
+                `{"open": "Open", "closed": "Closed"}`. Which phases are terminal stays on
+                the server, so a client labels the control from here.
             event_source:
               type: object
               additionalProperties: { type: string }

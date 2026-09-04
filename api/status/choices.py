@@ -55,6 +55,19 @@ class EventSource(models.TextChoices):
     SYSTEM = "system", "Statusboard"
 
 
+class EventPhaseState(models.TextChoices):
+    """Whether an event is still running, or over.
+
+    The `phase=` filter takes one of these. `CLOSED_PHASES` below draws
+    the line and stays on the server, so a client never restates which
+    phases are terminal. These two labels are what a client shows, so
+    `/meta/` publishes them beside every other fixed set.
+    """
+
+    OPEN = "open", "Open"
+    CLOSED = "closed", "Closed"
+
+
 EVENT_PHASES_BY_KIND = {
     EventKind.INCIDENT: IncidentPhase,
     EventKind.MAINTENANCE: MaintenancePhase,

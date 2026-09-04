@@ -12,6 +12,7 @@ from common.serializers import MetaSerializer
 from status.choices import (
     EVENT_PHASES_BY_KIND,
     EventKind,
+    EventPhaseState,
     EventSource,
     Severity,
     StatusSource,
@@ -62,6 +63,7 @@ class MetaView(APIView):
                     str(kind): _labels(phases)
                     for kind, phases in EVENT_PHASES_BY_KIND.items()
                 },
+                "event_phase_state": _labels(EventPhaseState),
             },
         }
         # `Response(data)` skips `MetaSerializer`, so `?fields=` never

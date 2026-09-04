@@ -38,6 +38,7 @@ def test_meta_publishes_every_enum():
         "event_kind",
         "event_source",
         "event_phase",
+        "event_phase_state",
     }
     assert body["enums"]["severity"]["0"] == "Major outage"
     assert body["enums"]["severity"]["5"] == "Operational"
@@ -45,6 +46,9 @@ def test_meta_publishes_every_enum():
     assert set(body["enums"]["event_phase"]) == {"incident", "maintenance"}
     assert "investigating" in body["enums"]["event_phase"]["incident"]
     assert "scheduled" in body["enums"]["event_phase"]["maintenance"]
+    # The `phase=` filter's own two values. Without them a client reads
+    # the values off the OpenAPI enum and writes the labels itself.
+    assert body["enums"]["event_phase_state"] == {"open": "Open", "closed": "Closed"}
 
 
 @pytest.mark.django_db
@@ -84,6 +88,7 @@ def test_fields_enums_with_no_dotted_path_keeps_every_enum():
         "event_kind",
         "event_source",
         "event_phase",
+        "event_phase_state",
     }
 
 
