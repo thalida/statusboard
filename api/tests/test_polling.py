@@ -43,11 +43,11 @@ def test_a_poller_inside_its_cooldown_is_not_due():
 
 @pytest.mark.django_db
 def test_two_boards_tracking_one_service_produce_one_poller():
-    # The cooldown is on the service, not on a user or a board.
-    service = ServiceFactory(tracked=1)
+    # The cooldown is on the service, not on a user or a board. `due()`
+    # asks whether anybody tracks the service. Asked as a join instead,
+    # it would return this poller once per board and poll twice as often.
+    service = ServiceFactory(tracked=2)
     StatusPageFactory(service=service)
-    PollerFactory(service=service)
-    assert Poller.objects.filter(service=service).count() == 1
     assert len(list(Poller.objects.due())) == 1
 
 
@@ -337,8 +337,9 @@ def test_an_import_schedules_the_same_way_a_poll_does():
     # Two callers wrote this. The import set a bare interval, with no
     # backoff and no jitter. A hundred imported at once came due on the
     # same second.
-    from polling.models import JITTER
-
+    #
+    # The window is a tenth either side, written out. Read from the
+    # constant, this would pass with the constant itself set wrong.
     poller = PollerFactory(service=ServiceFactory(tracked=1))
     at = timezone.now()
 
@@ -348,7 +349,7 @@ def test_an_import_schedules_the_same_way_a_poll_does():
     assert poller.consecutive_failure_count == 0
     interval = poller.effective_interval_seconds
     gap = (poller.next_at - at).total_seconds()
-    assert interval * (1 - JITTER) <= gap <= interval * (1 + JITTER)
+    assert interval * 0.9 <= gap <= interval * 1.1
 
 
 @pytest.mark.django_db
