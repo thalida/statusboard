@@ -106,9 +106,10 @@ class Service(BaseModel):
         # save. This is the smaller of the two.
         from polling.models import Poller
 
-        # Nobody adds this one, so the system account signs it. A blank
-        # author would read as one that was lost.
-        author = get_user_model().objects.system()
+        # A person caused the service, so the poller they spawned
+        # carries them. The system account signs it only when the
+        # service has none. A blank author reads as one that was lost.
+        author = self.created_by or get_user_model().objects.system()
         poller, _ = Poller.objects.get_or_create(
             service=self,
             defaults={"created_by": author, "updated_by": author},

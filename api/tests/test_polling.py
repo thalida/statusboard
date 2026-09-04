@@ -244,8 +244,25 @@ def test_an_api_url_override_replaces_the_page_url(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_a_poller_nobody_added_is_signed_by_the_system():
-    """The signal adds it, so the author says the system, not nobody.
+def test_a_poller_carries_the_author_of_the_service_that_spawned_it():
+    """A person caused the service, so the poller records that person.
+
+    Stamping the system account here would name the bot for work a
+    person did.
+    """
+    from catalog.models import Service
+    from tests.factories import UserFactory
+
+    person = UserFactory()
+
+    service = Service.objects.create(name="Owned", created_by=person)
+
+    assert service.poller.created_by == person
+
+
+@pytest.mark.django_db
+def test_a_poller_for_a_service_with_no_author_is_signed_by_the_system():
+    """The fallback, for a service nobody signed.
 
     A blank author reads the same as one that was lost.
     """

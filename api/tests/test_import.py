@@ -234,3 +234,32 @@ def test_a_second_import_of_the_same_page_returns_the_first_service():
     assert again is False
     assert second.pk == first.pk
     assert Service.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_an_import_records_the_caller_who_asked_for_it(user):
+    # The bot signs automated rows only. Dropping the caller here
+    # records a person's import as the system account.
+    from tests.conftest import jwt_client
+
+    jwt_client(user).post(
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.twilio.com/"},
+        format="json",
+    )
+
+    assert Service.objects.get().created_by == user
+
+
+@pytest.mark.django_db
+def test_an_anonymous_import_names_nobody_rather_than_the_bot():
+    # The endpoint is AllowAny, so a signed-out person can import. A
+    # service request answers this the same way, with null. A person
+    # asked, and the system account would claim a job did.
+    APIClient().post(
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.twilio.com/"},
+        format="json",
+    )
+
+    assert Service.objects.get().created_by is None

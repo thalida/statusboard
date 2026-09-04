@@ -184,7 +184,7 @@ def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch)
 
     monkeypatch.setattr(
         "catalog.admin.import_from_url",
-        lambda url: (Service.objects.create(name="Imported"), True),
+        lambda url, author=None: (Service.objects.create(name="Imported"), True),
     )
     response = staff_client.post(
         "/admin/catalog/service/import-from-url/",
@@ -195,10 +195,32 @@ def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch)
 
 
 @pytest.mark.django_db
+def test_importing_from_the_admin_records_the_admin_who_asked(
+    staff_client, monkeypatch
+):
+    # The action has a request, so the row names the person. Dropping
+    # the caller signs the bot for work an admin did.
+    from catalog.models import Service
+
+    def recording_import(url, author=None):
+        return Service.objects.create(name="Imported", created_by=author), True
+
+    monkeypatch.setattr("catalog.admin.import_from_url", recording_import)
+    staff_client.post(
+        "/admin/catalog/service/import-from-url/",
+        {"status_page_url": "https://status.example.com/", "_form_submitted": "1"},
+    )
+
+    assert Service.objects.get().created_by == User.objects.get(
+        email="admin@example.com"
+    )
+
+
+@pytest.mark.django_db
 def test_an_unreadable_page_is_reported_not_a_500(staff_client, monkeypatch):
     # The URL came from a person pasting a stranger's page. Anything can
     # come back from it.
-    def boom(url):
+    def boom(url, author=None):
         raise ValueError("not a status page")
 
     monkeypatch.setattr("catalog.admin.import_from_url", boom)

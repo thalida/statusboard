@@ -100,7 +100,7 @@ def test_a_failed_import_does_not_spend_this_endpoints_budget(client, monkeypatc
     # shared scope would let the import spend this endpoint's budget.
     # An asker who had already tried six times could never send us
     # the URL that failed.
-    def refuses(url):
+    def refuses(url, author=None):
         raise ValueError(f"no adapter for {url}")
 
     monkeypatch.setattr("catalog.views.imports.import_from_url", refuses)

@@ -53,8 +53,12 @@ class CatalogImportView(APIView):
         if not body.is_valid():
             return Response(body.errors, status=400)
         url = body.validated_data["status_page_url"]
+        # Anonymous stays anonymous, as it does on a service request.
+        # The system account means automated, and a person asked for
+        # this one. Null says a person we cannot name.
+        author = request.user if request.user.is_authenticated else None
         try:
-            service, created = import_from_url(url)
+            service, created = import_from_url(url, author=author)
         except ValueError as error:
             # `identify` raises this when no adapter could read the page.
             # It is the ordinary outcome of pasting the wrong address,

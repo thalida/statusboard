@@ -457,7 +457,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
         url = form.cleaned_data["status_page_url"]
         try:
-            service, created = import_from_url(url)
+            # The staff member who pasted the URL, the same stamp an
+            # add form leaves. The system account means automated.
+            service, created = import_from_url(url, author=request.user)
         except Exception as error:  # noqa: BLE001 — the page is a stranger's
             # Anything can come back from a URL a person pasted. Say what
             # happened rather than showing a 500.
