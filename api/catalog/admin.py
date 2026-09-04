@@ -554,8 +554,7 @@ class ServiceComponentAdmin(
                     "service",
                     "name",
                     "external_id",
-                    "is_archived",
-                    "archived_at",
+                    "is_featured",
                 ]
             },
         ),
@@ -563,7 +562,7 @@ class ServiceComponentAdmin(
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
         ),
-        (_("Featuring"), {"fields": ["is_featured"]}),
+        (_("Archive"), {"fields": ["is_archived", "archived_at"]}),
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
