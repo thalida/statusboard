@@ -31,6 +31,10 @@ CODE_ISH = re.compile(r"^\s*[\w.]+\([^)]*\)\s*$|^\s*[-*]\s|^\s{4,}\S")
 # A code span, however many tokens inside, is one thing to read.
 CODE_SPAN = re.compile(r"`[^`]*`")
 
+# The repository root, from this file's own location. A hand run from
+# `api/` or `bin/` then resolves the same default as one from the root.
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
 
 def sentences(blocks):
     """Split prose into sentences, keeping the line each one started on."""
@@ -169,25 +173,67 @@ def prose_problems(blocks):
     return problems
 
 
+def default_targets():
+    """The directories scanned when no path is given: api/ and bin/.
+
+    A stdlib script checks its own prose too, not only Django's.
+    """
+    return [REPO_ROOT / "api", REPO_ROOT / "bin"]
+
+
+def default_paths():
+    """Every `.py` file under a default target that exists."""
+    return sorted(
+        path
+        for target in default_targets()
+        if target.is_dir()
+        for path in target.rglob("*.py")
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=pathlib.Path)
     parser.add_argument("--limit", type=int, default=8)
     args = parser.parse_args()
 
-    paths = args.paths or sorted(pathlib.Path("api").rglob("*.py"))
+    if args.paths:
+        paths = args.paths
+        label = ", ".join(str(p) for p in paths)
+    else:
+        targets = default_targets()
+        if not any(target.is_dir() for target in targets):
+            existing = ", ".join(str(t) for t in targets)
+            print(f"error: no scan target exists: {existing}", file=sys.stderr)
+            return 1
+        paths = default_paths()
+        label = " and ".join(
+            str(t.relative_to(REPO_ROOT)) for t in targets if t.is_dir()
+        )
+
     total = 0
+    examined = 0
     for path in paths:
         if path.suffix != ".py" or not path.is_file():
             continue
         if any(part in {".venv", "__pycache__", "migrations"} for part in path.parts):
             continue
+        examined += 1
         for line, rule, detail in check(path, args.limit):
             print(f"{path}:{line}: {rule}: {detail}")
             total += 1
+
+    # A checker that examines nothing has not passed. It has not run.
+    if examined == 0:
+        print(f"error: no files examined in {label}.", file=sys.stderr)
+        return 1
     if total:
         print(f"\n{total} problems. See AGENTS.md.", file=sys.stderr)
-    return 1 if total else 0
+        return 1
+
+    noun = "file" if examined == 1 else "files"
+    print(f"Checked {examined} {noun} in {label}. Clean.")
+    return 0
 
 
 if __name__ == "__main__":

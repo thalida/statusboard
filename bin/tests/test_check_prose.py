@@ -5,12 +5,18 @@ standard library, so they run on a machine that has done nothing but
 `just init`. Run them with `python3 -m unittest discover -s bin/tests`.
 """
 
+import io
+import os
+import subprocess
 import sys
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import check_prose
+
+SCRIPT = Path(check_prose.__file__).resolve()
 
 
 class WordsTests(unittest.TestCase):
@@ -56,6 +62,85 @@ class ProseProblemsTests(unittest.TestCase):
         sentence = " ".join(["word"] * 21)
         problems = check_prose.prose_problems([(sentence, 1)])
         self.assertEqual([rule for _line, rule, _detail in problems], ["long"])
+
+
+class DefaultTargetTests(unittest.TestCase):
+    def test_default_paths_are_the_same_from_the_repository_root_and_a_subdirectory(
+        self,
+    ):
+        # The default used to resolve "api" against the caller's cwd.
+        # A run from api/ then scanned api/api/, a handful of settings
+        # files, instead of api/. The default must not depend on cwd.
+        cwd = os.getcwd()
+        try:
+            os.chdir(check_prose.REPO_ROOT)
+            from_root = check_prose.default_paths()
+            os.chdir(check_prose.REPO_ROOT / "api")
+            from_subdir = check_prose.default_paths()
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(from_root, from_subdir)
+        self.assertTrue(from_root, "the default target found no files at all")
+
+    def test_a_missing_default_target_is_not_silently_skipped(self):
+        # A target that used to hold Python and no longer does must
+        # fail loudly. It must not report a clean run over nothing.
+        real_targets = check_prose.default_targets
+        real_argv = sys.argv
+        check_prose.default_targets = lambda: [check_prose.REPO_ROOT / "does-not-exist"]
+        sys.argv = ["check_prose.py"]
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                status = check_prose.main()
+        finally:
+            check_prose.default_targets = real_targets
+            sys.argv = real_argv
+        self.assertNotEqual(status, 0)
+        self.assertIn("no scan target exists", err.getvalue())
+
+
+class MainExitStatusTests(unittest.TestCase):
+    """Run the real script as a subprocess: main()'s exit code is the contract."""
+
+    def run_script(self, *args, cwd=None):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            check=False,
+        )
+
+    def test_a_clean_default_run_exits_zero_and_names_what_it_scanned(self):
+        result = self.run_script(cwd=str(check_prose.REPO_ROOT))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Silence on success is what let two runs from api/ report clean
+        # while checking a handful of settings files. The count must show.
+        self.assertIn("Checked", result.stdout)
+        self.assertIn("api", result.stdout)
+        self.assertIn("bin", result.stdout)
+
+    def test_the_default_run_is_identical_from_the_repository_root_and_bin(self):
+        from_root = self.run_script(cwd=str(check_prose.REPO_ROOT))
+        from_bin = self.run_script(cwd=str(check_prose.REPO_ROOT / "bin"))
+        self.assertEqual(from_root.returncode, 0, from_root.stderr)
+        self.assertEqual(from_root.stdout, from_bin.stdout)
+
+    def test_an_explicit_path_matching_no_file_exits_non_zero(self):
+        # A caller who passes a path that matches nothing has the same
+        # silent-pass problem as a broken default. Treated the same way.
+        result = self.run_script("does/not/exist.py", cwd=str(check_prose.REPO_ROOT))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no files examined", result.stderr)
+
+    def test_an_explicit_directory_with_no_python_files_exits_non_zero(self):
+        # check() only ever receives files listed directly in args.paths,
+        # so a directory argument matches zero files. That must error,
+        # not report a clean run.
+        result = self.run_script("docs", cwd=str(check_prose.REPO_ROOT))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no files examined", result.stderr)
 
 
 if __name__ == "__main__":
