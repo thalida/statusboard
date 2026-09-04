@@ -709,15 +709,31 @@ def test_the_sidebar_names_every_top_level_destination():
         for group in settings.UNFOLD["SIDEBAR"]["navigation"]
         for item in group["items"]
     }
-    for title in (
-        "Dashboard",
-        "Services",
-        "Polling",
-        "Boards",
-        "Users",
-        "Service requests",
-    ):
+    for title in ("Dashboard", "Services", "Polling", "Boards", "Users"):
         assert title in titles, f"{title} has no sidebar entry"
+
+
+def _tab_strip(body):
+    """The tab strip's own markup, not the whole page.
+
+    The sidebar links to a service or a poller too, on every admin
+    page. Searching the full body would pass on that link alone and
+    never prove a tab exists.
+    """
+    start = body.index('id="tabs-items"')
+    return body[start : body.index("</nav>", start)]
+
+
+@pytest.mark.django_db
+def test_the_catalog_tabs_carry_service_requests(staff_client):
+    # A sidebar link once pointed here on its own. A thing that belongs
+    # to the catalog belongs on the catalog's tabs instead.
+    body = staff_client.get(
+        reverse("admin:catalog_service_changelist")
+    ).content.decode()
+    tabs = _tab_strip(body)
+    assert 'href="/admin/catalog/servicerequest/"' in tabs
+    assert "Service requests" in tabs
 
 
 @pytest.mark.django_db

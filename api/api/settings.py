@@ -277,8 +277,10 @@ UNFOLD = {
     "COMMAND": {"search_models": True, "show_history": True},
     # The sidebar is two levels deep. It cannot nest an item under an
     # item, so tabs carry the relationship. A component belongs to a
-    # service, and a status history to a component. All four are one
-    # page. The sidebar entry stays active on any of its tabs.
+    # service, and a status history to a component. A service request
+    # names something the catalog lacks, so it lives beside the catalog
+    # too. All five are one page. The sidebar entry stays active on any
+    # of its tabs.
     "TABS": [
         {
             "models": [
@@ -286,6 +288,7 @@ UNFOLD = {
                 "catalog.servicecomponent",
                 "status.serviceevent",
                 "status.componentstatus",
+                "catalog.servicerequest",
             ],
             "items": [
                 {
@@ -303,6 +306,10 @@ UNFOLD = {
                 {
                     "title": _("Status history"),
                     "link": reverse_lazy("admin:status_componentstatus_changelist"),
+                },
+                {
+                    "title": _("Service requests"),
+                    "link": reverse_lazy("admin:catalog_servicerequest_changelist"),
                 },
             ],
         },
@@ -366,11 +373,6 @@ UNFOLD = {
                         "title": _("Users"),
                         "icon": "person",
                         "link": reverse_lazy("admin:authentication_user_changelist"),
-                    },
-                    {
-                        "title": _("Service requests"),
-                        "icon": "playlist_add",
-                        "link": reverse_lazy("admin:catalog_servicerequest_changelist"),
                     },
                 ],
             },
