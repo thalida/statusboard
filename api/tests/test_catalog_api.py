@@ -222,7 +222,8 @@ def test_an_event_carries_no_component_ids():
         "phase",
         "starts_at",
         "ends_at",
-        "updates",
+        "detected_by",
+        "service",
     }
 
 

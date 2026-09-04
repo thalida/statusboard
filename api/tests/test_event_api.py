@@ -3,8 +3,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from authentication.models import User
-from status.choices import EventKind, IncidentPhase, MaintenancePhase
-from status.models import ServiceEvent
+from status.choices import EventKind, EventSource, IncidentPhase, MaintenancePhase
+from status.models import EventUpdate, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory, track
 
 pytestmark = pytest.mark.django_db
@@ -36,6 +36,16 @@ def test_the_feed_lists_events_newest_first(client):
 
     results = client.get(reverse("event-list")).json()["results"]
     assert [r["title"] for r in results] == ["Newer", "Older"]
+
+
+def test_a_feed_row_names_its_service(client):
+    # /events/?dashboard= spans every service on a board. A row cannot
+    # label itself without the service it belongs to.
+    service = ServiceFactory(slug="pagerduty")
+    _event(service, ComponentFactory(service=service), external_id="1")
+
+    results = client.get(reverse("event-list")).json()["results"]
+    assert results[0]["service"]["slug"] == "pagerduty"
 
 
 def test_service_narrows_the_feed(client):
@@ -157,3 +167,63 @@ def test_the_dashboard_filter_does_not_repeat_an_event(authenticated_client, boa
         reverse("event-list"), {"dashboard": str(board.id)}
     ).json()["results"]
     assert [r["title"] for r in results] == ["Shared"]
+
+
+def test_the_detail_carries_both_tab_counts(client):
+    # The header draws `Timeline 3` and `Affects 2` before either tab
+    # is opened, so neither can wait for that tab's request.
+    service = ServiceFactory()
+    first = ComponentFactory(service=service)
+    second = ComponentFactory(service=service)
+    event = _event(service, first, external_id="1")
+    event.affected_components.add(second)
+    for minute in range(3):
+        EventUpdate.objects.create(
+            event=event,
+            phase=IncidentPhase.INVESTIGATING,
+            body=f"update {minute}",
+            posted_at=timezone.now(),
+        )
+
+    body = client.get(reverse("event-detail", args=[event.id])).json()
+    assert body["update_count"] == 3
+    assert body["affected_count"] == 2
+
+
+def test_the_timeline_is_its_own_paged_list(client):
+    # A provider's log has no ceiling, so it cannot ride on the detail.
+    service = ServiceFactory()
+    event = _event(service, ComponentFactory(service=service), external_id="1")
+    EventUpdate.objects.create(
+        event=event,
+        phase=IncidentPhase.IDENTIFIED,
+        body="Cause found",
+        posted_at=timezone.now(),
+        source=EventSource.PROVIDER,
+    )
+
+    body = client.get(reverse("event-updates", args=[event.id])).json()
+    assert body["aggregates"]["total"] == 1
+    assert body["results"][0]["source"] == "provider"
+
+
+def test_the_timeline_is_oldest_first(client):
+    # A story is read forwards. The feed is newest first because it is
+    # a feed; one event's log is a narrative.
+    service = ServiceFactory()
+    event = _event(service, ComponentFactory(service=service), external_id="1")
+    EventUpdate.objects.create(
+        event=event,
+        phase=IncidentPhase.IDENTIFIED,
+        body="Second",
+        posted_at=timezone.now() + timezone.timedelta(minutes=1),
+    )
+    EventUpdate.objects.create(
+        event=event,
+        phase=IncidentPhase.INVESTIGATING,
+        body="First",
+        posted_at=timezone.now(),
+    )
+
+    results = client.get(reverse("event-updates", args=[event.id])).json()["results"]
+    assert [r["body"] for r in results] == ["First", "Second"]

@@ -12,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from authentication.models import User
 from dashboards.models import DashboardItem
 from status.choices import EventKind, IncidentPhase
-from status.models import ServiceEvent
+from status.models import EventUpdate, ServiceEvent
 from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
 
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "api" / "openapi.yaml"
@@ -127,6 +127,40 @@ def _event_list_probe():
     return APIClient(), reverse("event-list"), "id"
 
 
+def _event_detail_probe():
+    service = ServiceFactory()
+    event = ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    url = reverse("event-detail", kwargs={"uuid": event.id})
+    return APIClient(), url, "id"
+
+
+def _event_updates_probe():
+    service = ServiceFactory()
+    event = ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    EventUpdate.objects.create(
+        event=event,
+        phase=IncidentPhase.DETECTED,
+        body="x",
+        posted_at=timezone.now(),
+    )
+    url = reverse("event-updates", kwargs={"uuid": event.id})
+    return APIClient(), url, "phase"
+
+
 def _component_list_probe():
     service = ServiceFactory()
     ComponentFactory(service=service, is_overall=True)
@@ -163,6 +197,8 @@ FIELDS_PROBES = {
     "/catalog/components/{uuid}/": _component_detail_probe,
     "/dashboards/{uuid}/components/": _board_components_probe,
     "/events/": _event_list_probe,
+    "/events/{uuid}/": _event_detail_probe,
+    "/events/{uuid}/updates/": _event_updates_probe,
 }
 
 

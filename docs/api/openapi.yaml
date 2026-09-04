@@ -41,7 +41,7 @@ info:
 
     Do not derive one from the other.
 
-    ## One schema, one model
+    ## One schema, one model, usually
 
     Every schema maps to one Django model, and every nested key is a real relation a
     `ModelSerializer` can traverse. Nest a related model under a key. Do not flatten it into the
@@ -54,8 +54,8 @@ info:
     | `Service.overall_component` | the `ServiceComponent` where `is_overall` |
     | `Component.status` | the `ComponentStatus` row where `ended_at` is null |
     | `Component.active_incident` | newest unresolved `ServiceEvent` with `kind=incident`, across the reverse M2M |
-    | `ServiceEvent.updates` | reverse FK from `EventUpdate` |
     | `Component.service` | `ForeignKey` |
+    | `ServiceEvent.service` | `ForeignKey` |
 
     `status` is its own object because `ComponentStatus` is its own table. A `ModelSerializer`
     with a nested serializer produces these shapes directly.
@@ -63,12 +63,11 @@ info:
     The rule applies transitively. A `Service` nests its overall component. It does not copy that
     component's status.
 
-    **One model, one schema.** There is no list variant and detail variant of the same thing.
-    A second schema exists only to withhold fields, and every field here is either a column on the
-    row or a `select_related` join — nothing a variant would save is expensive. `?fields=` lets a
-    client ask for a smaller shape, and unlike a schema variant the client chooses.
+    **A second schema never exists to withhold fields.** `?fields=` does that, and the client
+    chooses. One exists only to layer a value too expensive to compute for every row in a list.
 
-    `allOf` therefore appears only where two schemas cover two models.
+    `allOf` appears where two schemas cover two models. It also appears where a detail schema
+    layers that kind of value onto its own list row.
 
     Query parameters use the ORM path. django-filter generates them from `filterset_fields` and
     `ordering_fields`. No `FilterSet` class is necessary.
@@ -415,6 +414,41 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/EventAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
+
+  /events/{uuid}/:
+    get:
+      tags: [status]
+      summary: One event
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { $ref: '#/components/parameters/Fields' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ServiceEventDetail' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /events/{uuid}/updates/:
+    get:
+      tags: [status]
+      summary: One event's log, oldest first
+      description: Its own operation because a provider's log has no ceiling.
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Uuid' }
+        - { $ref: '#/components/parameters/Fields' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      aggregates: { $ref: '#/components/schemas/Aggregates' }
+                      results: { type: array, items: { $ref: '#/components/schemas/EventUpdate' } }
 
   /dashboards/{uuid}/components/:
     get:
@@ -972,9 +1006,25 @@ components:
             Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
         starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
         ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
-        updates:
-          type: array
-          items: { $ref: '#/components/schemas/EventUpdate' }
+        detected_by:
+          type: string
+          enum: [provider, system]
+          description: |
+            Who opened it: the provider's own page, or this deployment noticing a severity drop
+            first. Never rewritten by a later claim. Render the label from `/meta/`
+            `enums.event_source`.
+        service: { $ref: '#/components/schemas/ServiceRef' }
+    ServiceEventDetail:
+      allOf:
+        - $ref: '#/components/schemas/ServiceEvent'
+        - type: object
+          description: |
+            The event screen's header. Both counts are here because the header draws both tab
+            badges before either tab has made a request.
+          properties:
+            update_count: { type: integer }
+            affected_count: { type: integer }
+            last_update_at: { type: string, format: date-time, nullable: true }
     EventUpdate:
       type: object
       description: One posted update within an event's timeline.

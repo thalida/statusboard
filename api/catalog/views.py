@@ -131,7 +131,7 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     )
     def events(self, request, slug=None):
         return self._page(
-            ServiceEvent.objects.filter(service__slug=slug).prefetch_related("updates")
+            ServiceEvent.objects.filter(service__slug=slug).select_related("service")
         )
 
 

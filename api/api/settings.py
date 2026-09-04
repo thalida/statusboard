@@ -381,6 +381,11 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    # EventUpdate.source and ServiceEvent.detected_by share one choice
+    # set. Without this, the generator names the same enum twice.
+    "ENUM_NAME_OVERRIDES": {
+        "EventSourceEnum": "status.choices.EventSource",
+    },
     "TAGS": [
         {"name": "meta"},
         {"name": "auth"},

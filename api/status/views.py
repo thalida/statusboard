@@ -16,10 +16,15 @@ from rest_framework.permissions import AllowAny
 from common.aggregates import EventAggregateSet
 from common.filters import FieldsBackend
 from common.ordering import MappedOrderingFilter
+from common.pagination import TimelinePagination
 from dashboards.models import Dashboard
 from status.filters import EventFilter
-from status.models import ServiceEvent
-from status.serializers import ServiceEventSerializer
+from status.models import EventUpdate, ServiceEvent
+from status.serializers import (
+    EventUpdateSerializer,
+    ServiceEventDetailSerializer,
+    ServiceEventSerializer,
+)
 
 
 class EventListView(generics.ListAPIView):
@@ -36,9 +41,7 @@ class EventListView(generics.ListAPIView):
     queryset = ServiceEvent.objects.none()
 
     def get_queryset(self):
-        queryset = ServiceEvent.objects.select_related("service").prefetch_related(
-            "updates"
-        )
+        queryset = ServiceEvent.objects.select_related("service")
         board = self.request.query_params.get("dashboard")
         if not board:
             return queryset
@@ -58,3 +61,37 @@ class EventListView(generics.ListAPIView):
         # be confirmable. The filter runs after this.
         get_object_or_404(Dashboard, id=board, owner=self.request.user)
         return queryset
+
+
+class EventDetailView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = ServiceEventDetailSerializer
+    filter_backends = [FieldsBackend]
+    lookup_field = "pk"
+    # The contract names the path variable `uuid`. DRF renames a `pk`
+    # one to `id`, which would document a path nothing serves.
+    lookup_url_kwarg = "uuid"
+    queryset = ServiceEvent.objects.select_related("service")
+
+
+class EventUpdateListView(generics.ListAPIView):
+    """One event's log, oldest first.
+
+    The feed is newest first because it is a feed. This is a
+    narrative, and a narrative is read forwards.
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = EventUpdateSerializer
+    filter_backends = [FieldsBackend]
+    pagination_class = TimelinePagination
+    # get_queryset reads self.kwargs, which schema generation has not
+    # set. This names the model without running it.
+    queryset = EventUpdate.objects.none()
+
+    def get_queryset(self):
+        event = get_object_or_404(ServiceEvent, pk=self.kwargs["uuid"])
+        # `TimelinePagination.ordering` is what actually orders the
+        # response: CursorPagination always re-sorts by it. This is
+        # the correct order regardless, in case pagination is ever off.
+        return event.updates.order_by("posted_at")

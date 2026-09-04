@@ -5,6 +5,14 @@ from common.mixins import FieldsMixin
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
+def _service_ref_serializer():
+    # Imported lazily. catalog imports status, so a module-level import
+    # here would be a cycle.
+    from catalog.serializers import ServiceRefSerializer
+
+    return ServiceRefSerializer
+
+
 class StatusSerializer(FieldsMixin, serializers.ModelSerializer):
     last_refreshed_at = serializers.SerializerMethodField()
 
@@ -36,8 +44,57 @@ class EventUpdateSerializer(FieldsMixin, serializers.ModelSerializer):
 
 
 class ServiceEventSerializer(FieldsMixin, serializers.ModelSerializer):
-    updates = EventUpdateSerializer(many=True, read_only=True)
+    """One row of the feed. The log is `/events/{uuid}/updates/`."""
 
     class Meta:
         model = ServiceEvent
-        fields = ["id", "kind", "title", "phase", "starts_at", "ends_at", "updates"]
+        fields = [
+            "id",
+            "kind",
+            "title",
+            "phase",
+            "starts_at",
+            "ends_at",
+            "detected_by",
+            "service",
+        ]
+
+    def get_fields(self):
+        # `catalog.serializers` imports this module for `EventRefSerializer`,
+        # so the reverse import has to wait until both have finished loading.
+        fields = super().get_fields()
+        fields["service"] = _service_ref_serializer()(read_only=True)
+        return fields
+
+
+class ServiceEventDetailSerializer(ServiceEventSerializer):
+    """The event screen's header and its About tab.
+
+    Both counts are here because the header draws both tab badges
+    before either tab has made a request.
+    """
+
+    update_count = serializers.SerializerMethodField()
+    affected_count = serializers.SerializerMethodField()
+    last_update_at = serializers.SerializerMethodField()
+
+    class Meta(ServiceEventSerializer.Meta):
+        fields = [
+            *ServiceEventSerializer.Meta.fields,
+            "update_count",
+            "affected_count",
+            "last_update_at",
+        ]
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_update_count(self, event):
+        return event.updates.count()
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_affected_count(self, event):
+        return event.affected_components.count()
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_last_update_at(self, event):
+        newest = event.updates.order_by("-posted_at").first()
+        return newest.posted_at if newest else None

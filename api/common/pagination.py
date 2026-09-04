@@ -32,3 +32,14 @@ class EnvelopePagination(CursorPagination):
                 "results": data,
             }
         )
+
+
+class TimelinePagination(EnvelopePagination):
+    """One event's log, oldest first.
+
+    `posted_at` is not unique on its own, so `created_at` breaks a tie
+    between two updates posted in the same second.
+    """
+
+    ordering = "posted_at"
+    tiebreak = "created_at"
