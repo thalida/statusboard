@@ -539,6 +539,9 @@ class ServiceComponentAdmin(
     autocomplete_scope = ("service",)
     # The date follows the flag, so it is shown and never typed.
     readonly_fields = ["archived_at"]
+    # A checkbox in the list, not an action. One Save flips any mix of
+    # rollups and leaves, which a toggle action could never do at once.
+    list_editable = ["is_featured"]
     fieldsets = [
         (
             None,
@@ -560,11 +563,6 @@ class ServiceComponentAdmin(
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
-    # Two, not a toggle. A selection can mix already-featured and not,
-    # and a toggle would leave an admin unable to predict the result.
-    # `PollerAdmin.toggle_pause` can be one action because it only ever
-    # acts on a single object, which has one state to flip.
-    actions = ["feature_selected", "unfeature_selected"]
 
     def get_form(self, request, obj=None, **kwargs):
         # The parent picker needs to know which service is asking.
@@ -656,34 +654,6 @@ class ServiceComponentAdmin(
     @display(description=_("Watchers"), ordering="watcher_count")
     def watchers(self, obj):
         return obj.watcher_count
-
-    @admin.action(description=_("Feature selected components"))
-    def feature_selected(self, request, queryset):
-        """Feature every selected component, rollup or leaf.
-
-        The change form above sets the same flag one row at a time.
-        Both are unrestricted, because `suggested` reads the flag on
-        every component and a featured leaf is a real editorial choice.
-        """
-        count = 0
-        for component in queryset.filter(is_featured=False):
-            component.is_featured = True
-            component.save(update_fields=["is_featured"])
-            count += 1
-        self.message_user(
-            request, _("Featured %(count)d component(s).") % {"count": count}
-        )
-
-    @admin.action(description=_("Unfeature selected components"))
-    def unfeature_selected(self, request, queryset):
-        count = 0
-        for component in queryset.filter(is_featured=True):
-            component.is_featured = False
-            component.save(update_fields=["is_featured"])
-            count += 1
-        self.message_user(
-            request, _("Unfeatured %(count)d component(s).") % {"count": count}
-        )
 
 
 @admin.register(ServiceRequest)

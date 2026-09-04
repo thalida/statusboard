@@ -662,72 +662,44 @@ def test_service_requests_are_listed_by_demand(admin_client, db):
 
 
 @pytest.mark.django_db
-def test_the_feature_action_flips_the_flag(admin_client, db):
-    # Selecting a component and running the action is how the spec's
-    # "bulk action" is meant to be used. A missing action leaves an
-    # admin with no way to feature many components at once.
+def test_the_component_list_offers_the_featured_checkbox(admin_client, db):
+    # list_editable renders the flag as a checkbox in the row. Without
+    # it, featuring more than one component takes a form visit each.
     from tests.factories import ComponentFactory
 
     component = ComponentFactory(is_featured=False, is_overall=True)
-    admin_client.post(
-        reverse("admin:catalog_servicecomponent_changelist"),
-        {"action": "feature_selected", "_selected_action": [str(component.pk)]},
-    )
-    component.refresh_from_db()
-    assert component.is_featured is True
+    response = admin_client.get(reverse("admin:catalog_servicecomponent_changelist"))
+    assert response.status_code == 200
+    assert b'name="form-0-is_featured"' in response.content
+    assert str(component.pk).encode() in response.content
 
 
 @pytest.mark.django_db
-def test_the_unfeature_action_flips_it_back(admin_client, db):
-    # The reverse has to exist too. Otherwise featuring by mistake is
-    # permanent, short of editing the row on its change page.
-    from tests.factories import ComponentFactory
-
-    component = ComponentFactory(is_featured=True, is_overall=True)
-    admin_client.post(
-        reverse("admin:catalog_servicecomponent_changelist"),
-        {"action": "unfeature_selected", "_selected_action": [str(component.pk)]},
-    )
-    component.refresh_from_db()
-    assert component.is_featured is False
-
-
-@pytest.mark.django_db
-def test_the_feature_action_features_a_leaf(admin_client, db):
-    # Discover lists every component, and `suggested` reads the flag on
-    # every row. Featuring one part of a service is an editorial choice
-    # an admin is allowed to make.
-    from tests.factories import ComponentFactory
-
-    leaf = ComponentFactory(is_featured=False, is_overall=False)
-    admin_client.post(
-        reverse("admin:catalog_servicecomponent_changelist"),
-        {"action": "feature_selected", "_selected_action": [str(leaf.pk)]},
-    )
-    leaf.refresh_from_db()
-    assert leaf.is_featured is True
-
-
-@pytest.mark.django_db
-def test_the_feature_action_takes_a_mixed_selection_whole(admin_client, db):
-    # A rollup and a leaf are both featurable, so a selection holding
-    # one of each leaves nothing behind.
+def test_the_component_list_formset_flips_the_flag(admin_client, db):
+    # A mixed selection defeats the two actions in one pass. One row is
+    # featured, the other cleared, one Save.
     from tests.factories import ComponentFactory, ServiceFactory
 
     service = ServiceFactory()
-    overall = ComponentFactory(service=service, is_overall=True, is_featured=False)
-    leaf = ComponentFactory(service=service, is_overall=False, is_featured=False)
+    to_feature = ComponentFactory(service=service, is_overall=True, is_featured=False)
+    to_clear = ComponentFactory(service=service, is_overall=False, is_featured=True)
     admin_client.post(
         reverse("admin:catalog_servicecomponent_changelist"),
         {
-            "action": "feature_selected",
-            "_selected_action": [str(overall.pk), str(leaf.pk)],
+            "form-TOTAL_FORMS": "2",
+            "form-INITIAL_FORMS": "2",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": str(to_feature.pk),
+            "form-0-is_featured": "on",
+            "form-1-id": str(to_clear.pk),
+            "_save": "Save",
         },
     )
-    overall.refresh_from_db()
-    leaf.refresh_from_db()
-    assert overall.is_featured is True
-    assert leaf.is_featured is True
+    to_feature.refresh_from_db()
+    to_clear.refresh_from_db()
+    assert to_feature.is_featured is True
+    assert to_clear.is_featured is False
 
 
 @pytest.mark.django_db
