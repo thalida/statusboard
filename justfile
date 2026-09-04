@@ -103,9 +103,13 @@ test-bin:
 # image rather than the host. Run it before opening a pull request.
 # The two stdlib-only checks run on the host, because a container costs
 # more than it saves. `bin/tests/test_merge_gate.py` holds the two lists
-# together.
+# together, in one direction: everything here also runs in CI.
+#
+# CI runs one more. It scans the image with Trivy for HIGH and CRITICAL
+# CVEs and fails the merge on a hit. That needs the network and a
+# vulnerability database, so it stays out of this recipe.
 
-# Every check CI runs, each where CI runs it.
+# Every CI check but the image scan, each where CI runs it.
 check: image
     docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
     docker compose -f docker-compose.test.yml run --rm ruff

@@ -196,9 +196,9 @@ def test_event_narrows_to_the_components_one_event_affects(client, tree):
 def test_a_ranked_search_pages_without_repeating_a_row(client):
     """`?q=` is Discover's default path, and `rank` ties heavily.
 
-    Identical documents rank identically. `EnvelopePagination` appends
-    `-created_at` to make the key unique. Without it a cursor repeats or
-    skips a row, and infinite scroll shows it.
+    Identical documents rank identically. A page boundary inside a run
+    of ties is where a cursor repeats a row or skips one. Infinite
+    scroll then shows the fault.
     """
     service = ServiceFactory(name="Twilio")
     for _ in range(7):
@@ -206,10 +206,14 @@ def test_a_ranked_search_pages_without_repeating_a_row(client):
     rebuild_ancestry(service)
     rebuild_search(service)
 
-    seen = []
+    seen, pages = [], 0
     url = reverse("component-list")
     params = {"q": "twilio sms", "page_size": 2}
     while url:
+        pages += 1
+        # Seven rows, two a page. A cursor that repeats a page would
+        # otherwise hang the suite rather than fail it.
+        assert pages <= 4, "paging did not reach the end"
         body = client.get(url, params).json()
         seen += [row["id"] for row in body["results"]]
         url, params = body["next"], {}

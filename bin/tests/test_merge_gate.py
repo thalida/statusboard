@@ -1,4 +1,8 @@
-"""`just check` and the CI workflow must gate on the same checks.
+"""Every check `just check` runs must also run in CI.
+
+Not the reverse. CI also scans the image for CVEs, which needs the
+network and a vulnerability database. So a green `just check` is not a
+green merge gate, and the justfile says so.
 
 `bin/` has no dependency manager and no Django. These tests use only the
 standard library, so they run on a machine that has done nothing but

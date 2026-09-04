@@ -86,7 +86,8 @@ info:
     layers that kind of value onto its own list row.
 
     Query parameters are declared in a `FilterSet`. Almost none is generated from a column of
-    the same name. `is_overall` and `kind` are the two that are.
+    the same name. `is_overall` and `kind` are the two that are. `q` is no filter at all.
+    `ComponentListView.filter_queryset` ranks on it before the backends run.
 
     So a parameter is not an ORM path, and a field's path in the response body does not build
     its filter. `service` takes a slug where the body carries a nested `ServiceRef`. `component`
@@ -96,8 +97,9 @@ info:
     Read the operation's own parameter list instead. It says what each one takes and what it
     narrows.
 
-    Eleven are declared across the two collections: `q`, `service`, `ancestor`, `event`,
-    `component`, `dashboard`, `is_tracked`, `phase`, and the three `status__severity` forms.
+    Eleven narrow the three collections: `q`, `service`, `ancestor`, `event`, `component`,
+    `dashboard`, `is_tracked`, `phase`, and the three `status__severity` forms. The board list
+    takes those three severity forms and nothing else.
 
     Two ordering values are declared as well, `suggested` and `next_transition`. Neither names a
     column. A view annotates the fields each one sorts on.

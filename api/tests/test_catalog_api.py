@@ -125,6 +125,25 @@ def test_the_overall_component_is_a_plain_component():
 
 
 @pytest.mark.django_db
+def test_a_service_whose_rollup_is_archived_still_has_a_header_status():
+    # The one documented exception to the archived rule. Moving
+    # `visible` into `for_display` is the obvious simplification, and it
+    # would leave the service page with no status at all.
+    from catalog.models import Service
+
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    rollup = _with_status(service, Severity.MAJOR_OUTAGE, is_overall=True)
+    rollup.is_archived = True
+    rollup.save(update_fields=["is_archived"])
+
+    body = _service_detail(service)
+    assert body["overall_component"]["id"] == str(rollup.id)
+    assert body["overall_component"]["archived_at"] is not None
+    assert Service.objects.get(pk=service.pk).overall_component() == rollup
+
+
+@pytest.mark.django_db
 def test_severity_filters_use_the_orm_path():
     # The contract's name is not a column. It points at an annotation,
     # and a filter that missed it would answer every row.
