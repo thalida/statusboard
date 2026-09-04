@@ -92,7 +92,9 @@ class ServiceEventDetailSerializer(ServiceEventSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_affected_count(self, event):
-        return event.affected_components.count()
+        # `visible`, because the Affects tab reads `?event=` and counts
+        # the same rows. The badge cannot say 2 above a list of one.
+        return event.affected_components.visible().count()
 
     @extend_schema_field(serializers.DateTimeField(allow_null=True))
     def get_last_update_at(self, event):

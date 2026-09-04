@@ -102,6 +102,30 @@ def test_the_detail_answers_by_uuid(client, tree):
     assert response.json()["name"] == "SMS"
 
 
+def test_the_collection_leaves_out_an_archived_component(client, tree):
+    # A provider dropped it, so nothing lists it. The service badge
+    # counts the same rows, and the two cannot count differently.
+    _, _, _, leaf = tree
+    # `update_fields`, because the fixture rebuilt this row's ancestry
+    # and its search document after the factory made it.
+    leaf.is_archived = True
+    leaf.save(update_fields=["is_archived"])
+
+    body = client.get(reverse("component-list")).json()
+    assert body["aggregates"]["total"] == 2
+    assert "SMS" not in [r["name"] for r in body["results"]]
+
+
+def test_the_detail_refuses_an_archived_component(client, tree):
+    # Archived components are not served anywhere. A row the list hides
+    # and the detail answers would be two rules, not one.
+    _, _, _, leaf = tree
+    leaf.is_archived = True
+    leaf.save(update_fields=["is_archived"])
+
+    assert client.get(reverse("component-detail", args=[leaf.id])).status_code == 404
+
+
 def test_a_query_keeps_the_rank_the_search_worked_out(client, tree):
     # The rollup carries the word in its own name. The other two match
     # only through their service. A default sort applied after the

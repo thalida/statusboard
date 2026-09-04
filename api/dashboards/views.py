@@ -40,7 +40,7 @@ class BoardComponentListView(generics.ListCreateAPIView):
     ordering = ["severity_now"]  # worst first: lower severity is worse
 
     def get_queryset(self):
-        rows = ServiceComponent.objects.annotate(
+        rows = ServiceComponent.objects.visible().annotate(
             severity_now=CURRENT_SEVERITY, next_transition=NEXT_TRANSITION
         )
         if "uuid" not in self.kwargs:

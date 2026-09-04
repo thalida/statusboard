@@ -34,9 +34,7 @@ class ServiceQuerySet(models.QuerySet):
             self.select_related("status_page", "poller")
             .annotate(
                 _component_count=related_count(
-                    ServiceComponent.objects.filter(
-                        is_overall=False, is_archived=False
-                    ),
+                    ServiceComponent.objects.visible().filter(is_overall=False),
                     "service",
                 ),
                 _tracked_component_count=tracked,
@@ -93,7 +91,7 @@ class Service(BaseModel):
         prepared = getattr(self, "_component_count", None)
         if prepared is not None:
             return prepared
-        return self.components.filter(is_overall=False, is_archived=False).count()
+        return self.components.visible().filter(is_overall=False).count()
 
     def tracked_component_count(self, user):
         """How many parts this user has on a board."""
@@ -247,7 +245,8 @@ def _descendant_count():
         output_field=ArrayField(models.UUIDField()),
     )
     counted = (
-        ServiceComponent.objects.filter(ancestor_ids__contains=key)
+        ServiceComponent.objects.visible()
+        .filter(ancestor_ids__contains=key)
         .order_by()
         .values(one_group=models.Value(1))
         .annotate(total=models.Count("pk"))
@@ -257,6 +256,19 @@ def _descendant_count():
 
 
 class ServiceComponentQuerySet(models.QuerySet):
+    def visible(self):
+        """The components a caller is served, anywhere.
+
+        The provider stopped publishing an archived one. Every list,
+        every count and the detail read this, so no two of them can
+        answer the same question differently.
+
+        It is not part of `for_display`. That queryset also prefetches a
+        service's rollup, and a service whose rollup is archived still
+        needs a header status.
+        """
+        return self.filter(is_archived=False)
+
     def search(self, q):
         """Rank a query against the stored path.
 
@@ -411,9 +423,11 @@ class ServiceComponent(BaseModel):
             return 0
         prepared = getattr(self, "_descendant_count", None)
         if prepared is None:
-            return ServiceComponent.objects.filter(
-                ancestor_ids__contains=[self.pk]
-            ).count()
+            return (
+                ServiceComponent.objects.visible()
+                .filter(ancestor_ids__contains=[self.pk])
+                .count()
+            )
         return prepared
 
     def is_tracked_by(self, user):

@@ -239,6 +239,23 @@ def test_the_detail_carries_both_tab_counts(client):
     assert body["affected_count"] == 2
 
 
+def test_the_affects_badge_leaves_out_an_archived_component(client):
+    # The badge and the Affects tab count the same rows. The tab reads
+    # `?event=`, which does not serve an archived component.
+    service = ServiceFactory()
+    kept = ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    event = _event(service, kept, external_id="1")
+    event.affected_components.add(gone)
+    gone.is_archived = True
+    gone.save()
+
+    badge = client.get(reverse("event-detail", args=[event.id])).json()
+    listed = client.get(reverse("component-list"), {"event": str(event.id)}).json()
+    assert badge["affected_count"] == 1
+    assert listed["aggregates"]["total"] == 1
+
+
 def test_the_timeline_is_its_own_paged_list(client):
     # A provider's log has no ceiling, so it cannot ride on the detail.
     service = ServiceFactory()

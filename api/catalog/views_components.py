@@ -28,7 +28,8 @@ class ComponentQueryMixin:
 
     def get_queryset(self):
         return (
-            ServiceComponent.objects.for_display(self.request.user)
+            ServiceComponent.objects.visible()
+            .for_display(self.request.user)
             .annotate(
                 severity_now=CURRENT_SEVERITY,
                 watcher_count=COMPONENT_WATCHER_COUNT,

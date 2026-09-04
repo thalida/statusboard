@@ -13,6 +13,21 @@ info:
     To track a service, track its overall component. To track one part of a service, track that
     component. Both are the same call with a different id.
 
+    ## An archived component is not served
+
+    A provider stops publishing a component. The row is archived rather than deleted, because
+    somebody may be tracking it.
+
+    Archived components are left out of every list, every count and the detail. The detail
+    answers `404`. Nothing points at a row no list holds.
+
+    The one exception is `Service.overall_component`. A service whose rollup is archived still
+    needs a status in its header.
+
+    Two consequences follow. A tracked component that is archived leaves the board with no
+    notice. An event names the components it affected, and a link to an archived one answers
+    `404`.
+
     ## Severity is the state
 
     `severity` is an integer from 0 to 5. Lower is worse. This matches the SEV0/SEV1 convention.
@@ -264,6 +279,9 @@ paths:
         `q` matches a component's whole path, so `twilio` finds `SMS`. Results are then ranked by
         relevance. Without `q` the default is `suggested`, except under `service`, where it is
         `status_page_order`.
+
+        Archived components are never listed. An event whose only affected component was archived
+        returns an empty page.
       security: [{}, { bearer: [] }]
       parameters:
         - { name: q, in: query, schema: { type: string } }
@@ -296,6 +314,9 @@ paths:
     get:
       tags: [catalog]
       summary: Component detail
+      description: |
+        `404` for an archived component, as well as for one that never existed. A provider
+        stopped publishing it, so no screen holds it.
       security: [{}, { bearer: [] }]
       parameters:
         - { $ref: '#/components/parameters/Uuid' }
@@ -389,7 +410,12 @@ paths:
     get:
       tags: [board]
       summary: The components tracked on this dashboard
-      description: Filtering, sorting and pagination are server-side without exception — nothing assumes a board is small.
+      description: |
+        Filtering, sorting and pagination are server-side without exception. Nothing assumes a
+        board is small.
+
+        An archived component drops off the board. The item stays tracked, so the row returns if
+        the provider publishes the component again.
       parameters:
         - { $ref: '#/components/parameters/Uuid' }
         - { name: status__severity__lte, in: query, schema: { type: integer } }
@@ -763,10 +789,13 @@ components:
             rather than a copy of its fields. One FK, one nested serializer.
 
             It is a plain `Component`, the same shape a component has anywhere else, so one
-            renderer draws every row. Six of its fields are fixed by what an overall component is:
-            `parent` and `path` are null, `descendant_count` is 0, `is_overall` is true, `archived_at`
-            is null, and `name` is the service name. They are returned rather than omitted — a
-            client that special-cased them would need a second renderer to gain nothing.
+            renderer draws every row. Five of its fields are fixed by what an overall component is:
+            `parent` and `path` are null, `descendant_count` is 0, `is_overall` is true, and `name`
+            is the service name. They are returned rather than omitted. A client that
+            special-cased them would need a second renderer to gain nothing.
+
+            This is the one place an archived component is served. A provider can stop publishing
+            its top-level indicator, and the header still needs a status. Read `archived_at` here.
 
             Read severity at `overall_component.status.severity`. The filter uses the same path.
         tracked_component_count:
@@ -821,7 +850,7 @@ components:
             Always 0 on the overall component. It is a peer of the top-level components, not their
             parent.
         is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
-        archived_at: { type: string, format: date-time, nullable: true, description: Set when the provider stops publishing it. The row stays, reads unknown, and says so — deleting it would silently drop it from someone's board. }
+        archived_at: { type: string, format: date-time, nullable: true, description: 'When the provider stopped publishing the component. An archived component is not served, so this is null everywhere but `Service.overall_component`.' }
         status: { $ref: '#/components/schemas/Status' }
         upcoming_maintenance:
           allOf: [{ $ref: '#/components/schemas/EventRef' }]
@@ -937,7 +966,7 @@ components:
             badges before either tab has made a request.
           properties:
             update_count: { type: integer }
-            affected_count: { type: integer }
+            affected_count: { type: integer, description: 'The Affects badge. Archived components are left out, the same as the tab it labels. It can be 0.' }
             last_update_at: { type: string, format: date-time, nullable: true }
     EventUpdate:
       type: object

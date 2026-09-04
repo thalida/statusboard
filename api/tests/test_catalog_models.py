@@ -194,6 +194,51 @@ def test_for_display_counts_descendants_without_a_query_a_row(
     assert counts == [0, 1, 2]
 
 
+def test_the_prepared_descendant_count_leaves_out_an_archived_row(db):
+    # The badge and the list below it read one number. If this counted
+    # an archived row, the tab would say 2 and then show one component.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    leaf = ComponentFactory(service=service, parent=middle)
+    rebuild_ancestry(service)
+    # `update_fields`, because this row is stale: `rebuild_ancestry`
+    # wrote its ancestry after the factory made it.
+    leaf.is_archived = True
+    leaf.save(update_fields=["is_archived"])
+
+    row = ServiceComponent.objects.for_display().get(pk=top.pk)
+    assert row.descendant_count() == 1
+
+
+def test_the_unprepared_descendant_count_leaves_out_an_archived_row(db):
+    # A row fetched without `for_display` counts for itself. Two ways to
+    # answer one question is how the two answers drift apart.
+    service = ServiceFactory()
+    top = ComponentFactory(service=service)
+    middle = ComponentFactory(service=service, parent=top)
+    leaf = ComponentFactory(service=service, parent=middle)
+    rebuild_ancestry(service)
+    leaf.is_archived = True
+    leaf.save(update_fields=["is_archived"])
+
+    assert ServiceComponent.objects.get(pk=top.pk).descendant_count() == 1
+    assert middle.descendant_count() == 0
+
+
+def test_a_services_component_count_leaves_out_an_archived_row(db):
+    # This is the badge on the service page. The Components tab under it
+    # lists the same rows, and the two cannot count differently.
+    service = ServiceFactory()
+    ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    gone.is_archived = True
+    gone.save()
+
+    assert Service.objects.for_display().get(pk=service.pk).component_count() == 1
+    assert Service.objects.get(pk=service.pk).component_count() == 1
+
+
 def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
     # The rollup's own name is an exact, weight-A hit. A leaf matches
     # only through its service, at weight C, so it must sort below.

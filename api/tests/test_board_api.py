@@ -71,6 +71,21 @@ def test_all_returns_every_tracked_component(client, board):
 
 
 @pytest.mark.django_db
+def test_the_board_leaves_out_an_archived_component(client, board):
+    # The provider stopped publishing it, so no screen shows it. A board
+    # row that no other list holds would have nowhere to link to.
+    _track(board)
+    gone = _track(board)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
+
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    body = client.get(url).json()
+    assert body["aggregates"]["total"] == 1
+    assert str(gone.id) not in [r["id"] for r in body["results"]]
+
+
+@pytest.mark.django_db
 def test_one_fetch_fills_every_chip(client, board):
     # One response must fill every chip on the board.
     # Otherwise the client makes a request per chip.
