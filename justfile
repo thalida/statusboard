@@ -101,8 +101,11 @@ test-bin:
 
 # Slower than `just test`, and the answer that counts: it proves the
 # image rather than the host. Run it before opening a pull request.
+# The two stdlib-only checks run on the host, because a container costs
+# more than it saves. `bin/tests/test_merge_gate.py` holds the two lists
+# together.
 
-# Everything CI runs, in the containers CI runs it in.
+# Every check CI runs, each where CI runs it.
 check: image
     docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
     docker compose -f docker-compose.test.yml run --rm ruff

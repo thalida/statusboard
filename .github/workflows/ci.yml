@@ -57,6 +57,11 @@ jobs:
       - name: Prose
         run: python3 bin/check_prose.py
 
+      # Stdlib only as well. These cover the scripts in bin/, which have
+      # no dependency manager and no Django to test them with.
+      - name: The bin/ scripts
+        run: python3 -m unittest discover -s bin/tests
+
       - name: No migration is missing
         run: |
           docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
