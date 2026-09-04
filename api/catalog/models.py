@@ -516,11 +516,22 @@ class ServiceComponent(BaseModel):
         """The components above this one, top down.
 
         A provider can nest a component under another. The chain is what
-        tells you where it sits on the status page. The guard is for bad
-        data: the column points at its own table, so a loop is possible.
+        tells you where it sits on the status page.
+
+        Two rules end the walk. A loop is possible, because the column
+        points at its own table. And the chain stops at the service.
+        Moving a component leaves its old children pointing across. A
+        step there names a row this service's lists never hold.
+
+        `polling.reconcile._chains` walks a whole service by the same
+        rules, and the backfill in migration 0008 repeats them.
         """
         chain, node, seen = [], self.parent, {self.pk}
-        while node is not None and node.pk not in seen:
+        while (
+            node is not None
+            and node.pk not in seen
+            and node.service_id == self.service_id
+        ):
             seen.add(node.pk)
             chain.append(node)
             node = node.parent

@@ -197,6 +197,23 @@ def test_a_move_between_services_rebuilds_the_service_left_behind(db):
     assert list(ServiceComponent.objects.search("programmable sms")) == []
 
 
+def test_a_parent_in_another_service_is_not_a_step_in_the_path(db):
+    # The closure table stops at the service boundary. A breadcrumb that
+    # walked past it names a component of another service. The same
+    # response then says the row has no ancestors.
+    old = ServiceFactory(name="Twilio")
+    top = ComponentFactory(service=old, name="Programmable Messaging")
+    leaf = ComponentFactory(service=old, name="SMS", parent=top)
+
+    top.service = ServiceFactory(name="Vonage")
+    top.save()
+
+    leaf.refresh_from_db()
+    assert leaf.ancestors == []
+    assert leaf.visible_ancestors == []
+    assert leaf.path == "Twilio / SMS"
+
+
 def test_a_save_that_moves_nothing_rebuilds_nothing(db, monkeypatch):
     # A rebuild rewrites every row of the service. A save of an
     # unrelated column must not pay for it, or one poll goes quadratic.

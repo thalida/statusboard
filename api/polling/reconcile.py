@@ -101,13 +101,10 @@ def _chains(rows):
     parents = {row.id: row.parent_id for row in rows}
 
     def chain(node):
-        # The column points at its own table, so the data allows a loop.
-        # `seen` ends the walk. Without it bad data hangs the worker.
-        #
-        # `up in parents` keeps the chain inside this service. Moving
-        # a component to another service leaves its old children
-        # pointing across. A step there names a row this service's
-        # lists never hold.
+        # `seen` and `up in parents` are the loop guard and the service
+        # boundary. `ServiceComponent.ancestors` says why each ends the
+        # walk. The rows in hand are one service, so membership is the
+        # boundary here.
         walked, seen, up = [], {node}, parents.get(node)
         while up is not None and up not in seen and up in parents:
             seen.add(up)
