@@ -82,5 +82,5 @@ def test_a_view_that_declares_no_permissions_requires_authentication():
 def test_the_catalog_stays_public_on_purpose(client):
     # Browsing without an account is in the spec, so these say AllowAny
     # rather than inheriting it.
-    assert client.get(reverse("service-list")).status_code == 200
+    assert client.get(reverse("component-list")).status_code == 200
     assert client.get(reverse("meta")).status_code == 200

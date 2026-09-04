@@ -79,39 +79,11 @@ def _me_probe():
     return api, reverse("me"), "email"
 
 
-def _service_list_probe():
-    service = ServiceFactory()
-    StatusPageFactory(service=service)
-    ComponentFactory(service=service, is_overall=True)
-    return APIClient(), reverse("service-list"), "id"
-
-
 def _service_detail_probe():
     service = ServiceFactory()
     StatusPageFactory(service=service)
     ComponentFactory(service=service, is_overall=True)
     return APIClient(), reverse("service-detail", kwargs={"slug": service.slug}), "id"
-
-
-def _service_components_probe():
-    service = ServiceFactory()
-    ComponentFactory(service=service, is_overall=True)
-    url = reverse("service-components", kwargs={"slug": service.slug})
-    return APIClient(), url, "id"
-
-
-def _service_events_probe():
-    service = ServiceFactory()
-    ServiceEvent.objects.create(
-        service=service,
-        external_id="probe",
-        kind=EventKind.INCIDENT,
-        title="x",
-        phase=IncidentPhase.DETECTED,
-        starts_at=timezone.now(),
-    )
-    url = reverse("service-events", kwargs={"slug": service.slug})
-    return APIClient(), url, "id"
 
 
 def _event_list_probe():
@@ -189,10 +161,7 @@ def _board_components_probe():
 FIELDS_PROBES = {
     "/meta/": _meta_probe,
     "/me/": _me_probe,
-    "/catalog/services/": _service_list_probe,
     "/catalog/services/{slug}/": _service_detail_probe,
-    "/catalog/services/{slug}/components/": _service_components_probe,
-    "/catalog/services/{slug}/events/": _service_events_probe,
     "/catalog/components/": _component_list_probe,
     "/catalog/components/{uuid}/": _component_detail_probe,
     "/dashboards/{uuid}/components/": _board_components_probe,

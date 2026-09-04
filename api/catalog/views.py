@@ -1,149 +1,51 @@
 import requests
 from django.db.models import F
 from django.utils import timezone
-from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import generics
 from rest_framework import status as http
-from rest_framework.decorators import action
-from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.defaults import Throttle
-from catalog.filters import ComponentFilter, ServiceEventFilter, ServiceFilter
-from catalog.models import Service, ServiceComponent, ServiceRequest, StatusPage
-from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
+from catalog.models import Service, ServiceRequest, StatusPage
 from catalog.serializers import (
-    ComponentSerializer,
     ImportRequestSerializer,
     ServiceRequestSerializer,
     ServiceSerializer,
 )
-from common.aggregates import EventAggregateSet, StatusAggregateSet
 from common.errors import NoStatusPageFound, ProviderUnreachable
 from common.filters import FieldsBackend
-from common.ordering import MappedOrderingFilter
 from polling.importer import import_from_url
-from status.models import ServiceEvent
-from status.queries import CURRENT_SEVERITY
-from status.serializers import ServiceEventSerializer
 
 
-class ServiceAggregateSet(StatusAggregateSet):
-    """Counts for a list of services.
+class ServiceDetailView(generics.RetrieveAPIView):
+    """The service page's header and its About tab.
 
-    A service has no severity of its own. Its severity is the open status
-    of its overall component, which is the provider's own page-level
-    reading. So counting services by severity means counting those
-    components, not the services.
-    """
-
-    def components(self):
-        return ServiceComponent.objects.filter(
-            service__in=self.queryset, is_overall=True
-        )
-
-
-class ServiceViewSet(ReadOnlyModelViewSet):
-    """Every read of a service, in one place.
-
-    The list and the detail are the same resource. A component list and
-    an event list belong to a service, so they are detail actions.
-
-    Each action overrides the serializer, filters and ordering it needs.
-    Those names exist on the class because DRF refuses an initkwarg that
-    is not already an attribute.
+    There is no list. Discover searches components, and the signed-out
+    board lists overall components. So nothing asked a service
+    collection a question.
     """
 
     permission_classes = [AllowAny]
     lookup_field = "slug"
     serializer_class = ServiceSerializer
-    aggregate_set = ServiceAggregateSet
-    filterset_class = ServiceFilter
-    filter_backends = [
-        DjangoFilterBackend,
-        SearchFilter,
-        MappedOrderingFilter,
-        FieldsBackend,
-    ]
-    search_fields = ["name", "slug"]
-    ordering_fields = ["name", "updated_at"]
-    # `suggested` is not a field. Severity sits behind a related path.
-    #
-    # Severity ahead of popularity is deliberate. A middling service
-    # that is broken now beats a popular one that is fine.
-    #
-    # Lower severity is worse, so ascending puts the broken first. A
-    # service with no reading sorts last, not as healthy.
-    SUGGESTED = ["-is_featured", "severity_now", "-watcher_count", "name"]
-    ordering_map = {
-        "suggested": SUGGESTED,
-        "overall_component__status__severity": ["severity_now"],
-    }
-    ordering = SUGGESTED
-    # Schema generation calls get_queryset with no URL kwargs. This names
-    # the model without running it.
+    filter_backends = [FieldsBackend]
+    # get_queryset reads the request, which schema generation has not
+    # set. This names the model without running it.
     queryset = Service.objects.none()
 
     def get_queryset(self):
-        # `q` is SearchFilter's, through SEARCH_PARAM. It was a hand
-        # rolled `name__icontains` beside a `search_fields` no backend
-        # read. The slug was declared searchable, and was not.
-        return Service.objects.for_display(self.request.user).annotate(
-            watcher_count=WATCHER_COUNT,
-            severity_now=OVERALL_SEVERITY,
-        )
-
-    def _page(self, queryset):
-        """The same envelope the list actions return."""
-        page = self.paginate_queryset(self.filter_queryset(queryset))
-        return self.get_paginated_response(self.get_serializer(page, many=True).data)
-
-    @extend_schema(responses={200: ComponentSerializer})
-    @action(
-        detail=True,
-        url_path="components",
-        url_name="components",
-        serializer_class=ComponentSerializer,
-        aggregate_set=StatusAggregateSet,
-        filterset_class=ComponentFilter,
-        ordering_fields=["name", "status_page_order", "updated_at"],
-        ordering_map={"status__severity": ["severity_now"]},
-        ordering=["status_page_order"],
-    )
-    def components(self, request, slug=None):
-        return self._page(
-            ServiceComponent.objects.filter(service__slug=slug)
-            .for_display(self.request.user)
-            .annotate(severity_now=CURRENT_SEVERITY)
-        )
-
-    @extend_schema(responses={200: ServiceEventSerializer})
-    @action(
-        detail=True,
-        url_path="events",
-        url_name="events",
-        serializer_class=ServiceEventSerializer,
-        aggregate_set=EventAggregateSet,
-        filterset_class=ServiceEventFilter,
-        ordering_fields=["starts_at", "ends_at"],
-        ordering_map={},
-        ordering=["-starts_at"],
-    )
-    def events(self, request, slug=None):
-        return self._page(
-            ServiceEvent.objects.filter(service__slug=slug).select_related("service")
-        )
+        return Service.objects.for_display(self.request.user)
 
 
 class CatalogImportView(APIView):
-    """`POST /catalog/services/` is reserved.
+    """Add a service by pasting the address of its status page.
 
-    A future admin create takes a service body. A bulk create takes a
-    list. So importing by URL gets its own path. It does not overload
-    the standard collection.
+    Its own path, because the body is a URL rather than a service. A
+    later create that takes a service body then does not overload this
+    one.
     """
 
     permission_classes = [AllowAny]

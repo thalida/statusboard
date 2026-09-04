@@ -88,8 +88,9 @@ def test_urls_are_deduplicated_after_normalising():
 
 
 @pytest.mark.django_db
-def test_the_imported_service_is_identical_in_shape_to_a_listed_one():
-    # If a field is missing here it belongs in the list too, not in a second shape.
+def test_the_imported_service_is_identical_in_shape_to_a_read_one():
+    # If a field is missing here it belongs on the service page too,
+    # not in a second shape.
     created = (
         APIClient()
         .post(
@@ -99,8 +100,8 @@ def test_the_imported_service_is_identical_in_shape_to_a_listed_one():
         )
         .json()
     )
-    listed = APIClient().get(reverse("service-list")).json()["results"][0]
-    assert set(created) == set(listed)
+    url = reverse("service-detail", args=[created["slug"]])
+    assert set(created) == set(APIClient().get(url).json())
 
 
 @pytest.mark.django_db

@@ -166,7 +166,6 @@ class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
             "id",
             "slug",
             "name",
-            "description",
             "homepage_url",
             "logo",
             "in_catalog_since",

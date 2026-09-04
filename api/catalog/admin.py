@@ -19,7 +19,7 @@ from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
 from catalog.models import Service, ServiceComponent, StatusPage
-from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
+from catalog.queries import OVERALL_SEVERITY, is_tracked
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
@@ -242,8 +242,8 @@ class ServiceEventInline(TabularInline):
 class TrackedFilter(DropdownFilter):
     """Whether anybody has this service on a board.
 
-    The count is worked out when the list is read, so there is no column
-    to put a range over. This is the question the poller asks too.
+    There is no column to filter on. `is_tracked` is the question the
+    poller asks, so the admin asks it the same way.
     """
 
     title = _("Tracked")
@@ -255,9 +255,8 @@ class TrackedFilter(DropdownFilter):
     def queryset(self, request, queryset):
         if self.value() is None:
             return queryset
-        if self.value() == "1":
-            return queryset.filter(watcher_count__gt=0)
-        return queryset.filter(watcher_count=0)
+        watched = is_tracked()
+        return queryset.filter(watched if self.value() == "1" else ~watched)
 
 
 class ServiceSeverityFilter(DropdownFilter):
@@ -310,15 +309,12 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
         "display_service",
         "display_severity",
-        "is_featured",
-        "display_watchers",
         "provider",
         "display_related",
     ]
     search_fields = [
         "name",
         "slug",
-        "description",
         "homepage_url",
         "status_page__url",
     ]
@@ -327,17 +323,14 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     # when. A service belongs to nothing, so its state leads.
     list_filter = [
         ServiceSeverityFilter,
-        "is_featured",
         ("status_page__provider", ChoicesDropdownFilter),
         TrackedFilter,
         ("created_at", RangeDateTimeFilter),
         ("updated_at", RangeDateTimeFilter),
     ]
-    # Not `ordering`: the checks want a real column there, and this one
-    # is counted when the list is read. `get_queryset` sorts instead.
     ordering = ["name"]
     fieldsets = [
-        (None, {"fields": ["name", "slug", "description", "is_featured"]}),
+        (None, {"fields": ["name", "slug"]}),
         (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
         audit_section(),
     ]
@@ -361,19 +354,13 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             .select_related("status_page", "poller")
             .annotate(
                 severity_now=OVERALL_SEVERITY,
-                watcher_count=WATCHER_COUNT,
                 component_count=related_count(ServiceComponent.objects, "service"),
                 event_count=related_count(ServiceEvent.objects, "service"),
                 status_count=related_count(
                     ComponentStatus.objects, "component__service"
                 ),
             )
-            .order_by("-watcher_count", "name")
         )
-
-    @display(description=_("Watchers"), ordering="watcher_count")
-    def display_watchers(self, obj):
-        return obj.watcher_count
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):

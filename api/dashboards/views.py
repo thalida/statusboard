@@ -23,8 +23,8 @@ def _board(request, uuid):
 
 
 class BoardComponentListView(generics.ListCreateAPIView):
-    # get_queryset reads self.kwargs, which schema generation has
-    # not set. This names the model without running it.
+    # Schema generation reads the model off this before it calls
+    # get_queryset. It names the model without running one.
     queryset = ServiceComponent.objects.none()
     permission_classes = [IsAuthenticated]
     serializer_class = ComponentSerializer
@@ -40,11 +40,17 @@ class BoardComponentListView(generics.ListCreateAPIView):
     ordering = ["severity_now"]  # worst first: lower severity is worse
 
     def get_queryset(self):
+        rows = ServiceComponent.objects.annotate(
+            severity_now=CURRENT_SEVERITY, next_transition=NEXT_TRANSITION
+        )
+        if "uuid" not in self.kwargs:
+            # Schema generation reaches here with no URL. It reads the
+            # annotations, because the filters and the sorts name them.
+            return rows.none()
         board = _board(self.request, self.kwargs["uuid"])
         return (
-            ServiceComponent.objects.filter(tracked_by__dashboard=board)
+            rows.filter(tracked_by__dashboard=board)
             .for_display(self.request.user)
-            .annotate(severity_now=CURRENT_SEVERITY, next_transition=NEXT_TRANSITION)
             .distinct()
         )
 

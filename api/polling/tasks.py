@@ -75,7 +75,7 @@ def _refresh_metadata(service, metadata, adapter=None):
         if logo:
             service.logo = logo
             changed.append("logo")
-    for field in ("name", "description", "homepage_url"):
+    for field in ("name", "homepage_url"):
         value = metadata.get(field)
         if value and getattr(service, field) != value:
             setattr(service, field, value)

@@ -1,7 +1,7 @@
 """What a caller reads about a service, as SQL.
 
-A service's own severity is its overall component's. Who watches it is
-counted through the boards its components sit on. Both are questions
+A service's own severity is its overall component's. Who watches a
+component is counted through the boards it sits on. Both are questions
 about the catalog, so they live here.
 
 These lived in `common.ordering`, which made the base layer import the
@@ -22,16 +22,10 @@ OVERALL_SEVERITY = Subquery(
     ).values("severity")[:1]
 )
 
-# Who tracks a service, counted when it is read. It was a column that a
-# signal kept true, and four write paths never reached the signal.
-#
-# Two readers, two shapes. Only the suggestion order needs the number, so
-# only it pays for a distinct count over three joins.
-WATCHER_COUNT = Count("components__boards__owner", distinct=True)
-
-# Who tracks one component. `DashboardItem` points straight at it, so
-# this is one join. The service version needed three, and only the
-# service sort read it.
+# Who tracks one component, counted when it is read. It was a column
+# that a signal kept true, and four write paths never reached the
+# signal. `DashboardItem` points straight at a component, so this is one
+# join.
 COMPONENT_WATCHER_COUNT = Count("boards__owner", distinct=True)
 
 

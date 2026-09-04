@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -11,7 +11,20 @@ from status.choices import (
     StatusSource,
 )
 from status.models import ComponentStatus, ServiceEvent
-from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
+from tests.factories import (
+    ComponentFactory,
+    ServiceFactory,
+    StatusPageFactory,
+    track,
+)
+
+
+def resolve_or_none(path):
+    """The view a path reaches, or None when nothing serves it."""
+    try:
+        return resolve(path)
+    except Resolver404:
+        return None
 
 
 def _with_status(service, severity, is_overall=False, external_id=None):
@@ -29,14 +42,48 @@ def _with_status(service, severity, is_overall=False, external_id=None):
     return component
 
 
+def _service_detail(service):
+    return APIClient().get(reverse("service-detail", args=[service.slug])).json()
+
+
+def test_the_service_list_is_gone():
+    # Discover searches components, and the signed-out board lists
+    # overall components. Nothing asked a service list a question.
+    assert resolve_or_none("/catalog/services/") is None
+
+
 @pytest.mark.django_db
-def test_the_list_is_public():
-    assert APIClient().get(reverse("service-list")).status_code == 200
+def test_the_nested_component_route_is_gone():
+    # `/catalog/components/?service=` serves it, and three other
+    # screens besides.
+    service = ServiceFactory()
+    response = APIClient().get(f"/catalog/services/{service.slug}/components/")
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_the_nested_event_route_is_gone():
+    # `/events/?service=` serves it, beside every other event list.
+    service = ServiceFactory()
+    response = APIClient().get(f"/catalog/services/{service.slug}/events/")
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_a_service_still_answers_by_slug():
+    # The service page reads it for the header and the About tab.
+    service = ServiceFactory(name="Twilio")
+    StatusPageFactory(service=service)
+    response = APIClient().get(reverse("service-detail", args=[service.slug]))
+    assert response.status_code == 200
+    assert response.json()["name"] == "Twilio"
+    # Nothing renders a description, so it is not in the shape.
+    assert "description" not in response.json()
 
 
 @pytest.mark.django_db
 def test_every_list_response_uses_the_same_envelope():
-    body = APIClient().get(reverse("service-list")).json()
+    body = APIClient().get(reverse("component-list")).json()
     assert set(body) == {"aggregates", "next", "results"}
     assert "total" in body["aggregates"]
 
@@ -46,7 +93,7 @@ def test_a_service_nests_its_overall_component_rather_than_copying_its_fields():
     service = ServiceFactory(slug="twilio")
     StatusPageFactory(service=service)
     _with_status(service, Severity.MAJOR_OUTAGE, is_overall=True)
-    body = APIClient().get(reverse("service-list")).json()["results"][0]
+    body = _service_detail(service)
     assert body["overall_component"]["status"]["severity"] == Severity.MAJOR_OUTAGE
     assert "severity" not in body
 
@@ -57,11 +104,7 @@ def test_the_overall_component_is_a_plain_component():
     service = ServiceFactory()
     StatusPageFactory(service=service)
     _with_status(service, Severity.OPERATIONAL, is_overall=True)
-    overall = (
-        APIClient()
-        .get(reverse("service-list"))
-        .json()["results"][0]["overall_component"]
-    )
+    overall = _service_detail(service)["overall_component"]
     for field in (
         "id",
         "name",
@@ -83,13 +126,17 @@ def test_the_overall_component_is_a_plain_component():
 
 @pytest.mark.django_db
 def test_severity_filters_use_the_orm_path():
+    # The contract's name is not a column. It points at an annotation,
+    # and a filter that missed it would answer every row.
     service = ServiceFactory()
     StatusPageFactory(service=service)
     _with_status(service, Severity.MAJOR_OUTAGE, is_overall=True)
-    url = reverse("service-list") + "?overall_component__status__severity__lte=3"
-    assert len(APIClient().get(url).json()["results"]) == 1
-    url = reverse("service-list") + "?overall_component__status__severity__lte=0"
-    assert len(APIClient().get(url).json()["results"]) == 1
+    _with_status(service, Severity.OPERATIONAL)
+    url = reverse("component-list")
+    assert len(APIClient().get(url).json()["results"]) == 2
+    assert (
+        len(APIClient().get(url, {"status__severity__lte": 3}).json()["results"]) == 1
+    )
 
 
 @pytest.mark.django_db
@@ -97,11 +144,8 @@ def test_fields_prunes_the_response():
     service = ServiceFactory()
     StatusPageFactory(service=service)
     _with_status(service, Severity.OPERATIONAL, is_overall=True)
-    body = (
-        APIClient()
-        .get(reverse("service-list") + "?fields=id,name")
-        .json()["results"][0]
-    )
+    url = reverse("service-detail", args=[service.slug])
+    body = APIClient().get(url, {"fields": "id,name"}).json()
     assert set(body) == {"id", "name"}
 
 
@@ -110,8 +154,10 @@ def test_a_dotted_field_path_prunes_inside_a_nested_object():
     service = ServiceFactory()
     StatusPageFactory(service=service)
     _with_status(service, Severity.OPERATIONAL, is_overall=True)
-    url = reverse("service-list") + "?fields=id,overall_component.status.severity"
-    body = APIClient().get(url).json()["results"][0]
+    url = reverse("service-detail", args=[service.slug])
+    body = (
+        APIClient().get(url, {"fields": "id,overall_component.status.severity"}).json()
+    )
     assert set(body) == {"id", "overall_component"}
     assert set(body["overall_component"]) == {"status"}
     assert set(body["overall_component"]["status"]) == {"severity"}
@@ -133,11 +179,7 @@ def test_active_incident_excludes_resolved_ones():
         ends_at=timezone.now(),
     )
     resolved.affected_components.add(component)
-    overall = (
-        APIClient()
-        .get(reverse("service-list"))
-        .json()["results"][0]["overall_component"]
-    )
+    overall = _service_detail(service)["overall_component"]
     assert overall["active_incident"] is None
     assert overall["active_incident_count"] == 0
 
@@ -157,128 +199,71 @@ def test_upcoming_maintenance_excludes_finished_windows():
         ends_at=timezone.now() - timezone.timedelta(days=29),
     )
     past.affected_components.add(component)
-    overall = (
-        APIClient()
-        .get(reverse("service-list"))
-        .json()["results"][0]["overall_component"]
-    )
+    overall = _service_detail(service)["overall_component"]
     assert overall["upcoming_maintenance"] is None
     assert overall["upcoming_maintenance_count"] == 0
-
-
-@pytest.mark.django_db
-def test_the_events_endpoint_returns_both_kinds_and_filters_on_kind():
-    service = ServiceFactory(slug="twilio")
-    StatusPageFactory(service=service)
-    ServiceEvent.objects.create(
-        service=service,
-        external_id="1",
-        kind=EventKind.INCIDENT,
-        title="I",
-        phase=IncidentPhase.INVESTIGATING,
-        starts_at=timezone.now(),
-    )
-    ServiceEvent.objects.create(
-        service=service,
-        external_id="2",
-        kind=EventKind.MAINTENANCE,
-        title="M",
-        phase=MaintenancePhase.SCHEDULED,
-        starts_at=timezone.now(),
-    )
-    url = reverse("service-events", kwargs={"slug": "twilio"})
-    assert len(APIClient().get(url).json()["results"]) == 2
-    assert len(APIClient().get(url + "?kind=incident").json()["results"]) == 1
-
-
-@pytest.mark.django_db
-def test_the_events_aggregate_is_by_phase_only():
-    service = ServiceFactory(slug="twilio")
-    StatusPageFactory(service=service)
-    url = reverse("service-events", kwargs={"slug": "twilio"})
-    aggregates = APIClient().get(url).json()["aggregates"]
-    assert set(aggregates) == {"total", "by_phase"}
-
-
-@pytest.mark.django_db
-def test_an_event_carries_no_component_ids():
-    # The projection runs one way: a component carries its event, not the reverse.
-    service = ServiceFactory(slug="twilio")
-    StatusPageFactory(service=service)
-    ServiceEvent.objects.create(
-        service=service,
-        external_id="1",
-        kind=EventKind.INCIDENT,
-        title="I",
-        phase=IncidentPhase.INVESTIGATING,
-        starts_at=timezone.now(),
-    )
-    url = reverse("service-events", kwargs={"slug": "twilio"})
-    row = APIClient().get(url).json()["results"][0]
-    assert set(row) == {
-        "id",
-        "kind",
-        "title",
-        "phase",
-        "starts_at",
-        "ends_at",
-        "detected_by",
-        "service",
-    }
 
 
 @pytest.mark.django_db
 def test_suggestions_put_what_is_broken_ahead_of_what_is_popular():
     """Severity sits ahead of popularity on purpose.
 
-    A middling service that is broken now beats a popular one that is
+    A middling component that is broken now beats a popular one that is
     fine. That is the premise of the public view.
     """
-    popular = ServiceFactory(name="Popular", tracked=500)
+    popular = ServiceFactory(name="Popular")
     StatusPageFactory(service=popular)
-    _with_status(popular, Severity.OPERATIONAL, is_overall=True)
+    watched = _with_status(popular, Severity.OPERATIONAL, is_overall=True)
+    for _ in range(5):
+        track(watched)
 
-    broken = ServiceFactory(name="Broken", tracked=1)
+    broken = ServiceFactory(name="Broken")
     StatusPageFactory(service=broken)
-    _with_status(broken, Severity.MAJOR_OUTAGE, is_overall=True)
+    track(_with_status(broken, Severity.MAJOR_OUTAGE, is_overall=True))
 
     names = [
-        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+        r["service"]["name"]
+        for r in APIClient().get(reverse("component-list")).json()["results"]
     ]
     assert names.index("Broken") < names.index("Popular")
 
 
 @pytest.mark.django_db
-def test_a_featured_service_still_leads():
-    # Featured is the cold-start seed. On day one nothing has watchers
-    # and nothing is polled, so it is the whole list.
+def test_a_featured_component_still_leads():
+    # Featured is the first key, ahead of severity. An editor's pick
+    # leads even when something worse is on the same page.
     plain = ServiceFactory(name="Plain")
     StatusPageFactory(service=plain)
     _with_status(plain, Severity.MAJOR_OUTAGE, is_overall=True)
 
-    featured = ServiceFactory(name="Featured", is_featured=True)
+    featured = ServiceFactory(name="Featured")
     StatusPageFactory(service=featured)
-    _with_status(featured, Severity.OPERATIONAL, is_overall=True)
+    row = _with_status(featured, Severity.OPERATIONAL, is_overall=True)
+    row.is_featured = True
+    row.save(update_fields=["is_featured"])
 
     names = [
-        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+        r["service"]["name"]
+        for r in APIClient().get(reverse("component-list")).json()["results"]
     ]
     assert names.index("Featured") < names.index("Plain")
 
 
 @pytest.mark.django_db
-def test_a_service_with_no_reading_sorts_last_not_first():
+def test_a_component_with_no_reading_sorts_last_not_first():
     # Never seen is not the same as healthy, and it must not pose as
     # broken either.
     unread = ServiceFactory(name="Unread")
     StatusPageFactory(service=unread)
+    ComponentFactory(service=unread, is_overall=True)
 
     healthy = ServiceFactory(name="Healthy")
     StatusPageFactory(service=healthy)
     _with_status(healthy, Severity.OPERATIONAL, is_overall=True)
 
     names = [
-        r["name"] for r in APIClient().get(reverse("service-list")).json()["results"]
+        r["service"]["name"]
+        for r in APIClient().get(reverse("component-list")).json()["results"]
     ]
     assert names.index("Healthy") < names.index("Unread")
 
@@ -354,31 +339,9 @@ def test_a_component_list_costs_the_same_whatever_its_length():
         for size in (2, 30):
             reset_queries()
             APIClient().get(
-                reverse("service-components", kwargs={"slug": service.slug}),
-                {"page_size": size},
+                reverse("component-list"),
+                {"service": service.slug, "page_size": size},
             )
             counts[size] = len(connection.queries)
 
     assert counts[2] == counts[30], counts
-
-
-@pytest.mark.django_db
-def test_a_service_list_costs_the_same_whatever_its_length():
-    # Three fields asked per service, and one of them serialized a
-    # component, which asked seven more.
-    from django.db import connection, reset_queries
-    from django.test import override_settings
-
-    for n in range(12):
-        service = ServiceFactory(name=f"Service {n}")
-        StatusPageFactory(service=service)
-        _with_status(service, Severity.OPERATIONAL, is_overall=True)
-
-    counts = {}
-    with override_settings(DEBUG=True):
-        for size in (2, 12):
-            reset_queries()
-            APIClient().get(reverse("service-list"), {"page_size": size})
-            counts[size] = len(connection.queries)
-
-    assert counts[2] == counts[12], counts

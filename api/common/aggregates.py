@@ -1,6 +1,4 @@
-from django.db.models import Count, Exists, Min, OuterRef
-
-from status.choices import EventKind
+from django.db.models import Count, Min
 
 
 class AggregateSet:
@@ -22,62 +20,28 @@ class AggregateSet:
 
 
 class StatusAggregateSet(AggregateSet):
-    """For any list of things carrying a status. Services, or a board."""
+    """For any list of components. Discover, a service's parts, a board."""
 
     def build(self):
         data = super().build()
         data["by_severity"] = self._by_severity()
-        data["by_event_kind"] = self._by_event_kind()
         data["next_refresh_at"] = self._next_refresh_at()
         data["oldest_refreshed_at"] = self._oldest_refreshed_at()
         return data
 
-    def components(self):
-        """The components these counts are drawn from.
-
-        Severity and events hang off a component, so every count below
-        starts here. When the rows are already components this is them.
-        A list of something else overrides it to say which components
-        stand for its rows.
-        """
-        return self.queryset
-
     def _by_severity(self):
         rows = (
-            self.components()
-            .filter(statuses__ended_at__isnull=True)
+            self.queryset.filter(statuses__ended_at__isnull=True)
             .values("statuses__severity")
             .annotate(n=Count("id", distinct=True))
         )
         return {str(r["statuses__severity"]): r["n"] for r in rows}
 
-    def _by_event_kind(self):
-        """How many components have a live event of each kind.
-
-        Through `ServiceEvent.objects.live`, the same rule the component
-        beside it counts by. This had its own copy, and it left out the
-        end of a maintenance window. A chip and a row could disagree
-        about one that was over.
-        """
-        from status.models import ServiceEvent
-
-        counts = {}
-        for kind in EventKind:
-            live = ServiceEvent.objects.live(kind).filter(
-                affected_components=OuterRef("pk")
-            )
-            counts[str(kind)] = (
-                self.components().filter(Exists(live)).distinct().count()
-            )
-        return counts
-
     def _next_refresh_at(self):
-        return self.components().aggregate(v=Min("service__poller__next_at"))["v"]
+        return self.queryset.aggregate(v=Min("service__poller__next_at"))["v"]
 
     def _oldest_refreshed_at(self):
-        return self.components().aggregate(v=Min("service__poller__last_success_at"))[
-            "v"
-        ]
+        return self.queryset.aggregate(v=Min("service__poller__last_success_at"))["v"]
 
 
 class EventAggregateSet(AggregateSet):

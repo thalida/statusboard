@@ -183,39 +183,6 @@ paths:
       description: Removes the dashboard, its tracked components and the user. Catalog and status data are untouched — they are not personal.
       responses: { '204': { description: No content } }
 
-  /catalog/services/:
-    get:
-      tags: [catalog]
-      summary: List services
-      description: |
-        This endpoint serves Discover, the suggested lists, and the public "down right now" view.
-        Use parameters to select the view.
-
-        With `q`, results are ordered by relevance. Without `q`, the default ordering is
-        `suggested`: `(-is_featured, severity, -watcher_count, name)`. A broken service outranks a
-        more popular service that is working.
-      security: [{}, { bearer: [] }]
-      parameters:
-        - { name: q, in: query, schema: { type: string } }
-        - { name: overall_component__status__severity__lte, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'A service''s severity is its overall component''s, so the path runs through it.' }
-        - { name: overall_component__status__severity, in: query, schema: { type: integer, minimum: 0, maximum: 5 }, description: 'Maintenance chip is =4' }
-        - { name: overall_component__is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Narrower: whether the overall component specifically is tracked, which is what the ＋ on a service row toggles.' }
-        - { name: ordering, in: query, schema: { type: string, enum: [suggested, overall_component__status__severity, -overall_component__status__severity, name, -name, updated_at, -updated_at], default: suggested } }
-        - { $ref: '#/components/parameters/PageSize' }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { $ref: '#/components/parameters/Fields' }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
-                      results: { type: array, items: { $ref: '#/components/schemas/Service' } }
   /catalog/import/:
     post:
       tags: [catalog]
@@ -339,76 +306,6 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } } }
         '404': { $ref: '#/components/responses/Error' }
 
-  /catalog/services/{slug}/components/:
-    get:
-      tags: [catalog]
-      summary: List a service's components
-      description: |
-        The component tree, flattened. `parent` links a child to its group. The overall component
-        is first. `aggregates` gives the tab labels.
-      security: [{}, { bearer: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Slug' }
-        - { name: is_tracked, in: query, schema: { type: boolean }, description: Drives Showing All / Tracked / Untracked }
-        - { name: status__severity__lte, in: query, schema: { type: integer } }
-        - { name: status__severity, in: query, schema: { type: integer } }
-        - { name: ordering, in: query, schema: { type: string, enum: [status_page_order, status__severity, -status__severity, name, -name], default: status_page_order }, description: '`status_page_order` keeps the order the status page lists them in.' }
-        - { $ref: '#/components/parameters/PageSize' }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { $ref: '#/components/parameters/Fields' }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      aggregates: { $ref: '#/components/schemas/StatusAggregates' }
-                      results: { type: array, items: { $ref: '#/components/schemas/Component' } }
-
-  /catalog/services/{slug}/events/:
-    get:
-      tags: [catalog]
-      summary: List a service's events
-      description: |
-        Incidents and maintenance are one collection. Filter with `kind`.
-
-        The Incidents tab passes `kind=incident&ends_at__isnull=true`. The Maintenance tab passes
-        `kind=maintenance` with a window filter.
-      security: [{}, { bearer: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Slug' }
-        - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] }, description: Omit for both. }
-        - { name: phase, in: query, schema: { type: string }, description: 'Valid values depend on `kind`. See `/meta/` `enums.event_phase`.' }
-        - { name: phase__in, in: query, schema: { type: string }, description: Comma-separated. }
-        - { name: ends_at__isnull, in: query, schema: { type: boolean }, description: '`true` is the open set — unresolved, or a window still to close.' }
-        - { name: starts_at__gte, in: query, schema: { type: string, format: date-time } }
-        - { name: starts_at__lte, in: query, schema: { type: string, format: date-time }, description: 'With `ends_at__gte`, answers "what happens between now and Thursday".' }
-        - { name: ends_at__gte, in: query, schema: { type: string, format: date-time } }
-        # The M2M filter stays although no field exposes it. django-filter generates it free,
-        # and narrowing events to one component is a query a screen may want. The field was
-        # different: a prefetch and bytes on every row that nothing rendered.
-        - { name: affected_components, in: query, schema: { type: string, format: uuid }, description: Events naming this component. }
-        - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
-        - { $ref: '#/components/parameters/PageSize' }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { $ref: '#/components/parameters/Fields' }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      aggregates: { $ref: '#/components/schemas/EventAggregates' }
-                      results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
-
   /events/:
     get:
       tags: [status]
@@ -485,27 +382,15 @@ paths:
       description: Filtering, sorting and pagination are server-side without exception — nothing assumes a board is small.
       parameters:
         - { $ref: '#/components/parameters/Uuid' }
-        - name: event
-          in: query
-          schema: { type: string, enum: [incident, maintenance] }
-          description: |
-            The Incidents and Maintenance tabs. Keep a row if the component has an open
-            `ServiceEvent` of this kind. Omit the parameter for the All tab.
-
-            Declared, not generated. `ServiceEvent` and `ServiceComponent` are many-to-many, and
-            two generated parameters would apply as two `.filter()` calls. On a many-to-many each
-            call joins the relation again, so `events__kind` and `events__phase` can be satisfied
-            by two different events: a component with one closed incident and one running
-            maintenance would match `event=incident`. One `.filter()` holding both conditions
-            binds them to the same row.
-        - { name: status__severity__lte, in: query, schema: { type: integer }, description: 'Severity, not events. It works inside any tab — `event=incident&status__severity__lte=3` is written-up incidents that are also down now.' }
+        - { name: status__severity__lte, in: query, schema: { type: integer } }
         - { name: status__severity, in: query, schema: { type: integer } }
+        - { name: status__severity__in, in: query, schema: { type: string }, description: 'Comma separated, for a Severity filter offering every value at once.' }
         - name: ordering
           in: query
           schema: { type: string, enum: [status__severity, -status__severity, name, -name, updated_at, -updated_at, next_transition], default: status__severity }
           description: |
-            `next_transition` sorts the Maintenance tab. It uses `ends_at` for a running window
-            and `starts_at` for one that has not started. Running windows sort first. This
+            `next_transition` sorts by the next maintenance step. It uses `ends_at` for a running
+            window and `starts_at` for one that has not started. Running windows sort first. This
             ordering is declared, not generated.
         - { $ref: '#/components/parameters/PageSize' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -695,16 +580,6 @@ components:
               additionalProperties: { type: integer }
               description: |
                 Keys are severities 0–5. Sorting and the dot read from this. No tab is a severity.
-            by_event_kind:
-              type: object
-              additionalProperties: { type: integer }
-              description: |
-                `{"incident": 3, "maintenance": 1}` — how many rows each value of `event` returns.
-                These are the Incidents and Maintenance tab counts.
-
-                Neither can be read off `by_severity`. A maintenance window three days out leaves
-                the component at severity 5, and a provider can open an incident on components it
-                still reports as operational.
             next_refresh_at:
               type: string
               format: date-time
@@ -888,10 +763,6 @@ components:
 
             A value above 0 means the service is on your board. This differs from
             `overall_component.is_tracked`, which covers the overall component only.
-        description:
-          type: string
-          nullable: true
-          description: The provider's own summary of the service. The About tab shows it.
         in_catalog_since:
           type: string
           format: date
@@ -968,7 +839,7 @@ components:
 
             The full list is not on the component. History is unbounded, and a row renders from
             the soonest plus this count. Read the list from
-            `GET /catalog/services/{slug}/events/?kind=maintenance` when a screen needs it.
+            `GET /events/?component={uuid}&kind=maintenance` when a screen needs it.
         active_incident:
           allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: |

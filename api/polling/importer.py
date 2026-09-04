@@ -76,7 +76,6 @@ def _import(key, adapter_class, fetch_url, fetched):
     author = get_user_model().objects.system()
     service = Service.objects.create(
         name=metadata["name"],
-        description=metadata.get("description", ""),
         homepage_url=metadata.get("homepage_url", ""),
         logo=fetched["logo"],
         created_by=author,

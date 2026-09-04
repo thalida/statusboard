@@ -27,7 +27,6 @@ def service_form_data(staff_client, **fields):
     data = {
         "name": "",
         "slug": "",
-        "description": "",
         "logo": "",
         "homepage_url": "",
         **fields,

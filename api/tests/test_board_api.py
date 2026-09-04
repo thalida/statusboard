@@ -8,7 +8,6 @@ from dashboards.models import Dashboard, DashboardItem
 from status.choices import (
     EventKind,
     IncidentPhase,
-    MaintenancePhase,
     Severity,
     StatusSource,
 )
@@ -72,85 +71,51 @@ def test_all_returns_every_tracked_component(client, board):
 
 
 @pytest.mark.django_db
-def test_the_incidents_tab_filters_on_event_kind(client, board):
-    with_incident = _track(board)
-    _event(with_incident, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
-    _track(board)
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert len(client.get(url).json()["results"]) == 1
-
-
-@pytest.mark.django_db
-def test_a_resolved_incident_does_not_put_a_row_on_the_incidents_tab(client, board):
-    component = _track(board)
-    _event(
-        component, EventKind.INCIDENT, IncidentPhase.RESOLVED, ends_at=timezone.now()
-    )
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert client.get(url).json()["results"] == []
-
-
-@pytest.mark.django_db
-def test_the_event_filter_binds_both_conditions_to_the_same_event(client, board):
-    # `ServiceEvent` and `ServiceComponent` are many-to-many.
-    # Two parameters filter twice and can match two different events.
-    component = _track(board)
-    _event(
-        component, EventKind.INCIDENT, IncidentPhase.RESOLVED, ends_at=timezone.now()
-    )
-    _event(component, EventKind.MAINTENANCE, MaintenancePhase.IN_PROGRESS)
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert client.get(url).json()["results"] == []
-
-
-@pytest.mark.django_db
-def test_scheduled_maintenance_appears_on_the_maintenance_tab_while_reading_operational(
-    client, board
-):
-    # A window three days out leaves severity 5.
-    # Severity cannot select it, so the tab filters on the event.
-    component = _track(board, severity=Severity.OPERATIONAL)
-    _event(
-        component,
-        EventKind.MAINTENANCE,
-        MaintenancePhase.SCHEDULED,
-        starts_at=timezone.now() + timezone.timedelta(days=3),
-    )
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=maintenance"
-    rows = client.get(url).json()["results"]
-    assert len(rows) == 1
-    assert rows[0]["status"]["severity"] == Severity.OPERATIONAL
-
-
-@pytest.mark.django_db
 def test_one_fetch_fills_every_chip(client, board):
-    # One response must fill all three chips.
+    # One response must fill every chip on the board.
     # Otherwise the client makes a request per chip.
-    broken = _track(board, severity=Severity.MAJOR_OUTAGE)
-    _event(broken, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
-    planned = _track(board)
-    _event(planned, EventKind.MAINTENANCE, MaintenancePhase.SCHEDULED)
+    _track(board, severity=Severity.MAJOR_OUTAGE)
+    _track(board, severity=Severity.OPERATIONAL)
     aggregates = client.get(
         reverse("board-components", kwargs={"uuid": board.id})
     ).json()["aggregates"]
     assert aggregates["total"] == 2
-    assert aggregates["by_event_kind"]["incident"] == 1
-    assert aggregates["by_event_kind"]["maintenance"] == 1
+    assert aggregates["by_severity"][str(Severity.MAJOR_OUTAGE)] == 1
+    assert aggregates["by_severity"][str(Severity.OPERATIONAL)] == 1
     assert "next_refresh_at" in aggregates
     assert "oldest_refreshed_at" in aggregates
 
 
 @pytest.mark.django_db
-def test_severity_composes_with_a_tab(client, board):
-    down = _track(board, severity=Severity.MAJOR_OUTAGE)
-    _event(down, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
-    up = _track(board, severity=Severity.OPERATIONAL)
-    _event(up, EventKind.INCIDENT, IncidentPhase.MONITORING)
-    url = (
-        reverse("board-components", kwargs={"uuid": board.id})
-        + "?event=incident&status__severity__lte=3"
+def test_the_board_takes_several_severities_at_once(client, board):
+    # The Severity filter offers all six values. A single exact match
+    # could not express "everything that needs attention".
+    _track(board, severity=Severity.MAJOR_OUTAGE)
+    _track(board, severity=Severity.PARTIAL_OUTAGE)
+    _track(board, severity=Severity.OPERATIONAL)
+    response = client.get(
+        reverse("board-components", kwargs={"uuid": board.id}),
+        {"status__severity__in": "0,1,2"},
     )
-    assert len(client.get(url).json()["results"]) == 1
+    assert response.status_code == 200
+    severities = {r["status"]["severity"] for r in response.json()["results"]}
+    assert severities == {Severity.MAJOR_OUTAGE, Severity.PARTIAL_OUTAGE}
+
+
+@pytest.mark.django_db
+def test_the_event_parameter_is_gone(client, board):
+    # It named the Home Incidents and Maintenance tabs. Home is Board
+    # and Updates now, and Updates is `/events/?dashboard=`.
+    with_incident = _track(board)
+    _event(with_incident, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
+    _track(board)
+    body = client.get(
+        reverse("board-components", kwargs={"uuid": board.id}), {"event": "incident"}
+    ).json()
+    # django-filter ignores an unknown parameter rather than failing,
+    # so the proof is that it no longer narrows anything.
+    assert body["aggregates"]["total"] == 2
+    assert "by_event_kind" not in body["aggregates"]
 
 
 @pytest.mark.django_db

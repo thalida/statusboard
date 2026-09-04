@@ -17,10 +17,11 @@ from common.queries import related_count
 
 class ServiceQuerySet(models.QuerySet):
     def for_display(self, user=None):
-        """Everything `ServiceSerializer` reads, without a query a row.
+        """Everything `ServiceSerializer` reads, in four queries.
 
-        Three fields asked per service, and one of them serialized a
-        component, which asked seven more.
+        The service page reads one service. Three of its fields are
+        counted or nested. The nested one is a whole component, which
+        asks seven more.
         """
         from django.contrib.auth.models import AnonymousUser
 
@@ -59,10 +60,8 @@ class Service(BaseModel):
         blank=True,
         help_text="Derived from the name when left blank.",
     )
-    description = models.TextField(blank=True, default="")
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
-    is_featured = models.BooleanField(verbose_name="Featured", default=False)
     objects = ServiceQuerySet.as_manager()
 
     history = HistoricalRecords()

@@ -77,6 +77,55 @@ def test_component_narrows_the_feed(client):
     assert [r["title"] for r in results] == ["Wanted"]
 
 
+def test_kind_narrows_the_feed(client):
+    # Incidents and maintenance are one collection. A screen showing
+    # only one of them says which.
+    service = ServiceFactory()
+    component = ComponentFactory(service=service)
+    _event(service, component, external_id="1", title="Broke")
+    _event(
+        service,
+        component,
+        external_id="2",
+        title="Planned",
+        kind=EventKind.MAINTENANCE,
+        phase=MaintenancePhase.SCHEDULED,
+    )
+
+    both = client.get(reverse("event-list")).json()["results"]
+    incidents = client.get(reverse("event-list"), {"kind": "incident"}).json()[
+        "results"
+    ]
+    assert len(both) == 2
+    assert [r["title"] for r in incidents] == ["Broke"]
+
+
+def test_the_feed_aggregate_is_by_phase_only(client):
+    # A severity belongs to a component. An event carries a phase, so
+    # a severity count here would answer about the wrong row.
+    aggregates = client.get(reverse("event-list")).json()["aggregates"]
+    assert set(aggregates) == {"total", "by_phase"}
+
+
+def test_an_event_carries_no_component_ids(client):
+    # The projection runs one way. A component carries its event, and
+    # the reverse would put an unbounded list on every row.
+    service = ServiceFactory()
+    _event(service, ComponentFactory(service=service), external_id="1")
+
+    row = client.get(reverse("event-list")).json()["results"][0]
+    assert set(row) == {
+        "id",
+        "kind",
+        "title",
+        "phase",
+        "starts_at",
+        "ends_at",
+        "detected_by",
+        "service",
+    }
+
+
 def test_phase_open_and_closed_draw_one_line(client):
     # `CLOSED_PHASES` lives in status/choices.py. A client restating
     # which phases are terminal is a second copy that can drift.

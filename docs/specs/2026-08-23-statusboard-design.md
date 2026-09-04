@@ -28,7 +28,7 @@ current state, read the provider's incident log, and browse a public view withou
 | Community issue reporting, comments | Sub-project #3. The Figma set already contains `status dot - user reported`, a split-circle variant, so the dot component should accept a shape from day one. |
 | Notifications | Sub-project #2. The Figma set contains a `Toggle Notifications` button; nothing in v1 uses it. |
 | Uptime history charts | `ComponentStatus` accumulates from first poll, so any chart is empty on day one. Ships when there is data. |
-| Service categories | Cut deliberately. `is_featured` plus `watcher_count` orders the suggested list instead. |
+| Service categories | Cut deliberately. `is_featured` plus `watcher_count` orders the suggested list instead. Both sit on `ServiceComponent`. |
 
 ### Non-goals
 
@@ -126,11 +126,8 @@ erDiagram
         uuid id PK
         string slug UK
         string name
-        text description "from the provider's page"
         url logo
         url homepage_url
-        bool is_featured "first key of the suggested sort"
-        int watcher_count "distinct users"
     }
     StatusPage {
         uuid id PK
@@ -258,20 +255,16 @@ is a different concept from a permission role.
 
 ### catalog
 
-- `Service` — slug, name, `description`, logo, homepage URL, `is_featured`, `watcher_count`
+- `Service` — slug, name, logo, homepage URL
 
-  `description` and `logo` come from the provider's page and are refreshed on every poll, so a
-  rename or a rebrand upstream does not leave a stale entry in the catalogue. The service screen's
-  About tab renders the description.
+  `logo` comes from the provider's page and is refreshed on every poll, so a rebrand upstream does
+  not leave a stale entry in the catalogue.
 
-  `is_featured` is a boolean ticked in admin for services worth surfacing regardless of usage. It
-  is the first key of the suggestion sort, and on day one — every `watcher_count` zero — it is the
-  whole list.
-
-  Two earlier fields are gone. `added_by` duplicated `BaseModel.created_by`, which every model
+  Three earlier fields are gone. `added_by` duplicated `BaseModel.created_by`, which every model
   already carries. `is_curated` had no consumer: nothing sorted, filtered or rendered by it.
-  "Seeded by us rather than pasted by someone" is `created_by IS NULL`, and "worth surfacing" is
-  `is_featured`.
+  "Seeded by us rather than pasted by someone" is `created_by IS NULL`. `watcher_count` was a
+  column a signal kept true, and four write paths never reached the signal. It is counted when it
+  is read instead.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
   `provider`, `api_url_override` (blank unless needed). What and where — nothing about polling.
 - `Poller` — `OneToOneField` to **`Service`**, created with it. The thing that reads a service:
@@ -348,27 +341,23 @@ is a different concept from a permission role.
   parents costs nothing to keep in step.
 
 Custom URLs dedupe on `StatusPage.url`, so two users pasting the same status page share one
-`Service` and one poll. A popular pasted entry is surfaced by ticking `is_featured` in admin.
+`Service` and one poll. A popular pasted entry is surfaced by ticking `is_featured` on its overall
+component in admin.
 
-**Suggestion ordering** is `(-is_featured, -watcher_count, name)`.
+**Suggestion ordering** is `(-is_featured, severity, -watcher_count, name)`, over components.
 
-**`watcher_count` is distinct users, not items.** Someone tracking five Twilio components is one
-watcher, not five:
+**`watcher_count` is distinct users, not items.** Someone tracking one component from two
+boards is one watcher, not two:
 
 ```sql
 SELECT COUNT(DISTINCT d.owner_id)
 FROM   dashboards_dashboarditem i
 JOIN   dashboards_dashboard d ON d.id = i.dashboard_id
-WHERE  i.service_id = %s
+WHERE  i.component_id = %s
 ```
 
-It is recomputed for the one affected service on `DashboardItem` create and delete — a single
-indexed aggregate, not a scan — so it is exact rather than drifting the way naive
-increment/decrement would when someone adds a second component for a service they already track.
-Deleting an account removes its items, which fires the same path.
-
-A nightly reconciliation task recomputes every service as a safety net. It orders a suggestion
-list, so a few hours of staleness costs nothing if a signal is ever missed.
+It is counted when the list is read, so it is exact. There is no column and no signal to
+keep one true.
 
 On day one every `watcher_count` is zero, so the list is your featured picks followed by
 everything else alphabetically. As real usage arrives the tail self-orders and you stop curating.
@@ -652,7 +641,7 @@ Each successful poll:
 2. **Marks vanished components `archived_at`** rather than deleting them. Someone may be tracking
    one, and deleting the row would silently remove it from their board. An archived component
    still renders, reads `unknown`, and says the provider no longer publishes it.
-3. **Refreshes the service's own metadata** — name, description, logo — for seeded and pasted
+3. **Refreshes the service's own metadata** — name, homepage URL, logo — for seeded and pasted
    entries alike, so a rename upstream does not leave a stale name on someone's board.
 
 Component identity is the provider's `external_id`, never the display name. Names change; ids do
