@@ -35,6 +35,7 @@ from common.admin import (
 from common.queries import related_count
 from polling.importer import import_from_url
 from polling.models import Poller, PollRun
+from polling.reconcile import rebuild_ancestry, rebuild_search
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
 from status.queries import CURRENT_SEVERITY
@@ -583,6 +584,25 @@ class ServiceComponentAdmin(
                     service_id=editing.service_id
                 ).exclude(pk=editing.pk)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def delete_queryset(self, request, queryset):
+        """Rebuild each service the selection touches, once.
+
+        `delete_selected` is how an admin removes several components,
+        and it never reaches `ServiceComponent.delete`. Without this a
+        deleted middle row leaves its parent linked to its children.
+        `parent` is SET_NULL, so the orphan reads as a root.
+
+        Once per service, not once per row. A rebuild rewrites the whole
+        tree, so a selection of fifty would otherwise cost fifty passes.
+
+        Read the services before the delete. The rows are gone after it.
+        """
+        services = list(Service.objects.filter(pk__in=queryset.values("service_id")))
+        super().delete_queryset(request, queryset)
+        for service in services:
+            rebuild_ancestry(service)
+            rebuild_search(service)
 
     def get_queryset(self, request):
         return (
