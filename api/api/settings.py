@@ -375,7 +375,9 @@ UNFOLD = {
                         "link": reverse_lazy("admin:index"),
                     },
                     {
-                        "title": _("Services"),
+                        # Five models across catalog and status answer
+                        # here now, not only the services themselves.
+                        "title": _("Catalog"),
                         "icon": "lan",
                         "link": reverse_lazy("admin:catalog_service_changelist"),
                     },

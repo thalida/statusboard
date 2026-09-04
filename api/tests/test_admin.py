@@ -709,7 +709,7 @@ def test_the_sidebar_names_every_top_level_destination():
         for group in settings.UNFOLD["SIDEBAR"]["navigation"]
         for item in group["items"]
     }
-    for title in ("Dashboard", "Services", "Polling", "Boards", "Users"):
+    for title in ("Dashboard", "Catalog", "Polling", "Boards", "Users"):
         assert title in titles, f"{title} has no sidebar entry"
 
 
@@ -746,6 +746,15 @@ def test_the_user_tabs_carry_magic_links(staff_client):
     tabs = _tab_strip(body)
     assert 'href="/admin/authentication/magiclinktoken/"' in tabs
     assert "Magic links" in tabs
+
+
+@pytest.mark.django_db
+def test_the_sidebar_entry_is_named_for_the_whole_group(staff_client):
+    # Five models across catalog and status answer here now, not just
+    # the services themselves. "Services" read oddly from the events
+    # tab and undersold what the entry opens.
+    body = staff_client.get(reverse("admin:index")).content.decode()
+    assert "<span>Catalog</span>" in body
 
 
 @pytest.mark.django_db
