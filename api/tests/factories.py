@@ -124,11 +124,19 @@ def descendants(component):
 
 
 def watchers(component):
-    """How many people track it, counted the way the app counts."""
+    """What the app counts, checked against a count walked in Python.
+
+    The app's expression is the thing under test, so it cannot also be
+    the answer. Borrowing it made every caller assert that it equalled
+    itself, and dropping `distinct` would have stayed green.
+    """
     from catalog.queries import COMPONENT_WATCHER_COUNT
 
-    return (
+    counted = (
         ServiceComponent.objects.annotate(n=COMPONENT_WATCHER_COUNT)
         .get(pk=component.pk)
         .n
     )
+    walked = len({board.owner_id for board in component.boards.all()})
+    assert counted == walked, f"the app counted {counted}, the tree holds {walked}"
+    return counted
