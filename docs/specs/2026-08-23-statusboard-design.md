@@ -128,6 +128,7 @@ erDiagram
         string name
         url logo
         url homepage_url
+        enum source "TextChoices, admin only, never served"
     }
     StatusPage {
         uuid id PK
@@ -257,16 +258,19 @@ is a different concept from a permission role.
 
 ### catalog
 
-- `Service` — slug, name, logo, homepage URL
+- `Service` — slug, name, logo, homepage URL, source
 
   `logo` comes from the provider's page and is refreshed on every poll, so a rebrand upstream does
   not leave a stale entry in the catalogue.
 
+  `source` says how the row arrived: `manual` from the admin's add form, `import` from
+  `import_from_url`. It is admin only. No screen reads it, so no serializer carries it.
+
   Three earlier fields are gone. `added_by` duplicated `BaseModel.created_by`, which every model
-  already carries. `is_curated` had no consumer: nothing sorted, filtered or rendered by it.
-  "Seeded by us rather than pasted by someone" is `created_by IS NULL`. `watcher_count` was a
-  column a signal kept true, and four write paths never reached the signal. It is counted when it
-  is read instead.
+  already carries. `created_by` says who added a service and `source` says how. Neither is null
+  for a service a signed-in person added. `is_curated` had no consumer: nothing sorted, filtered
+  or rendered by it. `watcher_count` was a column a signal kept true, and four write paths never
+  reached the signal. It is counted when it is read instead.
 - `StatusPage` — **its own model**, `OneToOneField` to `Service`. `url` (normalised, **unique**),
   `provider`, `api_url_override` (blank unless needed). What and where — nothing about polling.
 - `Poller` — `OneToOneField` to **`Service`**, created with it. The thing that reads a service:

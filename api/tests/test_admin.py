@@ -162,6 +162,21 @@ def test_the_admin_stamps_who_created_a_row(staff_client):
 
 
 @pytest.mark.django_db
+def test_a_service_added_on_the_admin_form_says_it_was_added_by_hand(staff_client):
+    # The add form is the one path that is not an import. A row saying
+    # import here claims a status page named the service.
+    from catalog.choices import ServiceSource
+    from catalog.models import Service
+
+    staff_client.post(
+        reverse("admin:catalog_service_add"),
+        service_form_data(staff_client, name="By hand"),
+    )
+
+    assert Service.objects.get(name="By hand").source == ServiceSource.MANUAL
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("field", ["created_by", "updated_by"])
 def test_derived_fields_are_not_on_the_form(staff_client, field):
     # A hand edit would

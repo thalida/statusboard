@@ -17,6 +17,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from catalog.choices import ServiceSource
 from catalog.models import Service, StatusPage
 from polling.adapters.registry import identify
 from polling.models import PollRun
@@ -86,6 +87,7 @@ def _import(key, adapter_class, fetch_url, fetched, author):
         name=metadata["name"],
         homepage_url=metadata.get("homepage_url", ""),
         logo=fetched["logo"],
+        source=ServiceSource.IMPORT,
         created_by=author,
         updated_by=author,
     )

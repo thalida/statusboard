@@ -263,3 +263,18 @@ def test_an_anonymous_import_names_nobody_rather_than_the_bot():
     )
 
     assert Service.objects.get().created_by is None
+
+
+@pytest.mark.django_db
+def test_an_imported_service_says_it_was_imported():
+    # The human tells a service added by hand from one read off a page.
+    # A row left at the default claims somebody typed it in.
+    from catalog.choices import ServiceSource
+
+    APIClient().post(
+        reverse("catalog-import"),
+        {"status_page_url": "https://status.twilio.com/"},
+        format="json",
+    )
+
+    assert Service.objects.get().source == ServiceSource.IMPORT

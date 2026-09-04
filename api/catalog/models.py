@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from simple_history.models import HistoricalRecords
 
-from catalog.choices import StatusPageProvider
+from catalog.choices import ServiceSource, StatusPageProvider
 from common.models import BaseModel
 from common.queries import related_count
 
@@ -56,6 +56,14 @@ class Service(BaseModel):
     )
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
+    # How the row arrived. `created_by` says who, and this says how.
+    # Admin only: no screen reads it, so no serializer carries it.
+    source = models.CharField(
+        max_length=32,
+        choices=ServiceSource.choices,
+        default=ServiceSource.MANUAL,
+        db_default=ServiceSource.MANUAL,
+    )
     objects = ServiceQuerySet.as_manager()
 
     history = HistoricalRecords()

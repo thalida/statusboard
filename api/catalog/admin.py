@@ -315,6 +315,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "provider",
+        "source",
         "display_related",
     ]
     search_fields = [
@@ -329,6 +330,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_filter = [
         ServiceSeverityFilter,
         ("status_page__provider", ChoicesDropdownFilter),
+        ("source", ChoicesDropdownFilter),
         TrackedFilter,
         ("created_at", RangeDateTimeFilter),
         ("updated_at", RangeDateTimeFilter),
