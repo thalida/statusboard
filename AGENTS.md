@@ -62,9 +62,10 @@ problem; the setting fixes the class.
 Which file a piece of code goes in, by what it is.
 
 - An app keeps one `views.py` until it serves more than one resource.
-  Then it becomes `views/`, one module per resource. `catalog` serves
-  three. A sub-resource stays with its parent, so an event's update
-  log is not a second module.
+  Then it becomes `views/`, one module per resource or per long-lived
+  operation. `catalog` serves three resources, and `imports.py` is an
+  operation on `Service`. A sub-resource stays with its parent, so an
+  event's update log is not a second module.
 - A **queryset method** is chainable vocabulary. It lives on the
   queryset in `models.py`, because a caller chains it onto a query.
 - A **bare expression** is handed to `annotate()`. It lives in
@@ -72,9 +73,11 @@ Which file a piece of code goes in, by what it is.
 - `queries.py` is row-scoped and `aggregates.py` is collection-scoped.
   One lands in a serialized row. The other lands in the `aggregates`
   key beside `results`.
-- `common` never imports an app. `common/ordering.py` records this as a
-  scar. Those expressions lived there, and the base layer imported the
-  app it describes.
+- `common` holds no expression that describes an app. `common/ordering.py`
+  records this as a scar. The domain subqueries lived there, and the base
+  layer imported the app it describes. Naming an app's choices to publish
+  them is another thing, and it is fine: `/meta/` lists every enum, and
+  one place has to.
 
 ## Settings
 
