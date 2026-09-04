@@ -74,8 +74,12 @@ class CatalogImportView(APIView):
             raise NoStatusPageFound(str(error)) from error
         except requests.RequestException as error:
             raise ProviderUnreachable(f"{url} could not be read: {error}") from error
+        # Read again, after the import. `ServiceSerializer` reads the
+        # counts `for_display` annotates, and the import returns a
+        # plain row.
+        row = Service.objects.for_display(request.user).get(pk=service.pk)
         return Response(
-            ServiceSerializer(service, context={"request": request}).data,
+            ServiceSerializer(row, context={"request": request}).data,
             status=http.HTTP_201_CREATED if created else http.HTTP_200_OK,
         )
 

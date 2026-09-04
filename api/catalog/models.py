@@ -35,11 +35,11 @@ class ServiceQuerySet(models.QuerySet):
         return (
             self.select_related("status_page", "poller")
             .annotate(
-                _component_count=related_count(
+                component_count=related_count(
                     ServiceComponent.objects.visible().filter(is_overall=False),
                     "service",
                 ),
-                _tracked_component_count=tracked,
+                tracked_component_count=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -47,7 +47,7 @@ class ServiceQuerySet(models.QuerySet):
                     queryset=ServiceComponent.objects.filter(
                         is_overall=True
                     ).for_display(user),
-                    to_attr="_overall_components",
+                    to_attr="overall_components",
                 )
             )
         )
@@ -79,35 +79,16 @@ class Service(BaseModel):
     def overall_component(self):
         """The rollup component, which is the service's own status.
 
-        This and the two below read what `for_display` prepared. A row
-        fetched without it asks instead. The underscore names are that
-        queryset's, so a rename cannot leave a reader behind.
+        `for_display` prefetches it. A row fetched without that asks
+        instead, because a single service nests one.
+
+        The name is singular against the plural prefetch, so the two
+        never collide.
         """
-        prepared = getattr(self, "_overall_components", None)
+        prepared = getattr(self, "overall_components", None)
         if prepared is None:
             return self.components.filter(is_overall=True).first()
         return prepared[0] if prepared else None
-
-    def component_count(self):
-        """The parts. The rollup is excluded, because it is the service."""
-        prepared = getattr(self, "_component_count", None)
-        if prepared is not None:
-            return prepared
-        return self.components.visible().filter(is_overall=False).count()
-
-    def tracked_component_count(self, user):
-        """How many parts this user has on a board."""
-        if user is None or not user.is_authenticated:
-            return 0
-        prepared = getattr(self, "_tracked_component_count", None)
-        if prepared is not None:
-            return prepared
-        return (
-            ServiceComponent.objects.visible()
-            .filter(service=self, boards__owner=user)
-            .distinct()
-            .count()
-        )
 
     def ensure_poller(self):
         """Every service is polled, so every service has one.
@@ -298,8 +279,9 @@ class ServiceComponentQuerySet(models.QuerySet):
         It answered seven fields with a query each, per row. A page of
         fifty cost three hundred and fifty six.
 
-        A row that skipped this still serializes, because a single
-        service nests one. So the fast path has to be asked for.
+        Every path that serializes a component calls this. A path that
+        forgets raises `AttributeError` on the first count, rather than
+        running one query a row in silence.
         """
         from django.contrib.auth.models import AnonymousUser
 
@@ -318,8 +300,8 @@ class ServiceComponentQuerySet(models.QuerySet):
         return (
             self.select_related("service", "parent", "parent__parent")
             .annotate(
-                _descendant_count=_descendant_count(),
-                _is_tracked=tracked,
+                descendant_count=_descendant_count(),
+                is_tracked=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -329,11 +311,14 @@ class ServiceComponentQuerySet(models.QuerySet):
                     queryset=ComponentStatus.objects.filter(
                         ended_at__isnull=True
                     ).select_related("component__service__poller"),
-                    to_attr="_open_statuses",
+                    to_attr="open_statuses",
                 ),
                 models.Prefetch(
                     "events",
                     queryset=ServiceEvent.objects.live(),
+                    # The one name that keeps its underscore. Its reader
+                    # is `live_events`, so the plain name would shadow
+                    # the method that reads it.
                     to_attr="_live_events",
                 ),
             )
@@ -404,8 +389,9 @@ class ServiceComponent(BaseModel):
     def live_events(self, kind):
         """The live events of one kind.
 
-        This and the three below read what `for_display` prepared. A row
-        fetched without it asks instead.
+        This and the two below read what `for_display` prepared. Each
+        picks one row, or one kind, out of a prefetch. So the method
+        and the attribute cannot share a name.
         """
         prepared = getattr(self, "_live_events", None)
         if prepared is None:
@@ -414,25 +400,16 @@ class ServiceComponent(BaseModel):
 
     def open_status(self):
         """The status span still running, if there is one."""
-        prepared = getattr(self, "_open_statuses", None)
+        prepared = getattr(self, "open_statuses", None)
         if prepared is None:
             return self.statuses.filter(ended_at__isnull=True).first()
         return prepared[0] if prepared else None
-
-    def descendant_count(self):
-        """How many components sit anywhere under this one."""
-        if self.is_overall:
-            return 0
-        prepared = getattr(self, "_descendant_count", None)
-        if prepared is None:
-            return self.descendant_links.to_visible().count()
-        return prepared
 
     def is_tracked_by(self, user):
         """Whether this user has it on a board. Null if nobody asked."""
         if user is None or not user.is_authenticated:
             return None
-        prepared = getattr(self, "_is_tracked", None)
+        prepared = getattr(self, "is_tracked", None)
         if prepared is None:
             return self.boards.filter(owner=user).exists()
         return prepared

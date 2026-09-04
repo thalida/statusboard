@@ -114,7 +114,7 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
 
     @extend_schema_field(serializers.IntegerField())
     def get_descendant_count(self, row):
-        return row.descendant_count()
+        return row.descendant_count
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):
@@ -157,7 +157,7 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         return row.is_tracked_by(self.viewer)
 
 
-class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
+class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
     status_page = StatusPageSerializer(read_only=True)
     poller = PollerSerializer(read_only=True)
     overall_component = serializers.SerializerMethodField()
@@ -196,11 +196,11 @@ class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_component_count(self, service):
-        return service.component_count()
+        return service.component_count
 
     @extend_schema_field(serializers.IntegerField())
     def get_tracked_component_count(self, service):
-        return service.tracked_component_count(self.viewer)
+        return service.tracked_component_count
 
 
 class ImportRequestSerializer(serializers.Serializer):

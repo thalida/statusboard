@@ -78,8 +78,16 @@ class BoardComponentListView(generics.ListCreateAPIView):
             component=component,
             defaults={"created_by": request.user, "updated_by": request.user},
         )
+        # Read again, after the write. `ComponentSerializer` reads the
+        # counts `for_display` annotates, and `is_tracked` is false
+        # until the item exists.
+        row = (
+            ServiceComponent.objects.visible()
+            .for_display(request.user)
+            .get(pk=component.pk)
+        )
         return Response(
-            ComponentSerializer(component, context={"request": request}).data,
+            ComponentSerializer(row, context={"request": request}).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 

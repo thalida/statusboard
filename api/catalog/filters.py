@@ -29,10 +29,10 @@ class ComponentFilter(SeverityFilterMixin):
         """Answer it here, because nobody signed out tracks anything.
 
         Both directions are true for that reader, so neither is an
-        error. `for_display` annotates `_is_tracked` as NULL then, and
+        error. `for_display` annotates `is_tracked` as NULL then, and
         SQL reads `NOT NULL` as NULL rather than true. Comparing against
         the annotation would drop every row from Untracked.
         """
         if self.request is None or self.request.user.is_anonymous:
             return queryset.none() if value else queryset
-        return queryset.filter(_is_tracked=value)
+        return queryset.filter(is_tracked=value)

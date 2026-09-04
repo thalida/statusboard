@@ -154,6 +154,20 @@ def test_tracking_a_component_adds_it_and_bumps_the_watcher_count(client, board)
 
 
 @pytest.mark.django_db
+def test_the_tracked_component_comes_back_prepared(client, board):
+    # The write returns a component row. Its counts are annotations, so
+    # a fetch that skips `for_display` cannot fill them.
+    parent = ComponentFactory(service=ServiceFactory())
+    ComponentFactory(service=parent.service, parent=parent)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    body = client.post(url, {"component_id": str(parent.id)}, format="json").json()
+    assert body["descendant_count"] == 1
+    # Read after the write. The annotation is false until the item is
+    # there, so the order of the two matters.
+    assert body["is_tracked"] is True
+
+
+@pytest.mark.django_db
 def test_tracking_the_same_component_twice_is_not_an_error(client, board):
     component = ComponentFactory()
     url = reverse("board-components", kwargs={"uuid": board.id})

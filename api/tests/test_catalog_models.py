@@ -291,13 +291,13 @@ def test_for_display_counts_descendants_without_a_query_a_row(
 
     rows = list(ServiceComponent.objects.for_display())
     with django_assert_num_queries(0):
-        counts = sorted(row.descendant_count() for row in rows)
+        counts = sorted(row.descendant_count for row in rows)
 
     # Two below the top, one below the middle, none below the leaf.
     assert counts == [0, 1, 2]
 
 
-def test_the_prepared_descendant_count_leaves_out_an_archived_row(db):
+def test_the_descendant_count_leaves_out_an_archived_row(db):
     # The badge and the list below it read one number. If this counted
     # an archived row, the tab would say 2 and then show one component.
     service = ServiceFactory()
@@ -311,22 +311,19 @@ def test_the_prepared_descendant_count_leaves_out_an_archived_row(db):
     leaf.save(update_fields=["is_archived"])
 
     row = ServiceComponent.objects.for_display().get(pk=top.pk)
-    assert row.descendant_count() == 1
+    assert row.descendant_count == 1
 
 
-def test_the_unprepared_descendant_count_leaves_out_an_archived_row(db):
-    # A row fetched without `for_display` counts for itself. Two ways to
-    # answer one question is how the two answers drift apart.
-    service = ServiceFactory()
-    top = ComponentFactory(service=service)
-    middle = ComponentFactory(service=service, parent=top)
-    leaf = ComponentFactory(service=service, parent=middle)
-    rebuild_ancestry(service)
-    leaf.is_archived = True
-    leaf.save(update_fields=["is_archived"])
+def test_a_component_read_without_for_display_has_no_count(db):
+    # The count is an annotation and nothing falls back to a query. A
+    # serving path that forgets `for_display` has to fail loudly, not
+    # ask once a row.
+    top = ComponentFactory()
+    ComponentFactory(service=top.service, parent=top)
 
-    assert ServiceComponent.objects.get(pk=top.pk).descendant_count() == 1
-    assert middle.descendant_count() == 0
+    row = ServiceComponent.objects.get(pk=top.pk)
+    with pytest.raises(AttributeError):
+        assert row.descendant_count
 
 
 def test_a_services_component_count_leaves_out_an_archived_row(db):
@@ -338,8 +335,7 @@ def test_a_services_component_count_leaves_out_an_archived_row(db):
     gone.is_archived = True
     gone.save()
 
-    assert Service.objects.for_display().get(pk=service.pk).component_count() == 1
-    assert Service.objects.get(pk=service.pk).component_count() == 1
+    assert Service.objects.for_display().get(pk=service.pk).component_count == 1
 
 
 def test_a_services_tracked_count_leaves_out_an_archived_row(db):
@@ -354,8 +350,7 @@ def test_a_services_tracked_count_leaves_out_an_archived_row(db):
     gone.save()
 
     prepared = Service.objects.for_display(user).get(pk=service.pk)
-    assert prepared.tracked_component_count(user) == 0
-    assert Service.objects.get(pk=service.pk).tracked_component_count(user) == 0
+    assert prepared.tracked_component_count == 0
 
 
 def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
