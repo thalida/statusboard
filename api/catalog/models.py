@@ -472,6 +472,27 @@ class ServiceComponent(BaseModel):
                 rebuild_ancestry(service)
                 rebuild_search(service)
 
+    def delete(self, *args, **kwargs):
+        """Rebuild the service, because a delete moves the rows below.
+
+        The cascade drops this row's own links. `parent` is SET_NULL,
+        so a child of this row becomes a root. The link from this row's
+        parent down to that child survives. It names a tree nobody
+        sits in.
+
+        A queryset delete does not come through here. Nothing removes a
+        component that way. A poll archives instead.
+
+        Read the service before the write. Django clears the key.
+        """
+        service = self.service
+        result = super().delete(*args, **kwargs)
+        from polling.reconcile import rebuild_ancestry, rebuild_search
+
+        rebuild_ancestry(service)
+        rebuild_search(service)
+        return result
+
     def _services_to_rebuild(self, update_fields):
         """Whose derived columns this save is about to invalidate.
 

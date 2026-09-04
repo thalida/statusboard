@@ -255,10 +255,27 @@ def test_deleting_a_component_takes_its_ancestry_with_it(db):
     assert not ComponentAncestor.objects.filter(
         Q(ancestor=gone) | Q(descendant=gone)
     ).exists()
-    # `parent` is SET_NULL, so the leaf is now a root. The link to its
-    # grandparent outlives the delete, and the next rebuild drops it.
-    rebuild_ancestry(service)
+    # `parent` is SET_NULL, so the leaf is now a root. The cascade
+    # clears the deleted row's own links only. Without the rebuild the
+    # leaf keeps a grandparent it no longer sits under.
     assert ancestry(leaf) == []
+
+
+def test_deleting_a_component_takes_its_name_out_of_the_search_path(db):
+    # `search_document` holds each ancestor's name. Left stale, a
+    # deleted parent's name still finds a component under nothing.
+    service = ServiceFactory(name="Twilio")
+    top = ComponentFactory(service=service, name="Programmable Messaging")
+    leaf = ComponentFactory(service=service, name="SMS", parent=top)
+    rebuild_ancestry(service)
+    rebuild_search(service)
+
+    top.delete()
+
+    assert list(ServiceComponent.objects.search("messaging")) == []
+    # The leaf still answers its own name. A rebuild that dropped the
+    # whole vector would pass the line above and serve nothing.
+    assert list(ServiceComponent.objects.search("sms")) == [leaf]
 
 
 def test_for_display_counts_descendants_without_a_query_a_row(
