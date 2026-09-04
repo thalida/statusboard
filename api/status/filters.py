@@ -4,8 +4,11 @@ Beside the views, and apart from them. A filter is the query contract,
 and it is read on its own more often than the view around it.
 """
 
+from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
+from rest_framework.exceptions import NotAuthenticated
 
+from dashboards.models import Dashboard
 from status.choices import CLOSED_PHASES, EventPhaseState
 from status.models import ServiceEvent
 
@@ -32,9 +35,19 @@ class EventFilter(filters.FilterSet):
         """Everything posted across the services on one board.
 
         The board's rows are components, and an event names components.
-        A user reaches only their own board: the view checks the owner
-        before this runs.
+
+        Who owns the board is decided here too, because one parameter
+        belongs to one place. The view read the id again and parsed the
+        UUID by hand. django-filter has parsed it before this runs, and
+        a malformed one never arrives.
         """
+        # An anonymous caller owns no board. Refuse before comparing
+        # against AnonymousUser, which get_object_or_404 cannot do.
+        if not self.request.user.is_authenticated:
+            raise NotAuthenticated
+        # 404 rather than 403: someone else's board id should not be
+        # confirmable.
+        get_object_or_404(Dashboard, id=value, owner=self.request.user)
         return queryset.filter(
             affected_components__tracked_by__dashboard_id=value
         ).distinct()
