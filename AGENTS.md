@@ -194,11 +194,14 @@ service arrived and appeared on no form for two releases.
 happened — how a row arrived, which run wrote it — is shown and never
 typed. An editable one can be made to lie.
 
-**A name, once chosen, stays.** A column header, a field label and a
-`verbose_name` are how somebody finds a thing again. Never rename one to
-make it agree with another. Where the list says `State` and the form
-says `Is archived`, both stay. Close a gap by adding what is absent,
-never by relabelling what is already there.
+**A column header names its field.** The list and the form show the same
+data, so they use the same word. A column headed `State` over
+`is_archived` sent a reader looking for a field of that name, and there
+is none.
+
+**Rename the column, never the field.** The field name is what the
+model, the API, the filters and every query already say. A header is
+read in one place. When the two disagree, the header is what is wrong.
 
 ## Commits
 
