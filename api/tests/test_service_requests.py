@@ -103,7 +103,7 @@ def test_a_failed_import_does_not_spend_this_endpoints_budget(client, monkeypatc
     def refuses(url):
         raise ValueError(f"no adapter for {url}")
 
-    monkeypatch.setattr("catalog.views.import_from_url", refuses)
+    monkeypatch.setattr("catalog.views.imports.import_from_url", refuses)
     for _ in range(6):
         client.post(
             reverse("catalog-import"),

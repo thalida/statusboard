@@ -216,7 +216,7 @@ def test_every_throttled_view_names_a_rate_that_exists():
 
     from api.defaults import Throttle
     from authentication.views import MagicLinkView
-    from catalog.views import CatalogImportView
+    from catalog.views.imports import CatalogImportView
 
     named = {MagicLinkView.throttle_scope, CatalogImportView.throttle_scope}
     rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]

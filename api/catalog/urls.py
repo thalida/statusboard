@@ -1,7 +1,9 @@
 from django.urls import path
 
-from catalog.views import CatalogImportView, ServiceDetailView, ServiceRequestView
-from catalog.views_components import ComponentDetailView, ComponentListView
+from catalog.views.components import ComponentDetailView, ComponentListView
+from catalog.views.imports import CatalogImportView
+from catalog.views.requests import ServiceRequestView
+from catalog.views.services import ServiceDetailView
 
 urlpatterns = [
     path("catalog/import/", CatalogImportView.as_view(), name="catalog-import"),
