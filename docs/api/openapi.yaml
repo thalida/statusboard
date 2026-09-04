@@ -69,17 +69,25 @@ info:
     `allOf` appears where two schemas cover two models. It also appears where a detail schema
     layers that kind of value onto its own list row.
 
-    Query parameters use the ORM path. django-filter generates them from `filterset_fields` and
-    `ordering_fields`. No `FilterSet` class is necessary.
+    Query parameters are declared in a `FilterSet`. Almost none is generated from a column of
+    the same name. `is_overall` and `kind` are the two that are.
 
-    The nesting is visible in the URL. Read a field's path in the response body to build its
-    filter. This holds for fields added later.
+    So a parameter is not an ORM path, and a field's path in the response body does not build
+    its filter. `service` takes a slug where the body carries a nested `ServiceRef`. `component`
+    and `ancestor` name nothing in any body. `phase` takes `open` or `closed` where the body
+    carries `investigating`.
 
-    Three parameters are declared, not generated. They have no ORM path:
-    `overall_component__is_tracked`, `ordering=suggested`, and `ordering=next_transition`.
+    Read the operation's own parameter list instead. It says what each one takes and what it
+    narrows.
 
-    Model field names are chosen to read well in a URL, because a field name appears in `?fields=`
-    and in a filter path.
+    Eleven are declared across the two collections: `q`, `service`, `ancestor`, `event`,
+    `component`, `dashboard`, `is_tracked`, `phase`, and the three `status__severity` forms.
+
+    Two ordering values are declared as well, `suggested` and `next_transition`. Neither names a
+    column. A view annotates the fields each one sorts on.
+
+    Model field names are chosen to read well in a URL, because a field name appears in
+    `?fields=`.
 
     ## Conventions
 
@@ -103,7 +111,7 @@ tags:
   - name: auth
   - name: me
   - name: catalog
-    description: Public. Services, their components, and incidents.
+    description: Public. Services and their components.
   - name: status
     description: Public. The event feed, one collection for Home, a service and a component.
   - name: board
@@ -223,7 +231,9 @@ paths:
         holds the URL, so asking cannot reveal what we have.
 
         One row per URL, counted. Throttled per caller.
-      security: []
+
+        Signing in is optional. A signed-in asker is recorded on the row.
+      security: [{}, { bearer: [] }]
       requestBody:
         required: true
         content:
@@ -452,6 +462,9 @@ components:
         Use a dotted path for a nested field. `overall_component.status.severity` returns
         `overall_component` containing `status` containing `severity` only.
 
+        A dotted path reaches into `enums` on `/meta/` too. `enums.severity` returns that one
+        label map. `enums` alone returns all of them.
+
         A path that names an unknown field returns `400`. The body is a field-errors object,
         one array of messages under `fields` — not the `Error` shape.
     PageSize: { name: page_size, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
@@ -574,7 +587,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/Aggregates'
         - type: object
-          description: For any list of things that carry a status — services, components, a board.
+          description: For any list of components. Discover, a service's parts, a board.
           properties:
             by_severity:
               type: object
@@ -840,7 +853,8 @@ components:
 
             The full list is not on the component. History is unbounded, and a row renders from
             the soonest plus this count. Read the list from
-            `GET /events/?component={uuid}&kind=maintenance` when a screen needs it.
+            `GET /events/?component={uuid}&kind=maintenance&phase=open` when a screen needs it.
+            Without `phase=open` that call returns every window ever, which this never counts.
         active_incident:
           allOf: [{ $ref: '#/components/schemas/EventRef' }]
           description: |
