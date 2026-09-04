@@ -203,6 +203,11 @@ is none.
 model, the API, the filters and every query already say. A header is
 read in one place. When the two disagree, the header is what is wrong.
 
+**A column that only re-renders a field is the field.** Put the field
+name in `list_display`. Django draws a boolean as a tick, takes the
+header from the model and sorts the column, all without being asked. A
+method that rebuilt those by hand is where the header `State` came from.
+
 ## Commits
 
 A lowercase conventional prefix, then a declarative clause.
