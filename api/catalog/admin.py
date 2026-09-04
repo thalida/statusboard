@@ -556,17 +556,7 @@ class ServiceComponentAdmin(
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
         ),
-        (
-            _("Featuring"),
-            {
-                "fields": ["is_featured"],
-                "description": _(
-                    "Leads the suggested sort on the catalog. Tick it on any "
-                    "component. A rollup surfaces its service, and a leaf "
-                    "surfaces that part."
-                ),
-            },
-        ),
+        (_("Featuring"), {"fields": ["is_featured"]}),
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
