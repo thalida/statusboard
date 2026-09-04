@@ -116,11 +116,45 @@ Every behaviour change carries a test. The suite runs with no network:
 adapters are tested against recorded fixtures.
 
 A test's comment says what would break if the assertion failed.
+If the answer is "nothing", the test does not earn its place.
+
+**Assert on behaviour, not arrangement.** Field order, section titles and
+`list_display` contents change for cosmetic reasons. A test that pins
+them fails on a harmless edit and catches no defect. One pinned the four
+component fieldsets in order. Moving two lines then cost a test edit, and
+it had never caught a bug.
+
+**A test fails only when something is broken.** A reasonable refactor
+breaks a wrong test and nothing else.
+
+**Never restate the implementation.** A test that computes its expected
+value the way the code does passes while both are wrong. Write the
+expected value out.
+
+**No test-only production code.** No argument, method, flag or branch
+exists so that a test can reach something. A path no caller reaches is a
+path the test should not reach either.
+
+**Enter through the front door.** Use the API client, the admin client or
+the management command. Call an internal directly only when no pathway
+reaches it.
+
+**Every assertion can fail.** Watch it fail once, before the code exists.
+`assert fieldsets[3] is not None` held on every possible input.
+
+**Test what this project decided.** Django and DRF are already tested.
+That a `CharField` stores a string is theirs. That a poller claims an
+incident inside the window is ours.
+
+**In the admin, test the logic, not the form.** Worth pinning: a
+read-only field the model maintains, a queryset the page filters, what
+`list_editable` writes, which user `created_by` records. Not which
+fields appear, or in what order.
 
 ```sh
-just test        # the suite
-just test-cov    # with the coverage gate
+just test        # the suite, host and bin/ scripts together
 just lint        # ruff check and format
+just check       # every check CI runs, coverage gate included
 ```
 
 ## Database
