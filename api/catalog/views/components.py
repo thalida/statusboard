@@ -6,7 +6,7 @@ nested routes would have been four copies of this queryset.
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
@@ -15,7 +15,7 @@ from catalog.models import ServiceComponent
 from catalog.queries import COMPONENT_WATCHER_COUNT
 from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
-from common.filters import FieldsBackend
+from common.filters import REJECTED_PARAMETER, FieldsBackend
 from common.ordering import MappedOrderingFilter
 from common.serializers import ErrorSerializer
 from status.queries import CURRENT_SEVERITY
@@ -40,6 +40,14 @@ class ComponentQueryMixin:
         )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses={
+            200: ComponentSerializer,
+            400: OpenApiResponse(description=REJECTED_PARAMETER),
+        }
+    )
+)
 class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
     aggregate_set = StatusAggregateSet
     filterset_class = ComponentFilter

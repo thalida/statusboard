@@ -6,6 +6,14 @@ FIELDS_DESCRIPTION = (
     "nested object rather than dropping it."
 )
 
+# One description for the one 400 a list answers. `fields`, `ordering`
+# and every filter refuse the same way, so a client branches once.
+REJECTED_PARAMETER = (
+    "A query parameter names something this list does not serve, or "
+    "carries a value it cannot read. The body is a field-errors object, "
+    "keyed by the parameter."
+)
+
 
 class FieldsBackend(BaseFilterBackend):
     """Declare `?fields=` for drf-spectacular.

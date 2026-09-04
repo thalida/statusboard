@@ -119,6 +119,9 @@ info:
     Lists return `{ aggregates, next, results }`. `aggregates` covers the whole collection, not
     the page. `ordering` follows DRF. Prefix a field with `-` to reverse it. GETs are ETagged.
 
+    An `ordering` name the list does not declare answers `400`, as an unknown `fields` name
+    does. `suggested` names its own directions, so `-suggested` answers `400` as well.
+
     ## Identity
 
     Every resource has a UUID. `Service` also has a stable `slug`. Public catalog routes use the
@@ -339,6 +342,7 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+        '400': { $ref: '#/components/responses/RejectedParameter' }
 
   /catalog/components/{uuid}/:
     get:
@@ -400,6 +404,7 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/EventAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/ServiceEvent' } }
+        '400': { $ref: '#/components/responses/RejectedParameter' }
 
   /events/{uuid}/:
     get:
@@ -473,6 +478,7 @@ paths:
                     properties:
                       aggregates: { $ref: '#/components/schemas/StatusAggregates' }
                       results: { type: array, items: { $ref: '#/components/schemas/Component' } }
+        '400': { $ref: '#/components/responses/RejectedParameter' }
     post:
       tags: [board]
       summary: Track a component
@@ -535,6 +541,19 @@ components:
     Error:
       description: Error
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RejectedParameter:
+      description: |
+        A query parameter names something the list does not serve, or carries a value it
+        cannot read. `fields`, `ordering` and every filter refuse the same way, so a client
+        branches once.
+
+        The body is a field-errors object, one array of messages keyed by the parameter
+        name. It is not the `Error` shape.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: { type: array, items: { type: string } }
   schemas:
     Error:
       type: object

@@ -9,13 +9,13 @@ import uuid
 
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.exceptions import NotAuthenticated
 from rest_framework.permissions import AllowAny
 
 from common.aggregates import EventAggregateSet
-from common.filters import FieldsBackend
+from common.filters import REJECTED_PARAMETER, FieldsBackend
 from common.ordering import MappedOrderingFilter
 from common.pagination import TimelinePagination
 from common.serializers import ErrorSerializer
@@ -29,6 +29,14 @@ from status.serializers import (
 )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses={
+            200: ServiceEventSerializer,
+            400: OpenApiResponse(description=REJECTED_PARAMETER),
+        }
+    )
+)
 class EventListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = ServiceEventSerializer

@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from catalog.models import ServiceComponent
 from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
-from common.filters import FieldsBackend
+from common.filters import REJECTED_PARAMETER, FieldsBackend
 from common.ordering import MappedOrderingFilter
 from dashboards.filters import BoardComponentFilter
 from dashboards.models import Dashboard, DashboardItem
@@ -26,6 +26,12 @@ def _board(request, uuid):
 # dispatches to. An annotation on `create` was dropped in silence, so
 # the documented 200 and 404 reached no schema.
 @extend_schema_view(
+    get=extend_schema(
+        responses={
+            200: ComponentSerializer,
+            400: OpenApiResponse(description=REJECTED_PARAMETER),
+        }
+    ),
     post=extend_schema(
         request=TrackComponentSerializer,
         responses={
@@ -36,7 +42,7 @@ def _board(request, uuid):
             ),
             404: OpenApiResponse(description="No such board, or no such component."),
         },
-    )
+    ),
 )
 class BoardComponentListView(generics.ListCreateAPIView):
     # Schema generation reads the model off this before it calls
