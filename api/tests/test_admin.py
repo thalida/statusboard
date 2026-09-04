@@ -737,6 +737,18 @@ def test_the_catalog_tabs_carry_service_requests(staff_client):
 
 
 @pytest.mark.django_db
+def test_the_user_tabs_carry_magic_links(staff_client):
+    # MagicLinkTokenAdmin answered but nothing pointed at it. A token
+    # belongs to a user, so its tab sits on the user's page.
+    body = staff_client.get(
+        reverse("admin:authentication_user_changelist")
+    ).content.decode()
+    tabs = _tab_strip(body)
+    assert 'href="/admin/authentication/magiclinktoken/"' in tabs
+    assert "Magic links" in tabs
+
+
+@pytest.mark.django_db
 def test_the_component_list_offers_the_featured_checkbox(admin_client, db):
     # list_editable renders the flag as a checkbox in the row. Without
     # it, featuring more than one component takes a form visit each.

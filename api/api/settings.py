@@ -338,6 +338,26 @@ UNFOLD = {
                 },
             ],
         },
+        {
+            # A magic link belongs to a user. It has no reason to be
+            # findable on its own.
+            "models": [
+                "authentication.user",
+                "authentication.magiclinktoken",
+            ],
+            "items": [
+                {
+                    "title": _("Users"),
+                    "link": reverse_lazy("admin:authentication_user_changelist"),
+                },
+                {
+                    "title": _("Magic links"),
+                    "link": reverse_lazy(
+                        "admin:authentication_magiclinktoken_changelist"
+                    ),
+                },
+            ],
+        },
     ],
     "SIDEBAR": {
         "show_search": True,
