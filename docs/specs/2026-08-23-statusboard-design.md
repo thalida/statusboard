@@ -76,8 +76,9 @@ what makes sharing a change to `dashboards` alone.
 ## 3. Data model
 
 Every model extends `common.BaseModel`: UUID primary key, `created_at`, `updated_at`,
-`created_by`, `updated_by`, `ordering = ["-created_at"]`. `auth.Permission` and `ContentType`
-keep integer keys — that is Django, not a choice.
+`created_by`, `updated_by`, `ordering = ["-created_at"]`. `ComponentAncestor` is the one
+exception: reconcile derives every row from `parent`, so an author records nothing.
+`auth.Permission` and `ContentType` keep integer keys — that is Django, not a choice.
 
 ### authentication
 
@@ -154,12 +155,17 @@ erDiagram
         string external_id "unique with service"
         string name
         uuid parent_id FK "self, null at top level"
-        uuid[] ancestor_ids "root first, written by reconcile"
         tsvector search_document "weighted path, written by reconcile"
         int status_page_order
         bool is_overall
         bool is_featured "first key of the suggested sort"
         datetime archived_at "set when it stops being published"
+    }
+    ComponentAncestor {
+        uuid id PK
+        uuid ancestor_id FK "the component above"
+        uuid descendant_id FK "the component below, unique with ancestor"
+        int depth "steps down to the descendant, a parent is 1"
     }
     ComponentStatus {
         uuid id PK
@@ -212,6 +218,8 @@ erDiagram
     Service ||--|| Poller : "read by"
     Service ||--o{ ServiceComponent : publishes
     ServiceComponent ||--o| ServiceComponent : "parent of"
+    ServiceComponent ||--o{ ComponentAncestor : "sits above"
+    ServiceComponent ||--o{ ComponentAncestor : "sits below"
     ServiceComponent ||--o{ ComponentStatus : "severity over time"
     Poller ||--o{ PollRun : "attempts"
     Service ||--o{ ServiceEvent : "published on"
@@ -219,8 +227,9 @@ erDiagram
     ServiceEvent }o--o{ ServiceComponent : affects
 ```
 
-Every model also carries `common.BaseModel`: `created_at`, `updated_at`, `created_by`,
-`updated_by`. They are omitted above so the diagram shows what distinguishes each table.
+Every model above but `ComponentAncestor` also carries `common.BaseModel`: `created_at`,
+`updated_at`, `created_by`, `updated_by`. They are omitted so the diagram shows what
+distinguishes each table.
 
 Reading it:
 
@@ -228,6 +237,10 @@ Reading it:
   these, so the arrow from `DashboardItem` has one destination.
 - **`StatusPage` is separate from `Service`** because it is the *source*, and it is where the
   unique URL and the poller's state live.
+- **`ComponentAncestor` is the tree, flattened**, one row per pair with one component above the
+  other. `parent` alone answers one level; this answers any depth in a single indexed join, which
+  is what `?ancestor=` and every descendant count ask for. Both columns are real foreign keys, so
+  deleting a component takes every claim about where it sat with it.
 - **`ComponentStatus` is append-only**, one row per severity change, with a partial unique index
   marking the current one. Current state and history are the same table.
 

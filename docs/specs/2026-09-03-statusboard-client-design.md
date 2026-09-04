@@ -248,7 +248,7 @@ that does not exist until you type.
 
 ## 6. Model changes
 
-### New model
+### New models
 
 `catalog.ServiceRequest`, for "Send this URL to us".
 
@@ -274,12 +274,36 @@ once a URL was triaged.
 for copying `PollRun.error`, which can disagree with its source. Here there is no source.
 The counter is the record.
 
+`catalog.ComponentAncestor`, the component tree flattened.
+
+| Field | Note |
+| --- | --- |
+| `ancestor` | FK to `ServiceComponent`, the one above |
+| `descendant` | FK to `ServiceComponent`, the one below. Unique with `ancestor`. |
+| `depth` | the steps down from `ancestor` to `descendant`. A parent is 1. |
+
+One row per pair, written by reconcile. `parent` answers one level. This answers any depth
+in one indexed join, which is what `?ancestor=` and every `descendant_count` ask for. A
+breadcrumb reads the same rows the other way round, root first by `-depth`.
+
+**Both columns are foreign keys, and that is the point.** An array of ancestor ids buys the
+same indexed test and holds no reference. `parent` is `SET_NULL`, so nothing cleans an array
+when a component goes, and every descendant keeps naming a row that is gone. Only a poll of
+that service repairs it, and an untracked service is never polled again. A foreign key
+cascades in the same statement as the delete.
+
+It is not a `BaseModel`. Reconcile derives every row from `parent`, so an author and an edit
+time record nothing anybody reads. The UUIDv7 key stays.
+
+No row says a component is its own ancestor. Every reader counts other components, so a
+depth-zero row would add one to every answer. Two check constraints hold that: one forbids
+the row, one forbids the distance that would describe it.
+
 ### New columns
 
 | Column | Type | Written by |
 | --- | --- | --- |
 | `ServiceComponent.is_featured` | bool | admin |
-| `ServiceComponent.ancestor_ids` | `ArrayField(UUIDField)`, GIN index | reconcile |
 | `ServiceComponent.search_document` | `SearchVectorField`, GIN index | reconcile |
 | `ServiceEvent.detected_by` | `provider` or `system` | set when the event opens, never changed |
 | `EventUpdate.source` | `provider` or `system` | the adapter, or reconcile |
@@ -411,18 +435,20 @@ query time cannot use an index.
 | Weight | Source |
 | --- | --- |
 | `A` | the component's own name |
-| `B` | its ancestors' names, read from `ancestor_ids` |
+| `B` | its ancestors' names, walked from `parent` in that pass |
 | `C` | its service's name |
 
 So `twilio` ranks the Twilio rollup first, then top-level components, then leaves. The
 ranking solves most of the flooding a popular service would cause. `q` becomes a
 `SearchQuery` in websearch mode, so several words are an AND, ordered by `SearchRank`.
 
-**Renaming or reparenting rewrites a whole subtree.** `ancestor_ids` and `search_document`
-both carry ancestry, so both change. Providers do move components, so that rewrite belongs
-inside the reconcile pass. This is the one place the design fans out.
+**Renaming or reparenting rewrites a whole subtree.** `ComponentAncestor` and
+`search_document` both carry ancestry, so both change. Providers do move components, so that
+rewrite belongs inside the reconcile pass. This is the one place the design fans out.
 
-One column pays for three readers: the descendant query, the breadcrumb, and this weight.
+Both read one walk of `parent`, over the rows the pass already holds. A deep tree costs no
+extra query. The ancestry rebuild then writes only the links that moved, because almost no
+poll moves a component.
 
 The service `search_fields` go with the service list.
 
