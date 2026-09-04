@@ -66,6 +66,9 @@ class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
     def initial(self, request, *args, **kwargs):
         """Pick the default sort from what the caller asked for.
 
+        Both branches set a default, and neither overrides anybody.
+        `?ordering=` is read after this and wins when it is present.
+
         DRF reads `ordering` as an attribute, so a method cannot supply
         it. It does not check a default against `ordering_fields`
         either, so neither branch below needs an entry there.

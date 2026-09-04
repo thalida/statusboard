@@ -64,6 +64,20 @@ def test_q_reaches_a_component_through_its_services_name(client, tree):
     assert [r["name"] for r in response.json()["results"]] == ["SMS"]
 
 
+def test_an_explicit_ordering_beats_the_default_a_search_picks(client, tree):
+    # The view sets a default sort when `q` is present. It is a
+    # default: a caller who names one reads their own order. Losing
+    # that leaves the sort control on the screen doing nothing.
+    response = client.get(
+        reverse("component-list"), {"q": "twilio", "ordering": "name"}
+    )
+    assert [r["name"] for r in response.json()["results"]] == [
+        "Programmable Messaging",
+        "SMS",
+        "Twilio",
+    ]
+
+
 def test_q_reaches_a_component_through_its_parents_name(client, tree):
     # Searching "messaging" must find SMS as well as the group above
     # it. A part is named for what it does, not for what it sits under.
