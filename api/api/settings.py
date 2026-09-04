@@ -147,9 +147,6 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
         "common.filters.FieldsBackend",
     ],
-    # The contract calls it `q`, and DRF's SearchFilter calls it
-    # `search`. One name, and the schema documents it.
-    "SEARCH_PARAM": "q",
     # The contract has always answered 429, and nothing raised one. See
     # `Throttle` for what each rate is protecting.
     "DEFAULT_THROTTLE_CLASSES": [

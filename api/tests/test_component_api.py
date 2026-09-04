@@ -167,3 +167,28 @@ def test_event_narrows_to_the_components_one_event_affects(client, tree):
     event.affected_components.add(parent)
     response = client.get(reverse("component-list"), {"event": str(event.id)})
     assert [r["name"] for r in response.json()["results"]] == ["Programmable Messaging"]
+
+
+def test_a_ranked_search_pages_without_repeating_a_row(client):
+    """`?q=` is Discover's default path, and `rank` ties heavily.
+
+    Identical documents rank identically. `EnvelopePagination` appends
+    `-created_at` to make the key unique. Without it a cursor repeats or
+    skips a row, and infinite scroll shows it.
+    """
+    service = ServiceFactory(name="Twilio")
+    for _ in range(7):
+        ComponentFactory(service=service, name="SMS")
+    rebuild_ancestry(service)
+    rebuild_search(service)
+
+    seen = []
+    url = reverse("component-list")
+    params = {"q": "twilio sms", "page_size": 2}
+    while url:
+        body = client.get(url, params).json()
+        seen += [row["id"] for row in body["results"]]
+        url, params = body["next"], {}
+
+    assert seen == list(dict.fromkeys(seen)), "a row came back on two pages"
+    assert len(seen) == 7, "a row was never reached"

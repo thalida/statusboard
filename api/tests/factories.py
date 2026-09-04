@@ -74,15 +74,16 @@ class ComponentFactory(factory.django.DjangoModelFactory):
 
 
 def track(component, user=None):
-    """Track a component, the way somebody using the app would."""
-    from django.contrib.auth import get_user_model
+    """Track a component, the way somebody using the app would.
 
+    The user comes from `UserFactory`, which owns the one counter behind
+    these addresses. A second counter here reset per test and collided
+    with the factory's, on a column the database holds unique.
+    """
     from dashboards.models import Dashboard, DashboardItem
 
     if user is None:
-        user = get_user_model().objects.create(
-            email=f"watcher{DashboardItem.objects.count()}@example.test"
-        )
+        user = UserFactory()
     board = user.dashboards.first() or Dashboard.objects.create(owner=user)
     return DashboardItem.objects.create(dashboard=board, component=component)
 
