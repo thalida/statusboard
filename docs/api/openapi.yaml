@@ -452,7 +452,8 @@ components:
         Use a dotted path for a nested field. `overall_component.status.severity` returns
         `overall_component` containing `status` containing `severity` only.
 
-        A path that names an unknown field returns `400`.
+        A path that names an unknown field returns `400`. The body is a field-errors object,
+        one array of messages under `fields` — not the `Error` shape.
     PageSize: { name: page_size, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
     Slug: { name: slug, in: path, required: true, schema: { type: string }, example: twilio }
     Uuid: { name: uuid, in: path, required: true, schema: { type: string, format: uuid } }

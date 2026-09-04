@@ -1,3 +1,5 @@
+from rest_framework.serializers import ValidationError
+
 _UNSET = object()
 
 
@@ -52,6 +54,18 @@ class FieldsMixin:
         return tree
 
     def _prune(self, tree):
+        unknown = sorted(set(tree) - set(self.fields))
+        if unknown:
+            # A name nothing serves used to pop every field and answer
+            # `200 {}`. A typo, or a field a later change renames, then
+            # read as a server with nothing to say.
+            raise ValidationError(
+                {
+                    self.fields_param or "fields": [
+                        f"Unknown field: {name}." for name in unknown
+                    ]
+                }
+            )
         for name in set(self.fields) - set(tree):
             self.fields.pop(name)
         for name, children in tree.items():

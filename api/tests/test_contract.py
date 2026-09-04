@@ -191,6 +191,18 @@ def test_fields_prunes_the_response(path):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("path", sorted(FIELDS_PROBES))
+def test_fields_refuses_a_name_that_is_no_field(path):
+    # Nothing checked that a name in the tree named a field. An unknown
+    # one popped them all and answered `200 {}`. The contract promises
+    # 400. A typo must not read as a server with nothing to say.
+    client, url, _field = FIELDS_PROBES[path]()
+    response = client.get(url, {"fields": "total_nonsense"})
+    assert response.status_code == 400, f"GET {path} answered {response.status_code}"
+    assert response.json() == {"fields": ["Unknown field: total_nonsense."]}
+
+
+@pytest.mark.django_db
 def test_the_component_schema_has_exactly_the_documented_fields(committed):
     from catalog.serializers import ComponentSerializer
 
