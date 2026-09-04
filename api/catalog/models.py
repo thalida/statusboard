@@ -204,6 +204,33 @@ class StatusPage(BaseModel):
         )
 
 
+class ServiceRequest(BaseModel):
+    """A status page somebody asked for and we could not read.
+
+    One row per URL, not one per request. A row per request would
+    answer one question twice once a URL was triaged.
+
+    There is no `requested_by`. `BaseModel.created_by` already holds
+    it, null when the asker was signed out. The v1 spec deleted
+    `Service.added_by` for the same reason.
+
+    There is no state column either. Nothing closes a request yet, so
+    it would have no writer.
+    """
+
+    url = models.URLField(unique=True)
+    # The demand signal. Nothing else records how often a URL was
+    # asked for. This is that record, not a copy of one.
+    request_count = models.PositiveIntegerField(default=1)
+    last_requested_at = models.DateTimeField(default=timezone.now)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-request_count", "-last_requested_at"]
+
+    def __str__(self):
+        return self.url
+
+
 def _descendant_count():
     """How many components sit under each row, in one query for the page.
 

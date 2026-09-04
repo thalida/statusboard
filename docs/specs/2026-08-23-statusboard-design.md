@@ -201,6 +201,12 @@ erDiagram
         bool ok
         text error
     }
+    ServiceRequest {
+        uuid id PK
+        url url UK "normalised"
+        int request_count "the demand signal"
+        datetime last_requested_at
+    }
 
     User ||--|| Dashboard : owns
     Dashboard ||--o{ DashboardItem : holds

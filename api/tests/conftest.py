@@ -30,6 +30,11 @@ def authenticated_client(board):
     return jwt_client(board.owner)
 
 
+@pytest.fixture
+def user(db):
+    return User.objects.create(email="asker@example.test")
+
+
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """Fail loudly if any test reaches the internet.

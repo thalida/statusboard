@@ -86,6 +86,10 @@ class Throttle(StrEnum):
     SIGNED_IN = "user"
     IMPORT = "import"
     MAGIC_LINK = "magic-link"
+    # Its own bucket, not IMPORT's. Add-by-URL tries an import, and on
+    # a miss sends the same URL here. One scope would let the first
+    # call spend the second's budget.
+    SERVICE_REQUEST = "service-request"
 
 
 # Reading the catalog is the point, so the plain rates are wide. Each of
@@ -96,6 +100,7 @@ THROTTLE_RATES = {
     Throttle.SIGNED_IN: "600/min",
     Throttle.IMPORT: "6/min",
     Throttle.MAGIC_LINK: "5/hour",
+    Throttle.SERVICE_REQUEST: "6/min",
 }
 
 

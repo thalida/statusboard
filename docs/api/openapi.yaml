@@ -247,6 +247,34 @@ paths:
           description: No supported status page found at that URL
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
+  /catalog/requests/:
+    post:
+      tags: [catalog]
+      summary: Ask us for a status page we could not read
+      description: |
+        The Add-by-URL not-found screen. Always `202`, whether or not the catalog already
+        holds the URL, so asking cannot reveal what we have.
+
+        One row per URL, counted. Throttled per caller.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [url], properties: { url: { type: string, format: uri } } }
+      responses:
+        '202': { description: Recorded }
+        '400':
+          description: |
+            Missing or malformed url. A field-errors object, one array of messages per
+            field name — not the `Error` shape, which this response never raises.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: array, items: { type: string } }
+        '429': { $ref: '#/components/responses/Throttled' }
+
   /catalog/components/:
     get:
       tags: [catalog]

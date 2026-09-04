@@ -222,3 +222,9 @@ class ImportRequestSerializer(serializers.Serializer):
         except BlockedAddress as error:
             raise serializers.ValidationError(str(error)) from error
         return value
+
+
+class ServiceRequestSerializer(serializers.Serializer):
+    """The body of POST /catalog/requests/."""
+
+    url = serializers.URLField()
