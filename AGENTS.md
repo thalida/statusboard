@@ -176,37 +176,30 @@ does not help answer it does not belong there.
 One theme, dark. `UNFOLD["THEME"]` forces it, so a class with no `dark:`
 variant still lands on the right ground.
 
-**A column on the list has a place on the form.** Anything the changelist
-shows, the change view shows too. A value computed from related rows —
-a severity, a count — lands as a readonly field, not nowhere. Severity
-and watchers were on the component list and on no form, so opening the
-row answered less than the list did.
+**The change view holds every field.** A model field missing from every
+fieldset is invisible and unreachable, and a changelist column with no
+place on the form makes opening a row answer less than the list did.
+`Service.source` recorded how a service arrived and reached no form at
+all. A value computed from related rows lands as a readonly field, not
+nowhere. So does provenance: a field recording how a row arrived is
+shown and never typed, because an editable one can be made to lie.
+
+**A column header is the name of its field.** The list and the form show
+the same data, so they use the same word. A column headed `State` over
+`is_archived` sent a reader looking for a field of that name. When the
+two disagree the header gives way: the field name is what the model, the
+API, the filters and every query already say.
+
+**A column that only redraws a field is the field.** Put the field name
+in `list_display`. Django draws a boolean as a tick, takes the header
+from the model and sorts the column, none of it asked for. Hand-rolling
+those three is where the header `State` came from. Keep a method only
+where it does what a field cannot: composing several, following a
+relation, or building a link.
 
 **A column the list shows, the list filters.** If it is worth a column,
 it is worth narrowing by. The converse does not hold: a filter may
 narrow by something no column shows.
-
-**Every field reaches a form.** A model field missing from every
-fieldset is invisible and unreachable. `Service.source` recorded how a
-service arrived and appeared on no form for two releases.
-
-**Provenance is readonly.** A field the writer sets to record what
-happened — how a row arrived, which run wrote it — is shown and never
-typed. An editable one can be made to lie.
-
-**A column header names its field.** The list and the form show the same
-data, so they use the same word. A column headed `State` over
-`is_archived` sent a reader looking for a field of that name, and there
-is none.
-
-**Rename the column, never the field.** The field name is what the
-model, the API, the filters and every query already say. A header is
-read in one place. When the two disagree, the header is what is wrong.
-
-**A column that only re-renders a field is the field.** Put the field
-name in `list_display`. Django draws a boolean as a tick, takes the
-header from the model and sorts the column, all without being asked. A
-method that rebuilt those by hand is where the header `State` came from.
 
 ## Commits
 
