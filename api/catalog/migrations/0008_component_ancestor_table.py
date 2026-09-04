@@ -6,37 +6,39 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
-def fill_from_ancestor_ids(apps, schema_editor):
-    """Copy the array into the table, before the column goes.
+def fill_from_parent(apps, schema_editor):
+    """Fill the table with the walk `rebuild_ancestry` does.
 
-    Migration 0004 backfilled the array with a recursive walk of
-    `parent`. Reading it again here makes the two agree by
-    construction. Recomputing would be a second answer to the same
-    question.
+    That walk defines a component's ancestry, so the table starts where
+    a poll would leave it. The dropped array is not read. It kept the
+    steps above a deleted component, and that is the defect this table
+    removes.
 
-    The array can name a component somebody deleted. A foreign key
-    cannot, so such a step is dropped. That dangling reference is the
-    defect this table removes.
+    `ServiceComponent.ancestors` holds the rules the walk obeys.
 
     Python, not SQL, because the key defaults to `uuid.uuid7`. Postgres
     17 has no function for version 7.
     """
     ServiceComponent = apps.get_model("catalog", "ServiceComponent")
     ComponentAncestor = apps.get_model("catalog", "ComponentAncestor")
-    live = set(ServiceComponent.objects.values_list("id", flat=True))
-    links = [
-        ComponentAncestor(
-            ancestor_id=up,
-            descendant_id=row_id,
-            # The array reads root first, so the last step is the parent.
-            depth=len(ancestors) - step,
+    rows = {
+        row_id: (parent_id, service_id)
+        for row_id, parent_id, service_id in ServiceComponent.objects.values_list(
+            "id", "parent_id", "service_id"
         )
-        for row_id, ancestors in ServiceComponent.objects.values_list(
-            "id", "ancestor_ids"
-        )
-        for step, up in enumerate(ancestors)
-        if up in live
-    ]
+    }
+    links = []
+    for row_id, (parent_id, service_id) in rows.items():
+        chain, seen, up = [], {row_id}, parent_id
+        while up in rows and up not in seen and rows[up][1] == service_id:
+            seen.add(up)
+            chain.append(up)
+            up = rows[up][0]
+        links += [
+            ComponentAncestor(ancestor_id=up, descendant_id=row_id, depth=depth)
+            # The walk climbs, so the first step is the parent.
+            for depth, up in enumerate(chain, start=1)
+        ]
     ComponentAncestor.objects.bulk_create(links, batch_size=1000)
 
 
@@ -103,11 +105,7 @@ class Migration(migrations.Migration):
                 name="ancestry_depth_starts_at_one",
             ),
         ),
-        # The read comes before the drop. The column is the only record
-        # of the tree that survives a service nobody polls.
-        migrations.RunPython(
-            fill_from_ancestor_ids, reverse_code=migrations.RunPython.noop
-        ),
+        migrations.RunPython(fill_from_parent, reverse_code=migrations.RunPython.noop),
         migrations.RemoveIndex(
             model_name="servicecomponent",
             name="components_by_ancestor",
