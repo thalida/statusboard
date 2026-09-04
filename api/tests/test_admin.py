@@ -934,6 +934,30 @@ def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
     assert list(ServiceComponent.objects.search("programmable sms")) == [child]
 
 
+@pytest.mark.django_db
+def test_the_parent_picker_refuses_the_rollup(staff_client):
+    """The queryset, not just `clean`, is what a posted form meets first.
+
+    A `ModelChoiceField` rejects a posted pk outside its queryset before
+    the instance is ever built, so `clean` never runs. Narrowing the
+    queryset is what turns a stray click into a redisplayed form
+    instead of a trigger's `IntegrityError`.
+    """
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+    rollup = ComponentFactory(service=service, is_overall=True)
+    child = ComponentFactory(service=service, name="SMS")
+
+    url, data = component_form_data(staff_client, child, parent=str(rollup.pk))
+    response = staff_client.post(url, data)
+
+    assert response.status_code == 200
+    assert b"valid choice" in response.content
+    child.refresh_from_db()
+    assert child.parent_id is None
+
+
 def bulk_delete(admin_client, components):
     """Run the admin's own delete action, past the confirmation page.
 

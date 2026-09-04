@@ -360,6 +360,12 @@ class ServiceComponent(BaseModel):
     # the vector of the last ordinary save on every old row.
     history = HistoricalRecords(excluded_fields=["search_document"])
 
+    # The rollup is never a parent, but `is_overall` belongs to the
+    # parent row, not this one. A `CheckConstraint` sees one row, so it
+    # cannot read a joined column and cannot express this. Migration
+    # 0010 adds a trigger instead, named `rollup_is_not_a_parent`. It
+    # checks both directions: a row parented under the rollup, and a
+    # row with children gaining the flag.
     class Meta(BaseModel.Meta):
         constraints = [
             models.UniqueConstraint(
@@ -500,9 +506,11 @@ class ServiceComponent(BaseModel):
     def clean(self):
         """A component sits under one of its own service's components.
 
-        Nothing in the column says whose component the parent is.
-        Without this a service's tree reaches into another service's,
-        and a page shows one product's components under another.
+        Nothing in the column says whose component the parent is, or
+        that the parent is not the rollup. Without the first check a
+        service's tree reaches into another service's. Without the
+        second a rollup gains children, and every descendant count and
+        breadcrumb under it reads wrong.
         """
         super().clean()
         if self.parent_id is None:
@@ -512,6 +520,10 @@ class ServiceComponent(BaseModel):
         if self.parent.service_id != self.service_id:
             raise ValidationError(
                 {"parent": "That component belongs to another service."}
+            )
+        if self.parent.is_overall:
+            raise ValidationError(
+                {"parent": "The overall component is never a parent."}
             )
 
     @property

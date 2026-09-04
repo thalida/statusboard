@@ -161,6 +161,39 @@ def test_the_flag_and_the_date_cannot_disagree():
         ServiceComponent.objects.filter(pk=component.pk).update(is_archived=True)
 
 
+@pytest.mark.django_db
+def test_the_database_refuses_a_component_parented_under_the_rollup():
+    """A bulk write skips `clean`. Only the trigger is left to refuse it.
+
+    `ComponentFactory` calls `objects.create`, never `full_clean`. A
+    poll or a shell session meets this, never a form's `clean` error.
+    """
+    service = ServiceFactory()
+    rollup = ComponentFactory(service=service, is_overall=True)
+    with pytest.raises(IntegrityError):
+        ComponentFactory(service=service, parent=rollup)
+
+
+@pytest.mark.django_db
+def test_the_database_refuses_a_rollup_that_already_has_children():
+    """The same rule, met from the other side.
+
+    A component can gain the rollup flag after it already has
+    children, since `is_overall` is editable. The trigger checks both
+    directions, or promoting an existing parent would corrupt every
+    descendant count under it.
+    """
+    from django.db import IntegrityError, transaction
+
+    service = ServiceFactory()
+    parent = ComponentFactory(service=service)
+    ComponentFactory(service=service, parent=parent)
+
+    parent.is_overall = True
+    with pytest.raises(IntegrityError), transaction.atomic():
+        parent.save()
+
+
 def test_a_reparent_in_plain_python_rebuilds_the_derived_columns(db):
     # An admin-only hook left every other writer stale: a shell session,
     # a data migration, a later API write. The symptom is invisible. The

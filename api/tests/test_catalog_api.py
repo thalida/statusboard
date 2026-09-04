@@ -314,17 +314,17 @@ def test_a_path_carries_enough_to_link_to_each_step():
 
     service = ServiceFactory(name="Twilio")
     overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
-    parent = ComponentFactory(
-        service=service, name="Programmable Messaging", parent=overall
-    )
-    ComponentFactory(service=service, name="SMS", parent=parent)
+    group = ComponentFactory(service=service, name="Programmable Messaging")
+    sms = ComponentFactory(service=service, name="SMS", parent=group)
+    ComponentFactory(service=service, name="Delivery", parent=sms)
 
     prepared = ServiceComponent.objects.for_display()
-    path = ComponentSerializer(prepared.get(name="SMS")).data["path"]
+    path = ComponentSerializer(prepared.get(name="Delivery")).data["path"]
 
-    assert [step["name"] for step in path] == ["Twilio", "Programmable Messaging"]
-    assert path[0]["id"] == str(overall.id)
-    assert path[0]["is_overall"] is True
+    assert [step["name"] for step in path] == ["Programmable Messaging", "SMS"]
+    assert path[0]["id"] == str(group.id)
+    # The rollup is never a parent, so a real path step never carries it.
+    assert path[0]["is_overall"] is False
     # Empty, not null: the overall component is under nothing, and a
     # client maps over the list without checking first.
     assert ComponentSerializer(prepared.get(pk=overall.pk)).data["path"] == []
@@ -336,13 +336,14 @@ def test_fields_prunes_inside_a_path_step():
     # serializer. A dotted path into it was ignored, and the contract
     # promises a dotted path prunes wherever it is accepted.
     service = ServiceFactory(name="Twilio")
-    overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
-    child = ComponentFactory(service=service, name="SMS", parent=overall)
+    ComponentFactory(service=service, name="Twilio", is_overall=True)
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS", parent=parent)
 
     url = reverse("component-detail", args=[child.id])
     body = APIClient().get(url, {"fields": "path.name"}).json()
 
-    assert body["path"] == [{"name": "Twilio"}]
+    assert body["path"] == [{"name": "Programmable Messaging"}]
 
 
 @pytest.mark.django_db
@@ -350,8 +351,9 @@ def test_fields_refuses_an_unknown_name_under_a_path_step():
     # Nothing pruned and nothing refused. A typo read as a step that
     # holds every field, which is the opposite of what was asked for.
     service = ServiceFactory(name="Twilio")
-    overall = ComponentFactory(service=service, name="Twilio", is_overall=True)
-    child = ComponentFactory(service=service, name="SMS", parent=overall)
+    ComponentFactory(service=service, name="Twilio", is_overall=True)
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS", parent=parent)
 
     url = reverse("component-detail", args=[child.id])
     response = APIClient().get(url, {"fields": "path.nonsense"})

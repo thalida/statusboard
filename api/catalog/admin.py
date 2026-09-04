@@ -590,12 +590,17 @@ class ServiceComponentAdmin(
                 self.admin_site,
                 scope={"service": editing.service_id if editing else None},
             )
+            # The rollup is never a parent. Excluding it here, on both
+            # add and change, keeps the picker from offering the one
+            # choice the database refuses.
+            queryset = ServiceComponent.objects.exclude(is_overall=True)
             if editing is not None:
                 # The server's half: the picker narrows what is offered,
                 # this refuses anything else that is posted.
-                kwargs["queryset"] = ServiceComponent.objects.filter(
-                    service_id=editing.service_id
-                ).exclude(pk=editing.pk)
+                queryset = queryset.filter(service_id=editing.service_id).exclude(
+                    pk=editing.pk
+                )
+            kwargs["queryset"] = queryset
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def delete_queryset(self, request, queryset):
