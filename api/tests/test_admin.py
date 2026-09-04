@@ -626,6 +626,133 @@ def test_a_person_cannot_open_somebody_elses_board():
 
 
 @pytest.mark.django_db
+def test_the_service_admin_features_through_the_overall_component(admin_client, db):
+    # is_featured moved to the component. An admin asks "feature this
+    # service", so the service page has to answer it.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    response = admin_client.get(
+        reverse("admin:catalog_service_change", args=[service.pk])
+    )
+    assert response.status_code == 200
+    assert b"is_featured" in response.content
+
+
+@pytest.mark.django_db
+def test_the_component_list_shows_watchers(admin_client, db):
+    # The count is an annotation. A column that forgets to annotate it
+    # raises rather than showing a wrong number. A column with no
+    # ordering field cannot be sorted at all.
+    from catalog.models import ServiceComponent
+    from tests.factories import ComponentFactory, track
+
+    ComponentFactory(name="Quiet")
+    loud = ComponentFactory(name="Loud")
+    track(loud)
+    track(loud)
+
+    model_admin = admin.site._registry[ServiceComponent]
+    index = model_admin.list_display.index("watchers") + 1
+    response = admin_client.get(
+        reverse("admin:catalog_servicecomponent_changelist"), {"o": f"-{index}"}
+    )
+    assert response.status_code == 200
+    assert b">2<" in response.content
+    assert response.content.index(b"Loud") < response.content.index(b"Quiet")
+
+
+@pytest.mark.django_db
+def test_service_requests_are_listed_by_demand(admin_client, db):
+    # The list is the demand signal for what the catalog is missing,
+    # so the most-asked-for URL is the first row.
+    from catalog.models import ServiceRequest
+
+    ServiceRequest.objects.create(url="https://a.example", request_count=1)
+    ServiceRequest.objects.create(url="https://b.example", request_count=9)
+    response = admin_client.get(reverse("admin:catalog_servicerequest_changelist"))
+    assert response.status_code == 200
+    assert response.content.index(b"b.example") < response.content.index(b"a.example")
+
+
+@pytest.mark.django_db
+def test_the_feature_action_flips_the_flag(admin_client, db):
+    # Selecting a component and running the action is how the spec's
+    # "bulk action" is meant to be used. A missing action leaves an
+    # admin with no way to feature many components at once.
+    from tests.factories import ComponentFactory
+
+    component = ComponentFactory(is_featured=False, is_overall=True)
+    admin_client.post(
+        reverse("admin:catalog_servicecomponent_changelist"),
+        {"action": "feature_selected", "_selected_action": [str(component.pk)]},
+    )
+    component.refresh_from_db()
+    assert component.is_featured is True
+
+
+@pytest.mark.django_db
+def test_the_unfeature_action_flips_it_back(admin_client, db):
+    # The reverse has to exist too. Otherwise featuring by mistake is
+    # permanent, short of editing the row through the service's inline.
+    from tests.factories import ComponentFactory
+
+    component = ComponentFactory(is_featured=True, is_overall=True)
+    admin_client.post(
+        reverse("admin:catalog_servicecomponent_changelist"),
+        {"action": "unfeature_selected", "_selected_action": [str(component.pk)]},
+    )
+    component.refresh_from_db()
+    assert component.is_featured is False
+
+
+@pytest.mark.django_db
+def test_the_feature_action_skips_a_non_overall_component(admin_client, db):
+    # `suggested` sorts every component on `-is_featured` first, rollups
+    # included. Featuring a leaf would win Discover outright. Nothing in
+    # the design intends that, so the action must refuse it and say why.
+    from tests.factories import ComponentFactory
+
+    leaf = ComponentFactory(is_featured=False, is_overall=False)
+    response = admin_client.post(
+        reverse("admin:catalog_servicecomponent_changelist"),
+        {"action": "feature_selected", "_selected_action": [str(leaf.pk)]},
+        follow=True,
+    )
+    leaf.refresh_from_db()
+    assert leaf.is_featured is False
+    assert b"skipped" in response.content
+
+
+@pytest.mark.django_db
+def test_a_mixed_selection_features_the_overall_one_and_skips_the_leaf(
+    admin_client, db
+):
+    # A selection an admin makes by hand is not guaranteed to be clean.
+    # The overall row still gets featured; the leaf does not, silently
+    # or otherwise.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory()
+    overall = ComponentFactory(service=service, is_overall=True, is_featured=False)
+    leaf = ComponentFactory(service=service, is_overall=False, is_featured=False)
+    response = admin_client.post(
+        reverse("admin:catalog_servicecomponent_changelist"),
+        {
+            "action": "feature_selected",
+            "_selected_action": [str(overall.pk), str(leaf.pk)],
+        },
+        follow=True,
+    )
+    overall.refresh_from_db()
+    leaf.refresh_from_db()
+    assert overall.is_featured is True
+    assert leaf.is_featured is False
+    assert b"skipped" in response.content
+
+
+@pytest.mark.django_db
 def test_the_polling_schedule_page_opens(staff_client):
     """Readonly is not free: Django drops a readonly field from the form.
 

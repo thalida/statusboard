@@ -18,8 +18,8 @@ from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
-from catalog.models import Service, ServiceComponent, StatusPage
-from catalog.queries import OVERALL_SEVERITY, is_tracked
+from catalog.models import Service, ServiceComponent, ServiceRequest, StatusPage
+from catalog.queries import COMPONENT_WATCHER_COUNT, OVERALL_SEVERITY, is_tracked
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
@@ -304,6 +304,35 @@ class ComponentSeverityFilter(DropdownFilter):
         )
 
 
+class OverallComponentInline(StackedInline):
+    """Featuring lives on the rollup, and an admin asks about the service.
+
+    `is_featured` is the first key of the suggested sort. Ticking it on
+    a service's overall component is what surfaces that service, so
+    that is the question this answers.
+
+    `ServiceComponentInline` also edits `ServiceComponent`, through the
+    same FK. `ModelAdmin._create_formsets` auto-suffixes a repeated
+    prefix, so the two never collide even though both derive the same
+    default one.
+    """
+
+    model = ServiceComponent
+    fields = ["is_featured"]
+    extra = 0
+    max_num = 1
+    can_delete = False
+    verbose_name = "Featuring"
+    verbose_name_plural = "Featuring"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(is_overall=True)
+
+    def has_add_permission(self, request, obj):
+        # Reconcile makes the rollup. An admin ticks its flag.
+        return False
+
+
 @admin.register(Service)
 class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
@@ -340,6 +369,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     # What the service is, then what is happening to it. Then how it
     # is configured, then the log of us reading it.
     inlines = [
+        OverallComponentInline,
         ServiceComponentInline,
         ServiceEventInline,
         StatusPageInline,
@@ -495,6 +525,10 @@ class ServiceComponentAdmin(
         "is_overall",
         "display_archived",
         "display_related",
+        "watchers",
+        # Only the overall component's flag surfaces its service. The
+        # flag is real on any row, but only that one row does anything.
+        "is_featured",
     ]
     search_fields = [
         "name",
@@ -514,6 +548,7 @@ class ServiceComponentAdmin(
         "is_archived",
         ("archived_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
+        "is_featured",
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
@@ -541,6 +576,11 @@ class ServiceComponentAdmin(
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
+    # Two, not a toggle. A selection can mix already-featured and not,
+    # and a toggle would leave an admin unable to predict the result.
+    # `PollerAdmin.toggle_pause` can be one action because it only ever
+    # acts on a single object, which has one state to flip.
+    actions = ["feature_selected", "unfeature_selected"]
 
     def get_form(self, request, obj=None, **kwargs):
         # The parent picker needs to know which service is asking.
@@ -572,6 +612,7 @@ class ServiceComponentAdmin(
                 severity_now=CURRENT_SEVERITY,
                 status_count=related_count(ComponentStatus.objects, "component"),
                 event_count=related_count(ServiceEvent.objects, "affected_components"),
+                watcher_count=COMPONENT_WATCHER_COUNT,
             )
         )
 
@@ -622,3 +663,56 @@ class ServiceComponentAdmin(
     @display(description=_("Status"), label=SEVERITY_VARIANTS, ordering="severity_now")
     def display_severity(self, obj):
         return severity_label(obj.severity_now)
+
+    @display(description=_("Watchers"), ordering="watcher_count")
+    def watchers(self, obj):
+        return obj.watcher_count
+
+    def _skip_note(self, queryset):
+        """How many of the selection the action would not touch, and why.
+
+        `suggested` sorts on `-is_featured` first, over every component,
+        rollups included. Featuring a leaf would win Discover outright,
+        which nothing intends. Only the overall component may hold the
+        flag, so a silent skip would look like nothing happened.
+        """
+        skipped = queryset.exclude(is_overall=True).count()
+        if not skipped:
+            return ""
+        return " " + _(
+            "%(skipped)d selected component(s) skipped: not an overall component."
+        ) % {"skipped": skipped}
+
+    @admin.action(description=_("Feature selected components"))
+    def feature_selected(self, request, queryset):
+        count = 0
+        for component in queryset.filter(is_overall=True, is_featured=False):
+            component.is_featured = True
+            component.save(update_fields=["is_featured"])
+            count += 1
+        message = _("Featured %(count)d component(s).") % {"count": count}
+        self.message_user(request, message + self._skip_note(queryset))
+
+    @admin.action(description=_("Unfeature selected components"))
+    def unfeature_selected(self, request, queryset):
+        count = 0
+        for component in queryset.filter(is_overall=True, is_featured=True):
+            component.is_featured = False
+            component.save(update_fields=["is_featured"])
+            count += 1
+        message = _("Unfeatured %(count)d component(s).") % {"count": count}
+        self.message_user(request, message + self._skip_note(queryset))
+
+
+@admin.register(ServiceRequest)
+class ServiceRequestAdmin(ModelAdmin):
+    """What the catalog is missing, most asked for first."""
+
+    list_display = ["url", "request_count", "last_requested_at", "created_by"]
+    ordering = ["-request_count", "-last_requested_at"]
+    search_fields = ["url"]
+    readonly_fields = ["url", "request_count", "last_requested_at"]
+
+    def has_add_permission(self, request):
+        # A row arrives from the app, never from here.
+        return False
