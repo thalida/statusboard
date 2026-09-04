@@ -27,6 +27,9 @@ Delete a comment when the reason it recorded stops being true.
 - No sample output. It goes stale and nobody re-runs it.
 - No section nobody asked for.
 - A README describes the repository as it is now, not as it changed.
+- A spec describes the system, so it moves with the code. A plan
+  records what somebody intended, so it stays as written. That includes
+  the places where the plan turned out to be wrong.
 
 ## Engineering
 
@@ -53,6 +56,25 @@ edit that worked. Open the page. Read the value back.
 **Prefer the framework's own configuration** over a stylesheet or a
 template that overrides it. An override patches one instance of a
 problem; the setting fixes the class.
+
+## Layout
+
+Which file a piece of code goes in, by what it is.
+
+- An app keeps one `views.py` until it serves more than one resource.
+  Then it becomes `views/`, one module per resource. `catalog` serves
+  three. A sub-resource stays with its parent, so an event's update
+  log is not a second module.
+- A **queryset method** is chainable vocabulary. It lives on the
+  queryset in `models.py`, because a caller chains it onto a query.
+- A **bare expression** is handed to `annotate()`. It lives in
+  `queries.py`, because nothing chains it.
+- `queries.py` is row-scoped and `aggregates.py` is collection-scoped.
+  One lands in a serialized row. The other lands in the `aggregates`
+  key beside `results`.
+- `common` never imports an app. `common/ordering.py` records this as a
+  scar. Those expressions lived there, and the base layer imported the
+  app it describes.
 
 ## Settings
 
