@@ -387,6 +387,14 @@ def test_a_services_tracked_count_counts_a_component_once_per_owner(db):
     assert prepared.tracked_component_count == 1
 
 
+def test_the_audit_log_holds_no_search_vector():
+    # `rebuild_search` writes the column in a bulk update, which records
+    # no history. Every old row would carry the vector of the last
+    # ordinary save. That describes neither the row nor the edit.
+    columns = {field.name for field in ServiceComponent.history.model._meta.fields}
+    assert "search_document" not in columns
+
+
 def test_search_matches_a_components_path_and_ranks_the_rollup_first(db):
     # The rollup's own name is an exact, weight-A hit. A leaf matches
     # only through its service, at weight C, so it must sort below.

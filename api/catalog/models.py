@@ -355,7 +355,10 @@ class ServiceComponent(BaseModel):
         verbose_name="Archived on", null=True, blank=True, editable=False
     )
 
-    history = HistoricalRecords()
+    # `search_document` is derived and `rebuild_search` writes it in a
+    # bulk update, which records no history. A kept column would hold
+    # the vector of the last ordinary save on every old row.
+    history = HistoricalRecords(excluded_fields=["search_document"])
 
     class Meta(BaseModel.Meta):
         constraints = [
