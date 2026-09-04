@@ -315,6 +315,31 @@ def test_a_poll_writes_the_ancestor_chain():
 
 
 @pytest.mark.django_db
+def test_a_poll_rebuilds_the_service_once_not_once_a_component(monkeypatch):
+    # `ServiceComponent.save` rebuilds the whole service, and this pass
+    # saves every component of it. Unsuppressed, a hundred components
+    # cost a hundred rebuilds of a hundred rows, on every poll.
+    from polling import reconcile
+
+    calls = []
+    real = reconcile.rebuild_ancestry
+    monkeypatch.setattr(
+        reconcile,
+        "rebuild_ancestry",
+        lambda service: calls.append(service) or real(service),
+    )
+
+    service = ServiceFactory()
+    rows = [_component(external_id=str(n)) for n in range(5)]
+    apply_fetch(service, rows, [], StatusSource.PROVIDER)
+    assert len(calls) == 1
+
+    calls.clear()
+    apply_fetch(service, rows, [], StatusSource.PROVIDER)
+    assert len(calls) == 1
+
+
+@pytest.mark.django_db
 def test_a_reparent_rewrites_the_subtree():
     # The chain of a grandchild changes when its parent moves, and
     # nothing tells the grandchild. The pass rewrites the service.

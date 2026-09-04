@@ -920,12 +920,12 @@ def component_form_data(staff_client, component, **fields):
 
 @pytest.mark.django_db
 def test_reparenting_in_the_admin_rebuilds_the_derived_columns(staff_client):
-    """The admin is the only writer outside reconcile.
+    """The admin posts a form, so it reaches the model by another road.
 
-    `rebuild_ancestry` and `rebuild_search` run on a poll. A component
-    reparented here held no ancestry and no search vector. It was then
-    invisible to `?ancestor=` and unfindable by `?q=`. An untracked
-    service is never polled, so nothing would repair it.
+    `ServiceComponent.save` rebuilds the derived columns. A component
+    reparented here must come out of it with ancestry and a search
+    vector. Without them it is invisible to `?ancestor=` and unfindable
+    by `?q=`. An untracked service is never polled to repair it.
     """
     from catalog.models import ServiceComponent
     from tests.factories import ComponentFactory, ServiceFactory

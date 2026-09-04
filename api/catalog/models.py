@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import urlparse, urlunparse
 
 from django.contrib.postgres.fields import ArrayField
@@ -257,6 +259,30 @@ def _descendant_count():
     return Coalesce(models.Subquery(counted, output_field=models.IntegerField()), 0)
 
 
+_rebuilds_held = ContextVar("catalog_rebuilds_held", default=False)
+
+
+@contextmanager
+def held_rebuilds():
+    """Hold back the per-save rebuild, for a caller doing its own.
+
+    `ServiceComponent.save` rewrites the whole service. A caller that
+    saves many components of one service pays that per row. A poll of a
+    hundred components then costs a hundred passes over a hundred rows.
+
+    A caller that holds the rebuild owes the service one afterwards.
+    `polling.reconcile._upsert_components` is the only one.
+
+    A `ContextVar` rather than a flag, so one worker thread cannot hold
+    back another's rebuild.
+    """
+    token = _rebuilds_held.set(True)
+    try:
+        yield
+    finally:
+        _rebuilds_held.reset(token)
+
+
 class ServiceComponentQuerySet(models.QuerySet):
     def visible(self):
         """The components a caller is served, anywhere.
@@ -441,12 +467,24 @@ class ServiceComponent(BaseModel):
             return self.boards.filter(owner=user).exists()
         return prepared
 
+    # `ancestor_ids` and `search_document` are built from these. A save
+    # touching none of them leaves both true.
+    REBUILD_TRIGGERS = frozenset(
+        {"name", "parent", "parent_id", "service", "service_id"}
+    )
+
     def save(self, *args, **kwargs):
-        """Keep the archive date in step with the flag.
+        """Keep the archive date in step with the flag, and the tree true.
 
         A bulk update does not come through here, so anything writing
         the flag that way sets the date itself. The constraint is what
         makes that a failure rather than a quiet disagreement.
+
+        The rebuild was on the admin alone. Every other writer left the
+        derived columns stale. The symptom is silence: the component is
+        absent from `?ancestor=`, from `?q=` and from every
+        `descendant_count`. A poll repairs a tracked service, so a
+        paused or untracked one stayed wrong forever.
         """
         if self.is_archived and self.archived_at is None:
             self.archived_at = timezone.now()
@@ -455,7 +493,47 @@ class ServiceComponent(BaseModel):
         fields = kwargs.get("update_fields")
         if fields is not None and "is_archived" in fields:
             kwargs["update_fields"] = [*fields, "archived_at"]
+        stale = self._services_to_rebuild(kwargs.get("update_fields"))
         super().save(*args, **kwargs)
+        if stale:
+            from polling.reconcile import rebuild_ancestry, rebuild_search
+
+            for service in stale:
+                rebuild_ancestry(service)
+                rebuild_search(service)
+
+    def _services_to_rebuild(self, update_fields):
+        """Whose derived columns this save is about to invalidate.
+
+        Empty is the normal answer. A poll saves every row of a service
+        and usually moves none of them. So the check costs no query when
+        nothing the columns are built from changed.
+
+        A create counts. A component made in a shell otherwise holds no
+        ancestry and no search vector.
+
+        Call this before the write. It reads the row as it still stands.
+        """
+        if _rebuilds_held.get():
+            return ()
+        if self._state.adding:
+            return (self.service,)
+        if update_fields is not None and self.REBUILD_TRIGGERS.isdisjoint(
+            update_fields
+        ):
+            return ()
+        was = (
+            ServiceComponent.objects.filter(pk=self.pk)
+            .values_list("name", "parent_id", "service_id")
+            .first()
+        )
+        if was is None or was == (self.name, self.parent_id, self.service_id):
+            return ()
+        if was[2] == self.service_id:
+            return (self.service,)
+        # A move between services leaves the old one still naming this
+        # row in its `ancestor_ids` and in its search documents.
+        return (self.service, Service.objects.get(pk=was[2]))
 
     def clean(self):
         """A component sits under one of its own service's components.

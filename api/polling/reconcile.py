@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Value
 from django.utils import timezone
 
-from catalog.models import ServiceComponent
+from catalog.models import ServiceComponent, held_rebuilds
 from polling.system_events import claim, reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
@@ -56,33 +56,37 @@ def _signed(author, **fields):
 
 def _upsert_components(service, components, author):
     rows = {}
-    for incoming in components:
-        row, _ = ServiceComponent.objects.update_or_create(
-            service=service,
-            external_id=incoming.external_id,
-            **_signed(
-                author,
-                name=incoming.name,
-                status_page_order=incoming.order,
-                is_overall=incoming.is_overall,
-                is_archived=False,
-                archived_at=None,
-            ),
-        )
-        rows[incoming.external_id] = row
+    # `ServiceComponent.save` rebuilds the whole service. This pass
+    # saves every component of it, twice over, so the hook would make
+    # one poll quadratic. It runs once at the end instead.
+    with held_rebuilds():
+        for incoming in components:
+            row, _ = ServiceComponent.objects.update_or_create(
+                service=service,
+                external_id=incoming.external_id,
+                **_signed(
+                    author,
+                    name=incoming.name,
+                    status_page_order=incoming.order,
+                    is_overall=incoming.is_overall,
+                    is_archived=False,
+                    archived_at=None,
+                ),
+            )
+            rows[incoming.external_id] = row
 
-    # Parents in a second pass: a child may arrive before its parent exists.
-    for incoming in components:
-        parent = (
-            rows.get(incoming.parent_external_id)
-            if incoming.parent_external_id
-            else None
-        )
-        row = rows[incoming.external_id]
-        if row.parent_id != (parent.id if parent else None):
-            row.parent = parent
-            row.updated_by = author
-            row.save(update_fields=["parent", "updated_by"])
+        # Parents second: a child may arrive before its parent exists.
+        for incoming in components:
+            parent = (
+                rows.get(incoming.parent_external_id)
+                if incoming.parent_external_id
+                else None
+            )
+            row = rows[incoming.external_id]
+            if row.parent_id != (parent.id if parent else None):
+                row.parent = parent
+                row.updated_by = author
+                row.save(update_fields=["parent", "updated_by"])
     rebuild_ancestry(service)
     rebuild_search(service)
     return rows
@@ -103,8 +107,13 @@ def rebuild_ancestry(service):
     def chain(node):
         # The column points at its own table, so the data allows a loop.
         # `seen` ends the walk. Without it bad data hangs the worker.
+        #
+        # `up in parents` keeps the chain inside this service. Moving
+        # a component to another service leaves its old children
+        # pointing across. A step there names a row this service's
+        # lists never hold.
         walked, seen, up = [], {node}, parents.get(node)
-        while up is not None and up not in seen:
+        while up is not None and up not in seen and up in parents:
             seen.add(up)
             walked.append(up)
             up = parents.get(up)

@@ -159,6 +159,59 @@ def test_the_flag_and_the_date_cannot_disagree():
         ServiceComponent.objects.filter(pk=component.pk).update(is_archived=True)
 
 
+def test_a_reparent_in_plain_python_rebuilds_the_derived_columns(db):
+    # An admin-only hook left every other writer stale: a shell session,
+    # a data migration, a later API write. The symptom is invisible. The
+    # row is missing from `?ancestor=`, from `?q=` and from every count.
+    service = ServiceFactory(name="Twilio")
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS")
+
+    child.parent = parent
+    child.save()
+
+    child.refresh_from_db()
+    assert child.ancestor_ids == [parent.pk]
+    assert list(ServiceComponent.objects.search("programmable sms")) == [child]
+
+
+def test_a_move_between_services_rebuilds_the_service_left_behind(db):
+    # Only the new service was rebuilt. The old one kept rows naming
+    # this component in `ancestor_ids` and in their search documents.
+    old = ServiceFactory(name="Twilio")
+    new = ServiceFactory(name="Vonage")
+    top = ComponentFactory(service=old, name="Programmable Messaging")
+    leaf = ComponentFactory(service=old, name="SMS", parent=top)
+    rebuild_ancestry(old)
+    rebuild_search(old)
+    assert list(ServiceComponent.objects.search("programmable sms")) == [leaf]
+
+    top.parent = None
+    top.service = new
+    top.save()
+
+    leaf.refresh_from_db()
+    assert leaf.ancestor_ids == []
+    assert list(ServiceComponent.objects.search("programmable sms")) == []
+
+
+def test_a_save_that_moves_nothing_rebuilds_nothing(db, monkeypatch):
+    # A rebuild rewrites every row of the service. A save of an
+    # unrelated column must not pay for it, or one poll goes quadratic.
+    from polling import reconcile
+
+    component = ComponentFactory()
+    calls = []
+    monkeypatch.setattr(
+        reconcile, "rebuild_search", lambda service: calls.append(service)
+    )
+
+    component.is_featured = True
+    component.save()
+
+    assert calls == []
+
+
 def test_ancestor_ids_are_stored_top_down(db):
     # A descendant query reads this array. Walking `parent` per row
     # cannot use an index, and `for_display` only selects two levels up.

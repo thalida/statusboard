@@ -35,7 +35,6 @@ from common.admin import (
 from common.queries import related_count
 from polling.importer import import_from_url
 from polling.models import Poller, PollRun
-from polling.reconcile import rebuild_ancestry, rebuild_search
 from status.choices import EventKind, Severity
 from status.models import ComponentStatus, ServiceEvent
 from status.queries import CURRENT_SEVERITY
@@ -582,24 +581,6 @@ class ServiceComponentAdmin(
     # `PollerAdmin.toggle_pause` can be one action because it only ever
     # acts on a single object, which has one state to flip.
     actions = ["feature_selected", "unfeature_selected"]
-
-    def save_model(self, request, obj, form, change):
-        """Keep the derived columns true after an edit by hand.
-
-        `rebuild_ancestry` and `rebuild_search` run from reconcile only.
-        A component added or reparented here held no ancestry and no
-        search vector. It was then invisible to `?ancestor=`, counted by
-        no `descendant_count`, and unfindable by `?q=`.
-
-        A poll repairs a tracked service. An untracked or paused one is
-        never selected, so the staleness would be permanent.
-
-        Here and not on `ServiceComponent.save`, because reconcile writes
-        these rows with `bulk_update` and would pay the pass per row.
-        """
-        super().save_model(request, obj, form, change)
-        rebuild_ancestry(obj.service)
-        rebuild_search(obj.service)
 
     def get_form(self, request, obj=None, **kwargs):
         # The parent picker needs to know which service is asking.
