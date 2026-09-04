@@ -26,7 +26,7 @@ from common.admin import (
     severity_label,
 )
 from common.queries import related_count
-from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
+from status.choices import EVENT_PHASES_BY_KIND, EventKind
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
@@ -340,10 +340,6 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     def display_phase(self, obj):
         # A closed phase means the event is over.
         return phase_label(obj)
-
-    @display(description=_("Open"), boolean=True)
-    def display_open(self, obj):
-        return obj.phase not in CLOSED_PHASES
 
 
 @admin.register(EventUpdate)
