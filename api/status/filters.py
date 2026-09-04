@@ -27,9 +27,18 @@ class EventFilter(filters.FilterSet):
         fields = {"kind": ["exact"]}
 
     def filter_phase(self, queryset, name, value):
-        if value == EventPhaseState.CLOSED:
-            return queryset.filter(phase__in=CLOSED_PHASES)
-        return queryset.exclude(phase__in=CLOSED_PHASES)
+        """Narrow to the open phases, or to the terminal ones.
+
+        An absent `phase` returns both. django-filter skips a method
+        when the value is empty, so nothing here runs and no default
+        applies.
+
+        `ChoiceFilter` admits `open` and `closed` only. The last return
+        is the closed case, not a fallback.
+        """
+        if value == EventPhaseState.OPEN:
+            return queryset.exclude(phase__in=CLOSED_PHASES)
+        return queryset.filter(phase__in=CLOSED_PHASES)
 
     def filter_dashboard(self, queryset, name, value):
         """Everything posted across the services on one board.

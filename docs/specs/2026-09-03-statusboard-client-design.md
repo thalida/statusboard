@@ -198,7 +198,8 @@ and `/meta/` publishes the labels.
 ### Phase is a declared filter
 
 `phase` accepts `open` and `closed`. It draws `CLOSED_PHASES` from `status/choices.py`, so
-the client never restates which phases are terminal.
+the client never restates which phases are terminal. Omitting it returns both, so the feed
+is not an open-only list that a client has to opt out of.
 
 ### A tab badge is the collection's total
 

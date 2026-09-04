@@ -154,6 +154,24 @@ def test_phase_open_and_closed_draw_one_line(client):
     assert {r["title"] for r in closed} == {"Done", "Finished"}
 
 
+def test_no_phase_parameter_returns_every_event(client):
+    # Omitting `phase` is not a filter. The code reads as though open
+    # were the default, and a change that made it one would be silent.
+    service = ServiceFactory()
+    component = ComponentFactory(service=service)
+    _event(service, component, external_id="1", title="Open")
+    _event(
+        service,
+        component,
+        external_id="2",
+        title="Done",
+        phase=IncidentPhase.RESOLVED,
+    )
+
+    results = client.get(reverse("event-list")).json()["results"]
+    assert {r["title"] for r in results} == {"Open", "Done"}
+
+
 def test_dashboard_narrows_to_what_you_track(authenticated_client, board):
     # Home's Updates tab. Everything posted across the services on
     # your board, and nothing else.

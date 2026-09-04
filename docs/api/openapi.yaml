@@ -388,7 +388,7 @@ paths:
         - { name: service, in: query, schema: { type: string }, description: Service slug }
         - { name: component, in: query, schema: { type: string, format: uuid } }
         - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] } }
-        - { name: phase, in: query, schema: { type: string, enum: [open, closed] }, description: 'Render the label from `/meta/` `enums.event_phase_state`.' }
+        - { name: phase, in: query, schema: { type: string, enum: [open, closed] }, description: 'Omit it and both come back. Render the label from `/meta/` `enums.event_phase_state`.' }
         - { name: ordering, in: query, schema: { type: string, enum: [-starts_at, starts_at, ends_at, -ends_at], default: -starts_at } }
         - { $ref: '#/components/parameters/Fields' }
         - { $ref: '#/components/parameters/Cursor' }
