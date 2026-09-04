@@ -26,6 +26,8 @@ class ServiceQuerySet(models.QuerySet):
         """
         from django.contrib.auth.models import AnonymousUser
 
+        from catalog.queries import component_count
+
         tracked = models.Value(0, output_field=models.IntegerField())
         if user is not None and not isinstance(user, AnonymousUser):
             tracked = related_count(
@@ -35,10 +37,7 @@ class ServiceQuerySet(models.QuerySet):
         return (
             self.select_related("status_page", "poller")
             .annotate(
-                component_count=related_count(
-                    ServiceComponent.objects.visible().filter(is_overall=False),
-                    "service",
-                ),
+                component_count=component_count(),
                 tracked_component_count=tracked,
             )
             .prefetch_related(

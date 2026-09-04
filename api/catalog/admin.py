@@ -19,7 +19,12 @@ from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
 from catalog.models import Service, ServiceComponent, ServiceRequest, StatusPage
-from catalog.queries import COMPONENT_WATCHER_COUNT, OVERALL_SEVERITY, is_tracked
+from catalog.queries import (
+    COMPONENT_WATCHER_COUNT,
+    OVERALL_SEVERITY,
+    component_count,
+    is_tracked,
+)
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
@@ -355,7 +360,7 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             .select_related("status_page", "poller")
             .annotate(
                 severity_now=OVERALL_SEVERITY,
-                component_count=related_count(ServiceComponent.objects, "service"),
+                component_count=component_count(),
                 event_count=related_count(ServiceEvent.objects, "service"),
                 status_count=related_count(
                     ComponentStatus.objects, "component__service"
@@ -395,11 +400,18 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         return {
             "title": _("Related"),
             "items": [
+                # The count is the API's, so the admin and a client
+                # never disagree about how many parts a service has.
+                # The link carries the same two filters, because a
+                # count beside a link describes what the link opens.
+                # Clearing a chip reaches the rollup and the archive.
                 filtered_list(
                     "admin:catalog_servicecomponent_changelist",
                     _("Components"),
                     obj.component_count,
                     service__id__exact=obj.pk,
+                    is_overall__exact=0,
+                    is_archived__exact=0,
                 ),
                 filtered_list(
                     "admin:status_serviceevent_changelist",

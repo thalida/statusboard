@@ -40,6 +40,21 @@ def is_tracked(field="pk"):
     return Exists(DashboardItem.objects.filter(component__service=OuterRef(field)))
 
 
+def component_count():
+    """How many components a service publishes, in one query for the page.
+
+    The rollup is the service itself, and an archived row is served
+    nowhere. So neither is counted, and the number matches the
+    provider's own page. The API field and the admin column read this,
+    because two answers to one question drift apart.
+    """
+    from catalog.models import ServiceComponent
+
+    return related_count(
+        ServiceComponent.objects.visible().filter(is_overall=False), "service"
+    )
+
+
 def descendant_count():
     """How many components sit under each row, in one query for the page.
 

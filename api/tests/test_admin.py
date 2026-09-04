@@ -1013,3 +1013,53 @@ def test_the_bulk_delete_rebuilds_a_service_once(admin_client, monkeypatch):
     bulk_delete(admin_client, [first, second])
 
     assert rebuilt == [service.pk]
+
+
+def related_item(admin_user, service, label):
+    """One entry of a service row's View dropdown, count and link."""
+    from django.test import RequestFactory
+
+    from catalog.models import Service
+
+    request = RequestFactory().get("/")
+    request.user = admin_user
+    model_admin = admin.site._registry[Service]
+    row = model_admin.get_queryset(request).get(pk=service.pk)
+    items = model_admin.display_related(row)["items"]
+    return next(item for item in items if str(item["title"]).startswith(label))
+
+
+@pytest.mark.django_db
+def test_the_service_row_counts_the_components_the_api_counts(admin_client):
+    # `Service.component_count` leaves out the rollup and the archived
+    # rows. A second number under the same name is how the admin and a
+    # client come to disagree about one service.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    admin_user = User.objects.get(email="admin@example.com")
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
+
+    assert related_item(admin_user, service, "Components")["title"] == "Components (1)"
+
+
+@pytest.mark.django_db
+def test_the_components_link_opens_exactly_what_it_counts(admin_client):
+    # The count sits on the label of a link. A number that does not
+    # describe the list it opens is worse than no number.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    admin_user = User.objects.get(email="admin@example.com")
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
+
+    link = related_item(admin_user, service, "Components")["link"]
+    assert admin_client.get(link).context["cl"].result_count == 1
