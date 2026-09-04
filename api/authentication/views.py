@@ -35,6 +35,10 @@ class MagicLinkView(APIView):
         request=MagicLinkRequestSerializer,
         responses={
             202: OpenApiResponse(description="Sent, if the address can receive it."),
+            # Hand rolled, so it is a bare `detail` and carries no
+            # `code`. A client generated from the contract could not
+            # see this failure at all.
+            400: OpenApiResponse(description="No email address in the body."),
             429: OpenApiResponse(description="Too many requests."),
         },
     )
@@ -47,7 +51,9 @@ class MagicLinkView(APIView):
         user, _ = User.objects.get_or_create(email=email)
         link = MagicLinkToken.objects.create(user=user)
         send_magic_link(link)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Accepted, not No content. We say nothing about whether the
+        # address can receive mail, and the contract promises 202.
+        return Response(status=status.HTTP_202_ACCEPTED)
 
 
 class VerifyView(APIView):

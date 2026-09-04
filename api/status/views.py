@@ -9,6 +9,7 @@ import uuid
 
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.exceptions import NotAuthenticated
 from rest_framework.permissions import AllowAny
@@ -17,6 +18,7 @@ from common.aggregates import EventAggregateSet
 from common.filters import FieldsBackend
 from common.ordering import MappedOrderingFilter
 from common.pagination import TimelinePagination
+from common.serializers import ErrorSerializer
 from dashboards.models import Dashboard
 from status.filters import EventFilter
 from status.models import EventUpdate, ServiceEvent
@@ -63,6 +65,11 @@ class EventListView(generics.ListAPIView):
         return queryset
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses={200: ServiceEventDetailSerializer, 404: ErrorSerializer}
+    )
+)
 class EventDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = ServiceEventDetailSerializer

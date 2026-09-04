@@ -1,11 +1,16 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
 from catalog.models import Service
 from catalog.serializers import ServiceSerializer
 from common.filters import FieldsBackend
+from common.serializers import ErrorSerializer
 
 
+@extend_schema_view(
+    get=extend_schema(responses={200: ServiceSerializer, 404: ErrorSerializer})
+)
 class ServiceDetailView(generics.RetrieveAPIView):
     """The service page's header and its About tab.
 

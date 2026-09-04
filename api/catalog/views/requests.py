@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from api.defaults import Throttle
 from catalog.models import ServiceRequest, StatusPage
 from catalog.serializers import ServiceRequestSerializer
+from common.serializers import ErrorSerializer
 
 
 class ServiceRequestView(APIView):
@@ -33,6 +34,9 @@ class ServiceRequestView(APIView):
         responses={
             202: OpenApiResponse(description="Recorded."),
             400: OpenApiResponse(description="Missing or malformed url."),
+            429: OpenApiResponse(
+                response=ErrorSerializer, description="Too many requests."
+            ),
         },
     )
     def post(self, request):

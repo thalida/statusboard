@@ -6,6 +6,7 @@ nested routes would have been four copies of this queryset.
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
@@ -16,6 +17,7 @@ from catalog.serializers import ComponentSerializer
 from common.aggregates import StatusAggregateSet
 from common.filters import FieldsBackend
 from common.ordering import MappedOrderingFilter
+from common.serializers import ErrorSerializer
 from status.queries import CURRENT_SEVERITY
 
 
@@ -82,6 +84,9 @@ class ComponentListView(ComponentQueryMixin, generics.ListAPIView):
         return super().filter_queryset(queryset)
 
 
+@extend_schema_view(
+    get=extend_schema(responses={200: ComponentSerializer, 404: ErrorSerializer})
+)
 class ComponentDetailView(ComponentQueryMixin, generics.RetrieveAPIView):
     filter_backends = [FieldsBackend]
     lookup_field = "pk"

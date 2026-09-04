@@ -1,6 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -22,6 +22,22 @@ def _board(request, uuid):
     return get_object_or_404(Dashboard, id=uuid, owner=request.user)
 
 
+# On `post`, not on `create`. The generator reads the handler the router
+# dispatches to. An annotation on `create` was dropped in silence, so
+# the documented 200 and 404 reached no schema.
+@extend_schema_view(
+    post=extend_schema(
+        request=TrackComponentSerializer,
+        responses={
+            201: ComponentSerializer,
+            200: OpenApiResponse(
+                response=ComponentSerializer,
+                description="Already tracked. Tracking twice is not an error.",
+            ),
+            404: OpenApiResponse(description="No such board, or no such component."),
+        },
+    )
+)
 class BoardComponentListView(generics.ListCreateAPIView):
     # Schema generation reads the model off this before it calls
     # get_queryset. It names the model without running one.
@@ -54,17 +70,6 @@ class BoardComponentListView(generics.ListCreateAPIView):
             .distinct()
         )
 
-    @extend_schema(
-        request=TrackComponentSerializer,
-        responses={
-            201: ComponentSerializer,
-            200: OpenApiResponse(
-                response=ComponentSerializer,
-                description="Already tracked. Tracking twice is not an error.",
-            ),
-            404: OpenApiResponse(description="No such board, or no such component."),
-        },
-    )
     def create(self, request, *args, **kwargs):
         board = _board(request, self.kwargs["uuid"])
         # `visible`, so a write agrees with the reads. An archived id

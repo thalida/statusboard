@@ -161,6 +161,13 @@ paths:
             schema: { type: object, required: [email], properties: { email: { type: string, format: email } } }
       responses:
         '202': { description: Accepted }
+        '400':
+          description: |
+            No email address in the body. A bare `detail` string, hand rolled here — not the
+            `Error` shape, so there is no `code` to branch on.
+          content:
+            application/json:
+              schema: { type: object, properties: { detail: { type: string } } }
         '429': { $ref: '#/components/responses/Throttled' }
   /auth/verify/:
     post:
@@ -190,7 +197,10 @@ paths:
     post:
       tags: [auth]
       summary: Blacklist the refresh token
-      responses: { '204': { description: No content } }
+      responses:
+        '200':
+          description: Blacklisted. The body is an empty object.
+          content: { application/json: { schema: { type: object } } }
 
   /me/:
     get:
@@ -236,8 +246,24 @@ paths:
         '201':
           description: Service created
           content: { application/json: { schema: { $ref: '#/components/schemas/Service' } } }
-        '422':
-          description: No supported status page found at that URL
+        '400':
+          description: |
+            Two failures share this code. A missing or malformed `status_page_url` answers a
+            field-errors object, one array of messages per field name. A URL no adapter can
+            read answers the `Error` shape with `code: no_status_page_found`. Branch on
+            whether `code` is present.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties: { type: array, items: { type: string } }
+                  - $ref: '#/components/schemas/Error'
+        '429': { $ref: '#/components/responses/Throttled' }
+        '502':
+          description: |
+            The provider did not answer. `code: provider_unreachable`. The URL may still be a
+            status page, so this is worth retrying and `400` is not.
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /catalog/requests/:

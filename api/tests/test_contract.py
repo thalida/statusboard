@@ -28,12 +28,25 @@ def generated():
     return SchemaGenerator().get_schema(request=None, public=True)
 
 
+VERBS = ("get", "post", "delete", "patch", "put")
+
+
 def _paths(schema):
     return {
         f"{verb.upper()} {path}"
         for path, ops in schema["paths"].items()
         for verb in ops
-        if verb in ("get", "post", "delete", "patch", "put")
+        if verb in VERBS
+    }
+
+
+def _responses(schema):
+    return {
+        f"{verb.upper()} {path} -> {code}"
+        for path, ops in schema["paths"].items()
+        for verb, operation in ops.items()
+        if verb in VERBS
+        for code in operation.get("responses", {})
     }
 
 
@@ -45,6 +58,23 @@ def test_every_documented_operation_exists_in_the_code(committed, generated):
 def test_no_operation_exists_that_the_contract_does_not_document(committed, generated):
     extra = _paths(generated) - _paths(committed)
     assert not extra, f"implemented but undocumented: {sorted(extra)}"
+
+
+def test_every_documented_response_code_is_declared_in_the_code(committed, generated):
+    # The board endpoint documented a 409 no code path returned. The
+    # path check above passes on that, because the path exists. A
+    # client is generated from this file and branches on the code.
+    missing = _responses(committed) - _responses(generated)
+    assert not missing, f"documented but not returned: {sorted(missing)}"
+
+
+def test_no_response_code_is_declared_that_the_contract_does_not_document(
+    committed, generated
+):
+    # The other direction. A failure a client cannot see is one it
+    # cannot handle, so it falls through as an unexpected error.
+    extra = _responses(generated) - _responses(committed)
+    assert not extra, f"returned but undocumented: {sorted(extra)}"
 
 
 def test_every_endpoint_accepts_the_fields_parameter(generated):

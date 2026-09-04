@@ -120,10 +120,12 @@ def test_the_response_carries_the_detected_provider():
 
 @pytest.mark.django_db
 def test_a_missing_status_page_url_is_a_400():
-    assert (
-        APIClient().post(reverse("catalog-import"), {}, format="json").status_code
-        == 400
-    )
+    response = APIClient().post(reverse("catalog-import"), {}, format="json")
+    assert response.status_code == 400
+    # The serializer's own field map, not the `Error` shape. The
+    # contract documents both under this code, and a client tells them
+    # apart by whether `code` is there.
+    assert response.json() == {"status_page_url": ["This field is required."]}
 
 
 def test_normalising_keeps_the_www_prefix():

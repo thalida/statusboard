@@ -9,6 +9,7 @@ from api.defaults import Throttle
 from catalog.models import Service
 from catalog.serializers import ImportRequestSerializer, ServiceSerializer
 from common.errors import NoStatusPageFound, ProviderUnreachable
+from common.serializers import ErrorSerializer
 from polling.importer import import_from_url
 
 
@@ -29,7 +30,22 @@ class CatalogImportView(APIView):
         responses={
             200: ServiceSerializer,
             201: ServiceSerializer,
-            400: OpenApiResponse(description="Missing or malformed status_page_url."),
+            # Two shapes under one code. A malformed body answers the
+            # serializer's field map. A URL no adapter can read answers
+            # the named error. The contract carries both.
+            400: OpenApiResponse(
+                description=(
+                    "Missing or malformed status_page_url, or no status page "
+                    "found at it."
+                )
+            ),
+            429: OpenApiResponse(
+                response=ErrorSerializer, description="Too many requests."
+            ),
+            502: OpenApiResponse(
+                response=ErrorSerializer,
+                description="The provider could not be reached.",
+            ),
         },
     )
     def post(self, request):
