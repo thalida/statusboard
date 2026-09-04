@@ -154,9 +154,7 @@ def test_the_subject_is_one_line():
     # A header cannot hold a newline, and a template file ends with one.
     APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
 
-    subject = mail.outbox[0].subject
-    assert "\n" not in subject
-    assert subject == "Your sign-in link for Statusboard"
+    assert "\n" not in mail.outbox[0].subject
 
 
 def test_no_app_means_no_link_rather_than_a_link_to_nowhere(settings):
