@@ -73,7 +73,7 @@
   --app-edge: var(--u-800);
   --app-ink: var(--u-200);
   --app-ink-3: var(--u-600);
-  --app-nav: var(--u-900);
+  --app-nav: var(--u-800);
   --app-nav-ink: var(--u-200);
   --app-chip: var(--u-800);
 
@@ -91,7 +91,7 @@
     --app-edge: var(--u-800);
     --app-ink: var(--u-200);
     --app-ink-3: var(--u-600);
-    --app-nav: var(--u-900);
+    --app-nav: var(--u-800);
     --app-nav-ink: var(--u-200);
     --app-chip: var(--u-800);
     --ok: var(--green-lift);
