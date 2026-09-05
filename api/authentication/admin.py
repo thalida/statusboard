@@ -107,10 +107,10 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
     list_display = [
         "display_user",
         "display_default_board",
-        "display_active",
-        "display_bot",
-        "display_staff",
-        "display_superuser",
+        "is_active",
+        "is_bot",
+        "is_staff",
+        "is_superuser",
         "last_login",
         "last_active_at",
     ]
@@ -137,27 +137,9 @@ class UserAdmin(BaseModelAdmin, ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
-    # Django's own labels read "active", "staff status" and "superuser
-    # status". The three sit side by side, so they read as a set here.
     @display(description=_("Board"), ordering="default_dashboard__name")
     def display_default_board(self, obj):
         return change_link(obj.default_dashboard)
-
-    @display(description=_("Bot"), boolean=True, ordering="is_bot")
-    def display_bot(self, obj):
-        return obj.is_bot
-
-    @display(description=_("Active"), boolean=True, ordering="is_active")
-    def display_active(self, obj):
-        return obj.is_active
-
-    @display(description=_("Staff"), boolean=True, ordering="is_staff")
-    def display_staff(self, obj):
-        return obj.is_staff
-
-    @display(description=_("Superuser"), boolean=True, ordering="is_superuser")
-    def display_superuser(self, obj):
-        return obj.is_superuser
 
     @display(description=_("User"), header=True, ordering="email")
     def display_user(self, obj):
@@ -186,11 +168,12 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
     autocomplete_fields = ["user"]
     ordering = ["-created_at"]
     # The token is the credential. It is shown, never typed over: a new
-    # one by hand is a link nobody was sent.
-    readonly_fields = ["token"]
+    # one by hand is a link nobody was sent. The state is read from the
+    # two dates below it.
+    readonly_fields = ["token", "display_state"]
     fieldsets = [
         (None, {"fields": ["user", "token"]}),
-        (_("Validity"), {"fields": ["expires_at", "used_at"]}),
+        (_("Validity"), {"fields": ["display_state", "expires_at", "used_at"]}),
         audit_section(),
     ]
 
@@ -203,6 +186,10 @@ class MagicLinkTokenAdmin(BaseModelAdmin, ModelAdmin):
         label={"Usable": "success", "Used": "default", "Expired": "warning"},
     )
     def display_state(self, obj):
+        # The add form holds a link with no expiry. A link nobody has
+        # made yet is in no state.
+        if obj.expires_at is None:
+            return "—"
         if obj.used_at:
             return "Used"
         return "Usable" if obj.is_usable else "Expired"

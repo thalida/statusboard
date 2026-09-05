@@ -39,9 +39,12 @@ def test_a_dotted_path_prunes_inside_a_nested_object_rather_than_dropping_it():
     assert set(result["status"]) == {"severity"}
 
 
-def test_an_unknown_field_is_ignored_rather_than_erroring():
-    # A client asking for a field that does not exist yet gets what does exist.
-    assert set(_serialize("id,nonsense")) == {"id"}
+def test_an_unknown_field_is_refused():
+    # Ignoring it popped every field and returned an empty object. A
+    # client then read a typo as a server holding nothing.
+    with pytest.raises(serializers.ValidationError) as raised:
+        _serialize("id,nonsense")
+    assert raised.value.detail == {"fields": ["Unknown field: nonsense."]}
 
 
 def test_a_serializer_can_opt_out():
@@ -82,5 +85,5 @@ def test_a_view_that_declares_no_permissions_requires_authentication():
 def test_the_catalog_stays_public_on_purpose(client):
     # Browsing without an account is in the spec, so these say AllowAny
     # rather than inheriting it.
-    assert client.get(reverse("service-list")).status_code == 200
+    assert client.get(reverse("component-list")).status_code == 200
     assert client.get(reverse("meta")).status_code == 200

@@ -43,11 +43,11 @@ def test_a_poller_inside_its_cooldown_is_not_due():
 
 @pytest.mark.django_db
 def test_two_boards_tracking_one_service_produce_one_poller():
-    # The cooldown is on the service, not on a user or a board.
-    service = ServiceFactory(tracked=1)
+    # The cooldown is on the service, not on a user or a board. `due()`
+    # asks whether anybody tracks the service. Asked as a join instead,
+    # it would return this poller once per board and poll twice as often.
+    service = ServiceFactory(tracked=2)
     StatusPageFactory(service=service)
-    PollerFactory(service=service)
-    assert Poller.objects.filter(service=service).count() == 1
     assert len(list(Poller.objects.due())) == 1
 
 
@@ -244,8 +244,25 @@ def test_an_api_url_override_replaces_the_page_url(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_a_poller_nobody_added_is_signed_by_the_system():
-    """The signal adds it, so the author says the system, not nobody.
+def test_a_poller_carries_the_author_of_the_service_that_spawned_it():
+    """A person caused the service, so the poller records that person.
+
+    Stamping the system account here would name the bot for work a
+    person did.
+    """
+    from catalog.models import Service
+    from tests.factories import UserFactory
+
+    person = UserFactory()
+
+    service = Service.objects.create(name="Owned", created_by=person)
+
+    assert service.poller.created_by == person
+
+
+@pytest.mark.django_db
+def test_a_poller_for_a_service_with_no_author_is_signed_by_the_system():
+    """The fallback, for a service nobody signed.
 
     A blank author reads the same as one that was lost.
     """
@@ -320,8 +337,9 @@ def test_an_import_schedules_the_same_way_a_poll_does():
     # Two callers wrote this. The import set a bare interval, with no
     # backoff and no jitter. A hundred imported at once came due on the
     # same second.
-    from polling.models import JITTER
-
+    #
+    # The window is a tenth either side, written out. Read from the
+    # constant, this would pass with the constant itself set wrong.
     poller = PollerFactory(service=ServiceFactory(tracked=1))
     at = timezone.now()
 
@@ -331,7 +349,7 @@ def test_an_import_schedules_the_same_way_a_poll_does():
     assert poller.consecutive_failure_count == 0
     interval = poller.effective_interval_seconds
     gap = (poller.next_at - at).total_seconds()
-    assert interval * (1 - JITTER) <= gap <= interval * (1 + JITTER)
+    assert interval * 0.9 <= gap <= interval * 1.1
 
 
 @pytest.mark.django_db

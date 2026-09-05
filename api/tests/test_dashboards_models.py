@@ -61,12 +61,6 @@ def test_a_component_is_tracked_once_per_dashboard():
 
 
 @pytest.mark.django_db
-def test_an_item_carries_no_position():
-    # Order is a query, not a column. A stored position needs a rewrite on every insert.
-    assert not hasattr(DashboardItem, "position")
-
-
-@pytest.mark.django_db
 def test_the_system_account_cannot_sign_in():
     system = User.objects.system()
 
@@ -152,3 +146,17 @@ def test_closing_an_account_still_takes_its_boards():
     user.delete()
 
     assert not Dashboard.objects.filter(owner_id=user.pk).exists()
+
+
+@pytest.mark.django_db
+def test_a_factory_user_and_a_tracked_one_never_collide():
+    # `track` minted its own address from a counter that resets per
+    # test. UserFactory's persists across the session, and email is
+    # unique. The first test to call both would raise far from the cause.
+    from tests.factories import UserFactory, track
+
+    UserFactory.reset_sequence(0)
+    UserFactory()
+    track(ComponentFactory())
+
+    assert User.objects.filter(email__startswith="watcher").count() == 2

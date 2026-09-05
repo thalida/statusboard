@@ -4,7 +4,9 @@ from django.db.utils import IntegrityError
 from django.utils import timezone
 
 from status.choices import (
+    CLOSED_PHASES,
     EventKind,
+    EventSource,
     IncidentPhase,
     MaintenancePhase,
     Severity,
@@ -87,16 +89,39 @@ def test_a_matching_phase_validates():
     event.full_clean()
 
 
-@pytest.mark.django_db
-def test_an_event_may_name_no_component_at_all():
-    # A provider publishes some events against the service.
-    # A component FK cannot hold them.
-    event = ServiceEvent.objects.create(
-        service=ServiceFactory(),
-        external_id="1",
-        kind=EventKind.MAINTENANCE,
-        title="x",
-        phase=MaintenancePhase.SCHEDULED,
-        starts_at=timezone.now(),
-    )
-    assert event.affected_components.count() == 0
+def test_two_system_events_can_sit_on_one_service(db):
+    # Neither has a provider id. The unique key is partial, so a null
+    # does not collide with another null.
+    service = ServiceFactory()
+    for _ in range(2):
+        ServiceEvent.objects.create(
+            service=service,
+            external_id=None,
+            kind=EventKind.INCIDENT,
+            title="Degraded",
+            phase=IncidentPhase.DETECTED,
+            detected_by=EventSource.SYSTEM,
+            starts_at=timezone.now(),
+        )
+    assert ServiceEvent.objects.filter(service=service).count() == 2
+
+
+def test_a_provider_id_is_still_unique_per_service(db):
+    # A second poll of the same page must update the row, never add one.
+    service = ServiceFactory()
+    fields = {
+        "service": service,
+        "kind": EventKind.INCIDENT,
+        "title": "Outage",
+        "phase": IncidentPhase.INVESTIGATING,
+        "starts_at": timezone.now(),
+    }
+    ServiceEvent.objects.create(external_id="abc", **fields)
+    with pytest.raises(IntegrityError):
+        ServiceEvent.objects.create(external_id="abc", **fields)
+
+
+def test_detected_is_an_open_phase(db):
+    # A detected event is running. Listing it as closed would hide
+    # every outage no provider ever wrote up.
+    assert IncidentPhase.DETECTED not in CLOSED_PHASES

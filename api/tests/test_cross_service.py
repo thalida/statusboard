@@ -70,6 +70,21 @@ def test_a_component_may_sit_under_its_own_services_component(two_services):
 
 
 @pytest.mark.django_db
+def test_a_component_cannot_sit_under_the_rollup(two_services):
+    # The rollup is a peer of the top-level components, not their
+    # parent. A database trigger refuses the row; this is what a form
+    # sees instead of that trigger's error.
+    mine, _ = two_services
+    rollup = ComponentFactory(service=mine, is_overall=True)
+    child = ComponentFactory(service=mine, external_id="child")
+    child.parent = rollup
+
+    with pytest.raises(ValidationError) as raised:
+        child.full_clean()
+    assert "parent" in raised.value.message_dict
+
+
+@pytest.mark.django_db
 def test_a_reading_cannot_cite_a_poll_of_another_service(two_services):
     mine, theirs = two_services
     reading = ComponentStatus(
@@ -164,6 +179,7 @@ def test_an_event_keeps_a_component_the_provider_stopped_listing(two_services):
             )
         ],
         StatusSource.PROVIDER,
+        _run(mine),
     )
 
     event = ServiceEvent.objects.get(external_id="inc-1")
@@ -190,6 +206,7 @@ def test_a_poll_invents_no_component(two_services):
             )
         ],
         StatusSource.PROVIDER,
+        _run(mine),
     )
 
     assert not ServiceComponent.objects.filter(external_id="never-seen").exists()

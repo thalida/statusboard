@@ -9,7 +9,14 @@ from rest_framework.views import APIView
 
 from catalog.choices import StatusPageProvider
 from common.serializers import MetaSerializer
-from status.choices import EVENT_PHASES_BY_KIND, EventKind, Severity, StatusSource
+from status.choices import (
+    EVENT_PHASES_BY_KIND,
+    EventKind,
+    EventPhaseState,
+    EventSource,
+    Severity,
+    StatusSource,
+)
 
 
 def _labels(choices):
@@ -41,24 +48,27 @@ class MetaView(APIView):
 
     @extend_schema(responses={200: MetaSerializer})
     def get(self, request):
-        return Response(
-            {
-                "poll_interval_seconds": settings.POLL_INTERVAL_SECONDS,
-                "poll_cooldown_seconds": settings.POLL_COOLDOWN_SECONDS,
-                "default_page_size": settings.DEFAULT_PAGE_SIZE,
-                "max_page_size": settings.MAX_PAGE_SIZE,
-                "enums": {
-                    "severity": _labels(Severity),
-                    "status_source": _labels(StatusSource),
-                    "status_page_provider": _labels(StatusPageProvider),
-                    "event_kind": _labels(EventKind),
-                    "event_phase": {
-                        str(kind): _labels(phases)
-                        for kind, phases in EVENT_PHASES_BY_KIND.items()
-                    },
+        data = {
+            "poll_interval_seconds": settings.POLL_INTERVAL_SECONDS,
+            "poll_cooldown_seconds": settings.POLL_COOLDOWN_SECONDS,
+            "default_page_size": settings.DEFAULT_PAGE_SIZE,
+            "max_page_size": settings.MAX_PAGE_SIZE,
+            "enums": {
+                "severity": _labels(Severity),
+                "status_source": _labels(StatusSource),
+                "status_page_provider": _labels(StatusPageProvider),
+                "event_kind": _labels(EventKind),
+                "event_source": _labels(EventSource),
+                "event_phase": {
+                    str(kind): _labels(phases)
+                    for kind, phases in EVENT_PHASES_BY_KIND.items()
                 },
-            }
-        )
+                "event_phase_state": _labels(EventPhaseState),
+            },
+        }
+        # `Response(data)` skips `MetaSerializer`, so `?fields=` never
+        # pruned. `FieldsMixin` prunes at construction, on the instance.
+        return Response(MetaSerializer(data, context={"request": request}).data)
 
 
 class ApiDocsView(TemplateView):

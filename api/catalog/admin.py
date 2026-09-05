@@ -18,8 +18,13 @@ from unfold.decorators import action, display
 from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 
-from catalog.models import Service, ServiceComponent, StatusPage
-from catalog.queries import OVERALL_SEVERITY, WATCHER_COUNT
+from catalog.models import Service, ServiceComponent, ServiceRequest, StatusPage
+from catalog.queries import (
+    COMPONENT_WATCHER_COUNT,
+    OVERALL_SEVERITY,
+    component_count,
+    is_tracked,
+)
 from common.admin import (
     SEVERITY_VARIANTS,
     BaseModelAdmin,
@@ -242,8 +247,8 @@ class ServiceEventInline(TabularInline):
 class TrackedFilter(DropdownFilter):
     """Whether anybody has this service on a board.
 
-    The count is worked out when the list is read, so there is no column
-    to put a range over. This is the question the poller asks too.
+    There is no column to filter on. `is_tracked` is the question the
+    poller asks, so the admin asks it the same way.
     """
 
     title = _("Tracked")
@@ -255,9 +260,8 @@ class TrackedFilter(DropdownFilter):
     def queryset(self, request, queryset):
         if self.value() is None:
             return queryset
-        if self.value() == "1":
-            return queryset.filter(watcher_count__gt=0)
-        return queryset.filter(watcher_count=0)
+        watched = is_tracked()
+        return queryset.filter(watched if self.value() == "1" else ~watched)
 
 
 class ServiceSeverityFilter(DropdownFilter):
@@ -282,6 +286,28 @@ class ServiceSeverityFilter(DropdownFilter):
             components__statuses__ended_at__isnull=True,
             components__statuses__severity=self.value(),
         )
+
+
+class WatchedFilter(DropdownFilter):
+    """Whether anybody holds this component on a board.
+
+    The watcher count is a column and was not a filter. `boards` is the
+    relation the count reads, so this narrows on the same join.
+    """
+
+    title = _("Watched")
+    parameter_name = "watched"
+
+    def lookups(self, request, model_admin):
+        return [("1", _("Watched")), ("0", _("Unwatched"))]
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        watched = queryset.filter(boards__isnull=False)
+        if self.value() == "1":
+            return watched.distinct()
+        return queryset.exclude(pk__in=watched.values("pk"))
 
 
 class ComponentSeverityFilter(DropdownFilter):
@@ -310,15 +336,12 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     list_display = [
         "display_service",
         "display_severity",
-        "is_featured",
-        "display_watchers",
         "provider",
         "display_related",
     ]
     search_fields = [
         "name",
         "slug",
-        "description",
         "homepage_url",
         "status_page__url",
     ]
@@ -327,17 +350,22 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
     # when. A service belongs to nothing, so its state leads.
     list_filter = [
         ServiceSeverityFilter,
-        "is_featured",
         ("status_page__provider", ChoicesDropdownFilter),
+        ("source", ChoicesDropdownFilter),
         TrackedFilter,
         ("created_at", RangeDateTimeFilter),
         ("updated_at", RangeDateTimeFilter),
     ]
-    # Not `ordering`: the checks want a real column there, and this one
-    # is counted when the list is read. `get_queryset` sorts instead.
     ordering = ["name"]
+    # How the row arrived is written by the importer or by the add form.
+    # A person typing it makes the record claim a history it does not
+    # have.
+    readonly_fields = ["source"]
+    # `source` sits with the name, not in the collapsed trail. It was
+    # on no form for two releases, and a fold is the next place to lose
+    # it.
     fieldsets = [
-        (None, {"fields": ["name", "slug", "description", "is_featured"]}),
+        (None, {"fields": ["name", "slug", "source"]}),
         (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
         audit_section(),
     ]
@@ -361,19 +389,13 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
             .select_related("status_page", "poller")
             .annotate(
                 severity_now=OVERALL_SEVERITY,
-                watcher_count=WATCHER_COUNT,
-                component_count=related_count(ServiceComponent.objects, "service"),
+                component_count=component_count(),
                 event_count=related_count(ServiceEvent.objects, "service"),
                 status_count=related_count(
                     ComponentStatus.objects, "component__service"
                 ),
             )
-            .order_by("-watcher_count", "name")
         )
-
-    @display(description=_("Watchers"), ordering="watcher_count")
-    def display_watchers(self, obj):
-        return obj.watcher_count
 
     @display(description=_("Service"), header=True, ordering="name")
     def display_service(self, obj):
@@ -407,11 +429,18 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         return {
             "title": _("Related"),
             "items": [
+                # The count is the API's, so the admin and a client
+                # never disagree about how many parts a service has.
+                # The link carries the same two filters, because a
+                # count beside a link describes what the link opens.
+                # Clearing a chip reaches the rollup and the archive.
                 filtered_list(
                     "admin:catalog_servicecomponent_changelist",
                     _("Components"),
                     obj.component_count,
                     service__id__exact=obj.pk,
+                    is_overall__exact=0,
+                    is_archived__exact=0,
                 ),
                 filtered_list(
                     "admin:status_serviceevent_changelist",
@@ -458,7 +487,9 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
 
         url = form.cleaned_data["status_page_url"]
         try:
-            service, created = import_from_url(url)
+            # The staff member who pasted the URL, the same stamp an
+            # add form leaves. The system account means automated.
+            service, created = import_from_url(url, author=request.user)
         except Exception as error:  # noqa: BLE001 — the page is a stranger's
             # Anything can come back from a URL a person pasted. Say what
             # happened rather than showing a 500.
@@ -506,8 +537,13 @@ class ServiceComponentAdmin(
         "display_service",
         "display_severity",
         "is_overall",
-        "display_archived",
+        "is_archived",
         "display_related",
+        "watchers",
+        # `suggested` reads this flag on every component. Ticking it on
+        # a rollup surfaces the service. Ticking it on a leaf surfaces
+        # that part.
+        "is_featured",
     ]
     search_fields = [
         "name",
@@ -527,13 +563,20 @@ class ServiceComponentAdmin(
         "is_archived",
         ("archived_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
+        "is_featured",
+        WatchedFilter,
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
     # A parent is one of the same service's components.
     autocomplete_scope = ("service",)
     # The date follows the flag, so it is shown and never typed.
-    readonly_fields = ["archived_at"]
+    # The count is read from the boards, so it is shown and cannot be
+    # typed at all.
+    readonly_fields = ["archived_at", "watchers"]
+    # A checkbox in the list, not an action. One Save flips any mix of
+    # rollups and leaves, which a toggle action could never do at once.
+    list_editable = ["is_featured"]
     fieldsets = [
         (
             None,
@@ -542,8 +585,8 @@ class ServiceComponentAdmin(
                     "service",
                     "name",
                     "external_id",
-                    "is_archived",
-                    "archived_at",
+                    "is_featured",
+                    "watchers",
                 ]
             },
         ),
@@ -551,6 +594,7 @@ class ServiceComponentAdmin(
             _("Position"),
             {"fields": ["parent", "status_page_order", "is_overall"]},
         ),
+        (_("Archive"), {"fields": ["is_archived", "archived_at"]}),
         audit_section(),
     ]
     inlines = [ComponentStatusInline]
@@ -568,12 +612,17 @@ class ServiceComponentAdmin(
                 self.admin_site,
                 scope={"service": editing.service_id if editing else None},
             )
+            # The rollup is never a parent. Excluding it here, on both
+            # add and change, keeps the picker from offering the one
+            # choice the database refuses.
+            queryset = ServiceComponent.objects.exclude(is_overall=True)
             if editing is not None:
                 # The server's half: the picker narrows what is offered,
                 # this refuses anything else that is posted.
-                kwargs["queryset"] = ServiceComponent.objects.filter(
-                    service_id=editing.service_id
-                ).exclude(pk=editing.pk)
+                queryset = queryset.filter(service_id=editing.service_id).exclude(
+                    pk=editing.pk
+                )
+            kwargs["queryset"] = queryset
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_queryset(self, request):
@@ -585,6 +634,7 @@ class ServiceComponentAdmin(
                 severity_now=CURRENT_SEVERITY,
                 status_count=related_count(ComponentStatus.objects, "component"),
                 event_count=related_count(ServiceEvent.objects, "affected_components"),
+                watcher_count=COMPONENT_WATCHER_COUNT,
             )
         )
 
@@ -601,16 +651,6 @@ class ServiceComponentAdmin(
     @display(description=_("Service"), ordering="service__name")
     def display_service(self, obj):
         return change_link(obj.service)
-
-    @display(
-        description=_("State"),
-        label={"Live": "success", "Archived": "default"},
-        ordering="is_archived",
-    )
-    def display_archived(self, obj):
-        # An archived component still reads on the table. Without this
-        # it looked like one the provider is still publishing.
-        return "Archived" if obj.is_archived else "Live"
 
     @display(description=_("View"), dropdown=True)
     def display_related(self, obj):
@@ -635,3 +675,33 @@ class ServiceComponentAdmin(
     @display(description=_("Status"), label=SEVERITY_VARIANTS, ordering="severity_now")
     def display_severity(self, obj):
         return severity_label(obj.severity_now)
+
+    @display(description=_("Watchers"), ordering="watcher_count")
+    def watchers(self, obj):
+        return obj.watcher_count
+
+
+@admin.register(ServiceRequest)
+class ServiceRequestAdmin(BaseModelAdmin, ModelAdmin):
+    """What the catalog is missing, most asked for first."""
+
+    list_display = ["url", "request_count", "last_requested_at", "created_by"]
+    ordering = ["-request_count", "-last_requested_at"]
+    search_fields = ["url"]
+    # Who asked, then how many asked, then when the last one did. The
+    # URL is the row itself, and the search box reaches it.
+    list_filter = [
+        ("created_by", AutocompleteSelectFilter),
+        ("request_count", RangeNumericFilter),
+        ("last_requested_at", RangeDateTimeFilter),
+    ]
+    # The app writes all three. A hand-typed count is a demand nobody made.
+    readonly_fields = ["url", "request_count", "last_requested_at"]
+    fieldsets = [
+        (None, {"fields": ["url", "request_count", "last_requested_at"]}),
+        audit_section(),
+    ]
+
+    def has_add_permission(self, request):
+        # A row arrives from the app, never from here.
+        return False

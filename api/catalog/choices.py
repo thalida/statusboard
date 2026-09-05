@@ -23,3 +23,15 @@ class StatusPageProvider(models.TextChoices):
     ORACLE = "oracle", "Oracle"
     GOOGLE_FEED = "google_feed", "Google feed"
     RSS = "rss", "RSS"
+
+
+class ServiceSource(models.TextChoices):
+    """How a service reached the catalog.
+
+    Two values, because there are two writers. `import_from_url` makes
+    one, and the admin's add form makes the other. Anything else, such
+    as a shell or a migration, reads manual. It was not imported.
+    """
+
+    MANUAL = "manual", "Manual"
+    IMPORT = "import", "Imported from a status page"

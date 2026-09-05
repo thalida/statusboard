@@ -120,7 +120,7 @@ def test_reading_the_catalog_is_not_throttled_away(db):
     # The wide rates are the point: the catalog is public and scanned.
     ServiceFactory()
     client = APIClient()
-    codes = [client.get(reverse("service-list")).status_code for _ in range(30)]
+    codes = [client.get(reverse("component-list")).status_code for _ in range(30)]
 
     assert set(codes) == {200}
 

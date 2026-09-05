@@ -26,7 +26,7 @@ from common.admin import (
     severity_label,
 )
 from common.queries import related_count
-from status.choices import CLOSED_PHASES, EVENT_PHASES_BY_KIND, EventKind
+from status.choices import EVENT_PHASES_BY_KIND, EventKind
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
@@ -59,7 +59,7 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "display_span",
-        "display_source",
+        "source",
         "display_poll_run",
     ]
     date_hierarchy = "started_at"
@@ -104,19 +104,6 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         # standing.
         return date_span(obj.started_at, obj.ended_at)
 
-    @display(description=_("Source"))
-    def display_source(self, obj):
-        # How the severity was arrived at, which is not the same question
-        # as what it is.
-        return obj.get_source_display()
-
-    def get_readonly_fields(self, request, obj=None):
-        # The run is not an editable column, so it reaches the record
-        # only this way. Without it you could see where a reading came
-        # from on the table and not on the reading itself.
-        fields = list(super().get_readonly_fields(request, obj))
-        return fields + ["display_poll_run"]
-
     @display(description=_("Severity"), label=SEVERITY_VARIANTS, ordering="severity")
     def display_severity(self, obj):
         return severity_label(obj.severity)
@@ -131,10 +118,11 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
 
 
 class EventUpdateInline(TabularInline):
-    """The provider's update log, read only.
+    """The event's update log, read only.
 
-    These are the provider's words, written by a poll. Editing them here
-    would make the admin disagree with the status page it mirrors.
+    A poll writes these. Most are the provider's words. A claimed event
+    also holds ours. Editing any of them here would make the admin
+    disagree with the status page it mirrors.
     """
 
     model = EventUpdate
@@ -145,7 +133,9 @@ class EventUpdateInline(TabularInline):
     # Read only, but still worth opening: the row is a summary.
     show_change_link = True
     per_page = 10
-    fields = ["phase", "body", "posted_at"]
+    # A claimed event interleaves our updates with the provider's.
+    # Without the source the timeline reads as one author.
+    fields = ["phase", "source", "body", "posted_at"]
     readonly_fields = fields
     ordering = ["-posted_at"]
 
@@ -161,6 +151,9 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_when",
         "display_kind",
         "display_phase",
+        # `external_id IS NULL` cannot answer this. A claim fills the
+        # column in, which destroys the fact that we found it first.
+        "detected_by",
         "display_related",
     ]
     date_hierarchy = "starts_at"
@@ -172,6 +165,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         ("affected_components", AutocompleteSelectFilter),
         ("poll_run", AutocompleteSelectFilter),
         ("kind", ChoicesDropdownFilter),
+        ("detected_by", ChoicesDropdownFilter),
         PhaseFilter,
         ("starts_at", RangeDateTimeFilter),
         ("ends_at", RangeDateTimeFilter),
@@ -254,7 +248,7 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
                     ]
                 },
             ),
-            (_("Classification"), {"fields": ["kind", "phase"]}),
+            (_("Classification"), {"fields": ["kind", "phase", "detected_by"]}),
             (_("Span"), {"fields": ["starts_at", "ends_at"]}),
             audit_section(),
         ]
@@ -326,10 +320,6 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         # A closed phase means the event is over.
         return phase_label(obj)
 
-    @display(description=_("Open"), boolean=True)
-    def display_open(self, obj):
-        return obj.phase not in CLOSED_PHASES
-
 
 @admin.register(EventUpdate)
 class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
@@ -338,6 +328,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_event",
         "display_service",
         "phase",
+        "source",
         "posted_at",
     ]
     display_update = record_column(_("Update"))
@@ -352,11 +343,13 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     list_filter = [
         ("event__service", AutocompleteSelectFilter),
         ("event", AutocompleteSelectFilter),
+        PhaseFilter,
+        ("source", ChoicesDropdownFilter),
         ("posted_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
     fieldsets = [
-        (None, {"fields": ["event", "phase", "posted_at", "body"]}),
+        (None, {"fields": ["event", "phase", "source", "posted_at", "body"]}),
         audit_section(),
     ]
 

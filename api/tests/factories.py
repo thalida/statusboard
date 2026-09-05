@@ -1,7 +1,15 @@
 import factory
+from django.contrib.auth import get_user_model
 
 from catalog.models import Service, ServiceComponent, StatusPage
 from polling.models import Poller
+
+
+class UserFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = get_user_model()
+
+    email = factory.Sequence(lambda n: f"watcher{n}@example.test")
 
 
 class ServiceFactory(factory.django.DjangoModelFactory):
@@ -65,22 +73,70 @@ class ComponentFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Component {n}")
 
 
-def track(component, user=None):
-    """Track a component, the way somebody using the app would."""
-    from django.contrib.auth import get_user_model
+def poll_run(service, **kwargs):
+    """The fetch that a test says wrote its rows.
 
+    `apply_fetch` takes one, and refuses a run from another service's
+    poller. The run has to belong to the service being reconciled.
+
+    The status page supplies the url and the provider. A test about the
+    reconciliation does not have to make one.
+    """
+    from polling.models import PollRun
+
+    page = getattr(service, "status_page", None) or StatusPageFactory(service=service)
+    return PollRun.open(service.poller, page.url, page.provider, **kwargs)
+
+
+def track(component, user=None):
+    """Track a component, the way somebody using the app would.
+
+    The user comes from `UserFactory`, which owns the one counter behind
+    these addresses. A second counter here reset per test and collided
+    with the factory's, on a column the database holds unique.
+    """
     from dashboards.models import Dashboard, DashboardItem
 
     if user is None:
-        user = get_user_model().objects.create(
-            email=f"watcher{DashboardItem.objects.count()}@example.test"
-        )
+        user = UserFactory()
     board = user.dashboards.first() or Dashboard.objects.create(owner=user)
     return DashboardItem.objects.create(dashboard=board, component=component)
 
 
-def watchers(service):
-    """How many people track it, counted the way the app counts."""
-    from catalog.queries import WATCHER_COUNT
+def ancestry(component):
+    """The ids above it, root first, worked out from `parent`.
 
-    return Service.objects.annotate(n=WATCHER_COUNT).get(pk=service.pk).n
+    `ServiceComponent.ancestors` is the one walk up the tree, and a
+    breadcrumb reads the same order.
+    """
+    return [row.pk for row in component.ancestors]
+
+
+def descendants(component):
+    """The ids under it, at any depth, the way `?ancestor=` asks."""
+    from catalog.queries import descendant_ids
+
+    return set(
+        ServiceComponent.objects.filter(
+            pk__in=descendant_ids(component.pk)
+        ).values_list("pk", flat=True)
+    )
+
+
+def watchers(component):
+    """What the app counts, checked against a count walked in Python.
+
+    The app's expression is the thing under test, so it cannot also be
+    the answer. Borrowing it made every caller assert that it equalled
+    itself, and dropping `distinct` would have stayed green.
+    """
+    from catalog.queries import COMPONENT_WATCHER_COUNT
+
+    counted = (
+        ServiceComponent.objects.annotate(n=COMPONENT_WATCHER_COUNT)
+        .get(pk=component.pk)
+        .n
+    )
+    walked = len({board.owner_id for board in component.boards.all()})
+    assert counted == walked, f"the app counted {counted}, the tree holds {walked}"
+    return counted

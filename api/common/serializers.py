@@ -1,6 +1,9 @@
 from enum import StrEnum
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+
+from common.mixins import FieldsMixin
 
 
 class ErrorCode(StrEnum):
@@ -25,13 +28,35 @@ class ErrorSerializer(serializers.Serializer):
     detail = serializers.CharField()
 
 
-class MetaSerializer(serializers.Serializer):
+class MetaSerializer(FieldsMixin, serializers.Serializer):
     """Deployment-wide configuration. Nothing here is a user preference."""
 
     poll_interval_seconds = serializers.IntegerField()
     poll_cooldown_seconds = serializers.IntegerField()
     default_page_size = serializers.IntegerField()
     max_page_size = serializers.IntegerField()
-    enums = serializers.DictField(
-        help_text="Label maps for every enum, keyed by enum name."
+    enums = serializers.SerializerMethodField()
+
+    @extend_schema_field(
+        serializers.DictField(
+            help_text="Label maps for every enum, keyed by enum name."
+        )
     )
+    def get_enums(self, obj):
+        """Keep only the enums a dotted `?fields=enums.<name>` names.
+
+        `enums` is a plain dict, not a nested serializer, so
+        `FieldsMixin` cannot prune inside it on its own. This reads the
+        branch under "enums" and filters by hand instead. `MetaView`
+        still names every enum in the one place it always has.
+
+        `reject_unknown` is the same refusal `_prune` makes. Without it
+        a typed enum name answered `200 {"enums": {}}`, which is the
+        empty payload the 400 exists to prevent.
+        """
+        enums = obj["enums"]
+        wanted = self.child_tree("enums")
+        if not wanted:
+            return enums
+        self.reject_unknown(wanted, enums)
+        return {name: labels for name, labels in enums.items() if name in wanted}

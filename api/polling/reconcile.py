@@ -3,11 +3,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from catalog.models import ServiceComponent
+from polling.system_events import claim, reconcile_system_events
 from status.models import ComponentStatus, EventUpdate, ServiceEvent
 
 
 @transaction.atomic
-def apply_fetch(service, components, events, source, run=None):
+def apply_fetch(service, components, events, source, run):
     """Write one adapter fetch to the database.
 
     A poll is a reconciliation, not a status read.
@@ -15,7 +16,8 @@ def apply_fetch(service, components, events, source, run=None):
     An unchanged severity leaves the open status row alone.
 
     `run` is the PollRun that produced this data. Stamping it makes a
-    reading traceable back to the fetch that wrote it.
+    reading traceable back to the fetch that wrote it. Every fetch has
+    one, so nothing here writes a reading with no provenance.
 
     Nobody types any of this, so the system account signs every row. A
     blank author reads the same as one that was lost, and a component
@@ -24,7 +26,7 @@ def apply_fetch(service, components, events, source, run=None):
     # A poll writes to the service it read. Nothing in the arguments
     # ties them together. A run from another poller would file one
     # service's readings under another.
-    if run is not None and run.poller.service_id != service.pk:
+    if run.poller.service_id != service.pk:
         raise ValueError(
             f"{run} polled {run.poller.service}, not {service}. "
             "A poll writes to the service it read."
@@ -34,6 +36,9 @@ def apply_fetch(service, components, events, source, run=None):
     _archive_vanished(service, components, author)
     _write_statuses(components, rows, source, author, run)
     _upsert_events(service, events, rows, author, run)
+    # After the provider's events, so a component they explained does
+    # not also get one of ours in the same pass.
+    reconcile_system_events(service, author)
 
 
 def _signed(author, **fields):
@@ -65,7 +70,7 @@ def _upsert_components(service, components, author):
         )
         rows[incoming.external_id] = row
 
-    # Parents in a second pass: a child may arrive before its parent exists.
+    # Parents second: a child may arrive before its parent exists.
     for incoming in components:
         parent = (
             rows.get(incoming.parent_external_id)
@@ -89,7 +94,7 @@ def _archive_vanished(service, components, author):
     ).update(is_archived=True, archived_at=timezone.now(), updated_by=author)
 
 
-def _write_statuses(components, rows, source, author, run=None):
+def _write_statuses(components, rows, source, author, run):
     now = timezone.now()
     for incoming in components:
         row = rows[incoming.external_id]
@@ -135,7 +140,7 @@ def _affected(service, rows, external_ids):
     return named
 
 
-def _upsert_events(service, events, rows, author, run=None):
+def _upsert_events(service, events, rows, author, run):
     for incoming in events:
         event, _ = ServiceEvent.objects.update_or_create(
             service=service,
@@ -164,3 +169,6 @@ def _upsert_events(service, events, rows, author, run=None):
                     "updated_by": author,
                 },
             )
+        # After the updates, so they move with the row if this event
+        # takes over one we opened.
+        claim(event, author)

@@ -69,24 +69,27 @@ class Environment(StrEnum):
             ) from error
 
 
-# Which deployment this is. We named it, so it is resolved here, and
-# `debug` and `secret_key` in `settings.py` read it rather than being
-# handed it.
+# Which deployment this is. We named it, so `debug` and `secret_key`
+# in `settings.py` read it here rather than being handed it.
 ENVIRONMENT = Environment.parse(os.environ.get("ENVIRONMENT"))
 
 
 class Throttle(StrEnum):
     """A rate this deployment enforces.
 
-    A view names its scope and `settings.py` gives it a rate, so the
-    string was written twice and had to match. DRF names the first two;
-    we named the rest.
+    A view names its scope and `settings.py` gives it a rate. The two
+    spellings had to match. DRF names the first two; we named the
+    rest.
     """
 
     ANONYMOUS = "anon"
     SIGNED_IN = "user"
     IMPORT = "import"
     MAGIC_LINK = "magic-link"
+    # Its own bucket, not IMPORT's. Add-by-URL tries an import, and on
+    # a miss sends the same URL here. One scope would let the first
+    # call spend the second's budget.
+    SERVICE_REQUEST = "service-request"
 
 
 # Reading the catalog is the point, so the plain rates are wide. Each of
@@ -97,6 +100,7 @@ THROTTLE_RATES = {
     Throttle.SIGNED_IN: "600/min",
     Throttle.IMPORT: "6/min",
     Throttle.MAGIC_LINK: "5/hour",
+    Throttle.SERVICE_REQUEST: "6/min",
 }
 
 
@@ -119,6 +123,13 @@ POLL_MAX_INTERVAL_SECONDS = 3600
 # default interval a hundred services write ten million rows a year.
 # Long enough to read a week of failures, and no longer.
 POLL_RUN_RETENTION_DAYS = 30
+
+# How far back a provider's event may start and still claim one we
+# opened. Providers back-date `starts_at` to when an incident really
+# began, which is before our poll saw it.
+EVENT_CLAIM_WINDOW = timedelta(
+    seconds=int(os.environ.get("EVENT_CLAIM_WINDOW_SECONDS", "3600"))
+)
 
 # Who the system writes as. RFC 2606 reserves the domain. No mail leaves
 # for it, and nobody can hold the address.

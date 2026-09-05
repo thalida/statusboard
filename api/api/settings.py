@@ -13,6 +13,7 @@ from api.defaults import (  # noqa: F401
     APP_URL,
     DEFAULT_PAGE_SIZE,
     ENVIRONMENT,
+    EVENT_CLAIM_WINDOW,
     MAGIC_LINK_TTL,
     MAX_PAGE_SIZE,
     POLL_COOLDOWN_SECONDS,
@@ -146,9 +147,6 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
         "common.filters.FieldsBackend",
     ],
-    # The contract calls it `q`, and DRF's SearchFilter calls it
-    # `search`. One name, and the schema documents it.
-    "SEARCH_PARAM": "q",
     # The contract has always answered 429, and nothing raised one. See
     # `Throttle` for what each rate is protecting.
     "DEFAULT_THROTTLE_CLASSES": [
@@ -279,8 +277,10 @@ UNFOLD = {
     "COMMAND": {"search_models": True, "show_history": True},
     # The sidebar is two levels deep. It cannot nest an item under an
     # item, so tabs carry the relationship. A component belongs to a
-    # service, and a status history to a component. All four are one
-    # page. The sidebar entry stays active on any of its tabs.
+    # service, and a status history to a component. A service request
+    # names something the catalog lacks, so it lives beside the catalog
+    # too. All five are one page. The sidebar entry stays active on any
+    # of its tabs.
     "TABS": [
         {
             "models": [
@@ -288,6 +288,7 @@ UNFOLD = {
                 "catalog.servicecomponent",
                 "status.serviceevent",
                 "status.componentstatus",
+                "catalog.servicerequest",
             ],
             "items": [
                 {
@@ -305,6 +306,10 @@ UNFOLD = {
                 {
                     "title": _("Status history"),
                     "link": reverse_lazy("admin:status_componentstatus_changelist"),
+                },
+                {
+                    "title": _("Service requests"),
+                    "link": reverse_lazy("admin:catalog_servicerequest_changelist"),
                 },
             ],
         },
@@ -333,6 +338,26 @@ UNFOLD = {
                 },
             ],
         },
+        {
+            # A magic link belongs to a user. It has no reason to be
+            # findable on its own.
+            "models": [
+                "authentication.user",
+                "authentication.magiclinktoken",
+            ],
+            "items": [
+                {
+                    "title": _("Users"),
+                    "link": reverse_lazy("admin:authentication_user_changelist"),
+                },
+                {
+                    "title": _("Magic links"),
+                    "link": reverse_lazy(
+                        "admin:authentication_magiclinktoken_changelist"
+                    ),
+                },
+            ],
+        },
     ],
     "SIDEBAR": {
         "show_search": True,
@@ -350,7 +375,9 @@ UNFOLD = {
                         "link": reverse_lazy("admin:index"),
                     },
                     {
-                        "title": _("Services"),
+                        # Five models across catalog and status answer
+                        # here now, not only the services themselves.
+                        "title": _("Catalog"),
                         "icon": "lan",
                         "link": reverse_lazy("admin:catalog_service_changelist"),
                     },
@@ -380,11 +407,17 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    # EventUpdate.source and ServiceEvent.detected_by share one choice
+    # set. Without this, the generator names the same enum twice.
+    "ENUM_NAME_OVERRIDES": {
+        "EventSourceEnum": "status.choices.EventSource",
+    },
     "TAGS": [
         {"name": "meta"},
         {"name": "auth"},
         {"name": "me"},
         {"name": "catalog"},
+        {"name": "status"},
         {"name": "board"},
     ],
 }

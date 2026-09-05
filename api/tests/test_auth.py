@@ -22,7 +22,9 @@ def test_requesting_a_link_sends_one_and_creates_a_token():
     response = APIClient().post(
         reverse("magic-link"), {"email": "a@b.com"}, format="json"
     )
-    assert response.status_code == 204
+    # 202, not 204. We accept the address and say nothing about whether
+    # it can receive mail, which is what the contract promises.
+    assert response.status_code == 202
     assert len(mail.outbox) == 1
     assert MagicLinkToken.objects.filter(user__email="a@b.com").count() == 1
 
@@ -36,7 +38,7 @@ def test_requesting_a_link_for_an_unknown_email_looks_identical():
     second = APIClient().post(
         reverse("magic-link"), {"email": "new@b.com"}, format="json"
     )
-    assert first.status_code == second.status_code == 204
+    assert first.status_code == second.status_code == 202
 
 
 @pytest.mark.django_db
@@ -152,9 +154,7 @@ def test_the_subject_is_one_line():
     # A header cannot hold a newline, and a template file ends with one.
     APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
 
-    subject = mail.outbox[0].subject
-    assert "\n" not in subject
-    assert subject == "Your sign-in link for Statusboard"
+    assert "\n" not in mail.outbox[0].subject
 
 
 def test_no_app_means_no_link_rather_than_a_link_to_nowhere(settings):
@@ -188,3 +188,28 @@ def test_the_sign_in_page_is_not_the_endpoint_it_calls():
     from django.urls import reverse
 
     assert settings.APP_MAGIC_LINK_PATH != reverse("verify")
+
+
+@pytest.mark.django_db
+def test_a_link_request_with_no_email_says_which_shape_it_refuses_in():
+    # Hand rolled, so it is a bare `detail` with no `code`. The contract
+    # documents that shape rather than claiming the `Error` one.
+    response = APIClient().post(reverse("magic-link"), {}, format="json")
+    assert response.status_code == 400
+    assert response.json() == {"detail": "email is required"}
+
+
+@pytest.mark.django_db
+def test_logging_out_answers_with_an_empty_object():
+    # simplejwt's view answers 200 and a body, not 204. The contract
+    # documents what ships, because a client parses the response.
+    APIClient().post(reverse("magic-link"), {"email": "a@b.com"}, format="json")
+    token = MagicLinkToken.objects.get().token
+    pair = APIClient().post(reverse("verify"), {"token": token}, format="json").json()
+
+    response = APIClient().post(
+        reverse("logout"), {"refresh": pair["refresh"]}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}

@@ -75,7 +75,4 @@ class CStateAdapter(Adapter):
 
     def fetch_service_metadata(self):
         payload = self._payload()
-        return {
-            "name": payload.get("title", ""),
-            "description": payload.get("description", ""),
-        }
+        return {"name": payload.get("title", "")}

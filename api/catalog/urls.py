@@ -1,15 +1,31 @@
-from django.urls import include, path
-from rest_framework.routers import SimpleRouter
+from django.urls import path
 
-from catalog.views import CatalogImportView, ServiceViewSet
-
-router = SimpleRouter(trailing_slash=True)
-# basename "service" gives service-list, service-detail, and one route per
-# detail action: service-components and service-events.
-router.register("catalog/services", ServiceViewSet, basename="service")
+from catalog.views.components import ComponentDetailView, ComponentListView
+from catalog.views.imports import CatalogImportView
+from catalog.views.requests import ServiceRequestView
+from catalog.views.services import ServiceDetailView
 
 urlpatterns = [
-    # Above the router so its slug route does not shadow it.
     path("catalog/import/", CatalogImportView.as_view(), name="catalog-import"),
-    path("", include(router.urls)),
+    path(
+        "catalog/requests/",
+        ServiceRequestView.as_view(),
+        name="catalog-request",
+    ),
+    # Above the service route, so `components` is never read as a slug.
+    path(
+        "catalog/components/",
+        ComponentListView.as_view(),
+        name="component-list",
+    ),
+    path(
+        "catalog/components/<uuid:uuid>/",
+        ComponentDetailView.as_view(),
+        name="component-detail",
+    ),
+    path(
+        "catalog/services/<slug:slug>/",
+        ServiceDetailView.as_view(),
+        name="service-detail",
+    ),
 ]

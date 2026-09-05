@@ -59,22 +59,6 @@ def humanise_seconds(seconds):
 class PollRunColumns:
     """How a run reads. The same on its own table and under a poller."""
 
-    @display(
-        description=_("Result"),
-        label={"OK": "success", "Failed": "danger"},
-        ordering="ok",
-    )
-    def display_ok(self, obj):
-        return "OK" if obj.ok else "Failed"
-
-    @display(
-        description=_("Error type"),
-        ordering="error_type",
-        label={"Unrecorded": "warning"},
-    )
-    def display_error_type(self, obj):
-        return obj.error_type or "—"
-
     @display(description=_("Error"))
     def display_error(self, obj):
         return (obj.error or "—")[:90]
@@ -105,11 +89,11 @@ class PollRunInline(PollRunColumns, TabularInline):
     show_change_link = True
     per_page = 20
     fields = [
-        "display_ok",
+        "ok",
         "provider",
         "started_at",
         "finished_at",
-        "display_error_type",
+        "error_type",
         "display_error",
     ]
     readonly_fields = fields
@@ -153,6 +137,13 @@ class PollerAdmin(
     autocomplete_fields = ["service"]
     ordering = ["-consecutive_failure_count", "next_at"]
     inlines = [PollRunInline]
+    # Read from the pause flag and the failure count, so it is shown
+    # and never typed.
+    readonly_fields = ["display_health"]
+    # A checkbox in the list, not an action. A provider going down means
+    # pausing several pollers, and one Save covers any mix of pausing
+    # and resuming.
+    list_editable = ["is_paused"]
     fieldsets = [
         (None, {"fields": ["service", "is_paused", "note"]}),
         (
@@ -167,7 +158,14 @@ class PollerAdmin(
         ),
         (
             _("Health"),
-            {"fields": ["next_at", "last_success_at", "consecutive_failure_count"]},
+            {
+                "fields": [
+                    "display_health",
+                    "next_at",
+                    "last_success_at",
+                    "consecutive_failure_count",
+                ]
+            },
         ),
         audit_section(),
     ]
@@ -275,19 +273,19 @@ class PollerAdmin(
 class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     """We are the thing that tells you when services break.
 
-    So we cannot quietly break ourselves. A failing poll is a labelled row
-    here, not a number to go looking for.
+    So we cannot quietly break ourselves. A failing poll is marked on its
+    own row here, not a number to go looking for.
     """
 
     list_display = [
         "display_run",
         "display_poller",
         "display_service",
-        "display_ok",
+        "ok",
         "provider",
         "started_at",
         "display_duration",
-        "display_error_type",
+        "error_type",
         "display_related",
     ]
     date_hierarchy = "started_at"

@@ -34,7 +34,9 @@ BACKED = {
     "PathNode": "ServiceComponent",
     "Status": "ComponentStatus",
     "ServiceEvent": "ServiceEvent",
+    "ServiceEventDetail": "ServiceEvent",
     "EventRef": "ServiceEvent",
+    "EventUpdate": "EventUpdate",
     "Me": "User",
 }
 PLAIN = {
@@ -60,16 +62,18 @@ DERIVED = {
     "Poller.cooldown_seconds": "own override or /meta/ default",
     "Service.poller": "OneToOneField",
     "Component.path": "walk of parent",
-    "Component.child_count": "Count of reverse parent",
+    "Component.descendant_count": "recursive walk down parent, archived rows left out",
     "Component.is_tracked": "per-user annotation over DashboardItem",
     "Component.upcoming_maintenance": "soonest unfinished maintenance event across that M2M",
     "Component.upcoming_maintenance_count": "Count of unfinished maintenance across that M2M",
     "Component.active_incident": "newest unresolved ServiceEvent kind=incident across that M2M",
     "Component.active_incident_count": "Count of unresolved across that M2M",
-    "ServiceEvent.updates": "reverse FK from EventUpdate",
     "Me.default_dashboard_id": "Dashboard where is_default",
     "Service.in_catalog_since": "BaseModel.created_at",
     "Component.service": "ForeignKey",
+    "ServiceEventDetail.update_count": "Count of EventUpdate for this event",
+    "ServiceEventDetail.affected_count": "Count of affected_components for this event",
+    "ServiceEventDetail.last_update_at": "newest EventUpdate.posted_at for this event",
 }
 INHERITED = {"id", "created_at", "updated_at", "created_by", "updated_by"}
 

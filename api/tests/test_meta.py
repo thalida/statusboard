@@ -36,7 +36,9 @@ def test_meta_publishes_every_enum():
         "status_source",
         "status_page_provider",
         "event_kind",
+        "event_source",
         "event_phase",
+        "event_phase_state",
     }
     assert body["enums"]["severity"]["0"] == "Major outage"
     assert body["enums"]["severity"]["5"] == "Operational"
@@ -44,6 +46,69 @@ def test_meta_publishes_every_enum():
     assert set(body["enums"]["event_phase"]) == {"incident", "maintenance"}
     assert "investigating" in body["enums"]["event_phase"]["incident"]
     assert "scheduled" in body["enums"]["event_phase"]["maintenance"]
+    # The `phase=` filter's own two values. Without them a client reads
+    # the values off the OpenAPI enum and writes the labels itself.
+    assert body["enums"]["event_phase_state"] == {"open": "Open", "closed": "Closed"}
+
+
+@pytest.mark.django_db
+def test_fields_prunes_the_top_level():
+    # /meta/ built its dict and skipped the serializer that prunes it.
+    # ?fields= was declared but did nothing.
+    body = APIClient().get(reverse("meta") + "?fields=max_page_size").json()
+    assert body == {"max_page_size": 200}
+
+
+@pytest.mark.django_db
+def test_fields_prunes_inside_enums():
+    # `enums` is a plain dict. FieldsMixin only prunes a nested
+    # serializer, so a dotted path into `enums` reached nothing.
+    url = reverse("meta") + "?fields=enums.status_source"
+    body = APIClient().get(url).json()
+    assert body == {
+        "enums": {
+            "status_source": {
+                "provider": "Provider",
+                "components": "Components",
+                "incidents": "Incidents",
+            }
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_fields_enums_with_no_dotted_path_keeps_every_enum():
+    # `?fields=enums` names the whole map, not one entry in it.
+    body = APIClient().get(reverse("meta") + "?fields=enums").json()
+    assert set(body) == {"enums"}
+    assert set(body["enums"]) == {
+        "severity",
+        "status_source",
+        "status_page_provider",
+        "event_kind",
+        "event_source",
+        "event_phase",
+        "event_phase_state",
+    }
+
+
+@pytest.mark.django_db
+def test_fields_keeps_two_dotted_paths_under_enums():
+    # Two dotted paths under enums must both survive. Parsing only the
+    # last one would silently drop status_source here.
+    url = reverse("meta") + "?fields=enums.status_source,enums.event_kind"
+    body = APIClient().get(url).json()
+    assert set(body["enums"]) == {"status_source", "event_kind"}
+
+
+@pytest.mark.django_db
+def test_fields_refuses_an_unknown_name_under_enums():
+    # `enums` is a plain dict, filtered by hand, so `_prune` never saw
+    # this name. It answered `200 {"enums": {}}`, which is the silent
+    # empty payload the 400 exists to prevent.
+    response = APIClient().get(reverse("meta") + "?fields=enums.nonsense")
+    assert response.status_code == 400
+    assert response.json() == {"fields": ["Unknown field: nonsense."]}
 
 
 @pytest.mark.django_db
@@ -156,7 +221,7 @@ def test_every_throttled_view_names_a_rate_that_exists():
 
     from api.defaults import Throttle
     from authentication.views import MagicLinkView
-    from catalog.views import CatalogImportView
+    from catalog.views.imports import CatalogImportView
 
     named = {MagicLinkView.throttle_scope, CatalogImportView.throttle_scope}
     rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]

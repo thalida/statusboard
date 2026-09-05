@@ -6,35 +6,34 @@ from django.utils import timezone
 from django.utils.text import slugify
 from simple_history.models import HistoricalRecords
 
-from catalog.choices import StatusPageProvider
+from catalog.choices import ServiceSource, StatusPageProvider
 from common.models import BaseModel
 from common.queries import related_count
 
 
 class ServiceQuerySet(models.QuerySet):
     def for_display(self, user=None):
-        """Everything `ServiceSerializer` reads, without a query a row.
+        """Everything `ServiceSerializer` reads, in four queries.
 
-        Three fields asked per service, and one of them serialized a
-        component, which asked seven more.
+        The service page reads one service. Three of its fields are
+        counted or nested. The nested one is a whole component, which
+        asks seven more.
         """
         from django.contrib.auth.models import AnonymousUser
+
+        from catalog.queries import component_count
 
         tracked = models.Value(0, output_field=models.IntegerField())
         if user is not None and not isinstance(user, AnonymousUser):
             tracked = related_count(
-                ServiceComponent.objects.filter(boards__owner=user), "service"
+                ServiceComponent.objects.visible().filter(boards__owner=user),
+                "service",
             )
         return (
             self.select_related("status_page", "poller")
             .annotate(
-                _component_count=related_count(
-                    ServiceComponent.objects.filter(
-                        is_overall=False, is_archived=False
-                    ),
-                    "service",
-                ),
-                _tracked_component_count=tracked,
+                component_count=component_count(),
+                tracked_component_count=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -42,7 +41,7 @@ class ServiceQuerySet(models.QuerySet):
                     queryset=ServiceComponent.objects.filter(
                         is_overall=True
                     ).for_display(user),
-                    to_attr="_overall_components",
+                    to_attr="overall_components",
                 )
             )
         )
@@ -55,10 +54,16 @@ class Service(BaseModel):
         blank=True,
         help_text="Derived from the name when left blank.",
     )
-    description = models.TextField(blank=True, default="")
     logo = models.URLField(blank=True, default="")
     homepage_url = models.URLField(blank=True, default="")
-    is_featured = models.BooleanField(verbose_name="Featured", default=False)
+    # How the row arrived. `created_by` says who, and this says how.
+    # Admin only: no screen reads it, so no serializer carries it.
+    source = models.CharField(
+        max_length=32,
+        choices=ServiceSource.choices,
+        default=ServiceSource.MANUAL,
+        db_default=ServiceSource.MANUAL,
+    )
     objects = ServiceQuerySet.as_manager()
 
     history = HistoricalRecords()
@@ -76,34 +81,16 @@ class Service(BaseModel):
     def overall_component(self):
         """The rollup component, which is the service's own status.
 
-        This and the two below read what `for_display` prepared. A row
-        fetched without it asks instead. The underscore names are that
-        queryset's, so a rename cannot leave a reader behind.
+        `for_display` prefetches it. A row fetched without that asks
+        instead, because a single service nests one.
+
+        The name is singular against the plural prefetch, so the two
+        never collide.
         """
-        prepared = getattr(self, "_overall_components", None)
+        prepared = getattr(self, "overall_components", None)
         if prepared is None:
             return self.components.filter(is_overall=True).first()
         return prepared[0] if prepared else None
-
-    def component_count(self):
-        """The parts. The rollup is excluded, because it is the service."""
-        prepared = getattr(self, "_component_count", None)
-        if prepared is not None:
-            return prepared
-        return self.components.filter(is_overall=False, is_archived=False).count()
-
-    def tracked_component_count(self, user):
-        """How many parts this user has on a board."""
-        if user is None or not user.is_authenticated:
-            return 0
-        prepared = getattr(self, "_tracked_component_count", None)
-        if prepared is not None:
-            return prepared
-        return (
-            ServiceComponent.objects.filter(service=self, boards__owner=user)
-            .distinct()
-            .count()
-        )
 
     def ensure_poller(self):
         """Every service is polled, so every service has one.
@@ -127,9 +114,10 @@ class Service(BaseModel):
         # save. This is the smaller of the two.
         from polling.models import Poller
 
-        # Nobody adds this one, so the system account signs it. A blank
-        # author would read as one that was lost.
-        author = get_user_model().objects.system()
+        # A person caused the service, so the poller they spawned
+        # carries them. The system account signs it only when the
+        # service has none. A blank author reads as one that was lost.
+        author = self.created_by or get_user_model().objects.system()
         poller, _ = Poller.objects.get_or_create(
             service=self,
             defaults={"created_by": author, "updated_by": author},
@@ -200,18 +188,86 @@ class StatusPage(BaseModel):
         )
 
 
+class ServiceRequest(BaseModel):
+    """A status page somebody asked for and we could not read.
+
+    One row per URL, not one per request. A row per request would
+    answer one question twice once a URL was triaged.
+
+    There is no `requested_by`. `BaseModel.created_by` already holds
+    it, null when the asker was signed out. The v1 spec deleted
+    `Service.added_by` for the same reason.
+
+    There is no state column either. Nothing closes a request yet, so
+    it would have no writer.
+    """
+
+    url = models.URLField(unique=True)
+    # The demand signal. Nothing else records how often a URL was
+    # asked for. This is that record, not a copy of one.
+    request_count = models.PositiveIntegerField(default=1)
+    last_requested_at = models.DateTimeField(default=timezone.now)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-request_count", "-last_requested_at"]
+
+    def __str__(self):
+        return self.url
+
+
 class ServiceComponentQuerySet(models.QuerySet):
+    def visible(self):
+        """The components a caller is served, anywhere.
+
+        The provider stopped publishing an archived one. Every list,
+        every count, the detail and the track write read this. So no two
+        of them can answer the same question differently.
+
+        It is not part of `for_display`. That queryset also prefetches a
+        service's rollup, and a service whose rollup is archived still
+        needs a header status.
+        """
+        return self.filter(is_archived=False)
+
+    def search(self, q):
+        """Narrow to what every typed word describes.
+
+        A word matches the component's own name, its service's or its
+        parent's. So `twilio` reaches Twilio's SMS row, and `messaging`
+        reaches it through the group above it. Several words are an AND,
+        so `twilio sms` reaches that row and not its siblings.
+
+        One level up, and no further. A component three deep is not
+        found by its grandparent's name. `parent__name` is a join read
+        at query time, so a rename needs nothing rewritten. Storing the
+        ancestry is what forced a subtree rewrite on every rename.
+
+        The result is unordered. The list view decides what leads a
+        search. An ordering backend runs after this and would discard
+        any order set here.
+        """
+        rows = self
+        for term in q.split():
+            rows = rows.filter(
+                models.Q(name__icontains=term)
+                | models.Q(service__name__icontains=term)
+                | models.Q(parent__name__icontains=term)
+            )
+        return rows
+
     def for_display(self, user=None):
         """Everything `ComponentSerializer` reads, in four queries.
 
         It answered seven fields with a query each, per row. A page of
         fifty cost three hundred and fifty six.
 
-        A row that skipped this still serializes, because a single
-        service nests one. So the fast path has to be asked for.
+        Every path that serializes a component calls this. A path that
+        forgets raises `AttributeError` on the first count, rather than
+        running one query a row in silence.
         """
         from django.contrib.auth.models import AnonymousUser
 
+        from catalog.queries import descendant_count
         from status.models import ComponentStatus, ServiceEvent
 
         tracked = models.Value(None, output_field=models.BooleanField())
@@ -227,8 +283,8 @@ class ServiceComponentQuerySet(models.QuerySet):
         return (
             self.select_related("service", "parent", "parent__parent")
             .annotate(
-                _child_count=related_count(self.model.objects, "parent"),
-                _is_tracked=tracked,
+                descendant_count=descendant_count(),
+                is_tracked=tracked,
             )
             .prefetch_related(
                 models.Prefetch(
@@ -238,11 +294,14 @@ class ServiceComponentQuerySet(models.QuerySet):
                     queryset=ComponentStatus.objects.filter(
                         ended_at__isnull=True
                     ).select_related("component__service__poller"),
-                    to_attr="_open_statuses",
+                    to_attr="open_statuses",
                 ),
                 models.Prefetch(
                     "events",
                     queryset=ServiceEvent.objects.live(),
+                    # The one name that keeps its underscore. Its reader
+                    # is `live_events`, so the plain name would shadow
+                    # the method that reads it.
                     to_attr="_live_events",
                 ),
             )
@@ -266,6 +325,11 @@ class ServiceComponent(BaseModel):
 
     status_page_order = models.IntegerField(verbose_name="Page order", default=0)
     is_overall = models.BooleanField(verbose_name="Overall", default=False)
+    # Ticked on any component. The suggested sort leads with it. A
+    # featured rollup surfaces its service, and a featured leaf
+    # surfaces that part. Severity is the next key, so it breaks the
+    # tie among the featured rows.
+    is_featured = models.BooleanField(verbose_name="Featured", default=False)
     # Archiving is the flag. The date is kept because `updated_at`
     # moves on every save, so a later rename would erase it. `save` sets
     # the date from the flag, and a constraint holds them together.
@@ -282,6 +346,12 @@ class ServiceComponent(BaseModel):
 
     history = HistoricalRecords()
 
+    # The rollup is never a parent, but `is_overall` belongs to the
+    # parent row, not this one. A `CheckConstraint` sees one row, so it
+    # cannot read a joined column and cannot express this. Migration
+    # 0010 adds a trigger instead, named `rollup_is_not_a_parent`. It
+    # checks both directions: a row parented under the rollup, and a
+    # row with children gaining the flag.
     class Meta(BaseModel.Meta):
         constraints = [
             models.UniqueConstraint(
@@ -302,8 +372,9 @@ class ServiceComponent(BaseModel):
     def live_events(self, kind):
         """The live events of one kind.
 
-        This and the three below read what `for_display` prepared. A row
-        fetched without it asks instead.
+        This and the two below read what `for_display` prepared. Each
+        picks one row, or one kind, out of a prefetch. So the method
+        and the attribute cannot share a name.
         """
         prepared = getattr(self, "_live_events", None)
         if prepared is None:
@@ -312,23 +383,16 @@ class ServiceComponent(BaseModel):
 
     def open_status(self):
         """The status span still running, if there is one."""
-        prepared = getattr(self, "_open_statuses", None)
+        prepared = getattr(self, "open_statuses", None)
         if prepared is None:
             return self.statuses.filter(ended_at__isnull=True).first()
         return prepared[0] if prepared else None
-
-    def child_count(self):
-        """How many components sit under this one."""
-        if self.is_overall:
-            return 0
-        prepared = getattr(self, "_child_count", None)
-        return self.children.count() if prepared is None else prepared
 
     def is_tracked_by(self, user):
         """Whether this user has it on a board. Null if nobody asked."""
         if user is None or not user.is_authenticated:
             return None
-        prepared = getattr(self, "_is_tracked", None)
+        prepared = getattr(self, "is_tracked", None)
         if prepared is None:
             return self.boards.filter(owner=user).exists()
         return prepared
@@ -352,9 +416,11 @@ class ServiceComponent(BaseModel):
     def clean(self):
         """A component sits under one of its own service's components.
 
-        Nothing in the column says whose component the parent is.
-        Without this a service's tree reaches into another service's,
-        and a page shows one product's components under another.
+        Nothing in the column says whose component the parent is, or
+        that the parent is not the rollup. Without the first check a
+        service's tree reaches into another service's. Without the
+        second a rollup gains children, and every descendant count and
+        breadcrumb under it reads wrong.
         """
         super().clean()
         if self.parent_id is None:
@@ -365,21 +431,50 @@ class ServiceComponent(BaseModel):
             raise ValidationError(
                 {"parent": "That component belongs to another service."}
             )
+        if self.parent.is_overall:
+            raise ValidationError(
+                {"parent": "The overall component is never a parent."}
+            )
 
     @property
     def ancestors(self):
         """The components above this one, top down.
 
         A provider can nest a component under another. The chain is what
-        tells you where it sits on the status page. The guard is for bad
-        data: the column points at its own table, so a loop is possible.
+        tells you where it sits on the status page.
+
+        Two rules end the walk. A loop is possible, because the column
+        points at its own table. And the chain stops at the service.
+        Moving a component leaves its old children pointing across. A
+        step there names a row this service's lists never hold.
+
+        `catalog.queries` walks the other direction under the same two
+        rules. The rows here are already loaded, so this stays Python.
         """
         chain, node, seen = [], self.parent, {self.pk}
-        while node is not None and node.pk not in seen:
+        while (
+            node is not None
+            and node.pk not in seen
+            and node.service_id == self.service_id
+        ):
             seen.add(node.pk)
             chain.append(node)
             node = node.parent
         return list(reversed(chain))
+
+    @property
+    def visible_ancestors(self):
+        """The ancestors a caller is served, top down.
+
+        `ServiceComponentQuerySet.visible` is the same rule in SQL.
+        `ancestors` has already loaded these rows, so asking the
+        database again would cost a query a row.
+
+        A dropped step makes the chain shorter, never broken. Every
+        other reader answers "not served" by leaving the row out. A
+        marker node would carry an id nothing can fetch.
+        """
+        return [row for row in self.ancestors if not row.is_archived]
 
     @property
     def path(self):

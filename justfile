@@ -6,20 +6,66 @@ set dotenv-path := "api/.env.local"
 # then never share a port or a database. See bin/worktree-env.py.
 wt := 'eval "$(python3 bin/worktree-env.py)"'
 
-# List the recipes. Keep first: bare `just` runs whatever recipe comes first.
+# Keep first: bare `just` runs whatever recipe comes first.
+
+# List the recipes.
 default:
-    @just --list
+    @just --list --unsorted
 
-# One-time setup. Every step it calls is runnable on its own.
-init: env up sync migrate seed
-    pre-commit install
-    @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
+# Applying migrations here is a little surprising: starting a server
+# that also changes the database. The human asked for exactly this,
+# since a fresh worktree that only warns still fails unexplained.
 
-# Write .env.local, asking for the admin once. Worktrees copy main's.
-env:
-    @python3 bin/make-env.py
+# Ctrl-C stops the server and the poller together.
 
-# Show this worktree's ports, database and compose project.
+# Run the app: stores, migrations, server, poller.
+[group('Daily')]
+dev: up migrate
+    @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
+      echo "http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
+      cd api ; \
+      uv run celery -A api worker -B -l info & \
+      uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
+
+# Arguments pass to both, so `just test -k foo` filters each.
+
+# Run the test suite, host and bin/ scripts.
+[group('Daily')]
+test *args:
+    @{{wt}} ; cd api && uv run pytest -n auto {{args}}
+    @python3 -m unittest discover -s bin/tests -v {{args}}
+
+# Fix lint and format the code.
+[group('Daily')]
+lint:
+    cd api && uv run ruff check --fix . && uv run ruff format .
+
+# Slower than `just test`, and the answer that counts: it proves the
+# image rather than the host. Run it before opening a pull request.
+# The two stdlib-only checks run on the host, because a container costs
+# more than it saves. `bin/tests/test_merge_gate.py` holds the two lists
+# together, in one direction: everything here also runs in CI.
+#
+# CI runs one more. It scans the image with Trivy for HIGH and CRITICAL
+# CVEs and fails the merge on a hit. That needs the network and a
+# vulnerability database, so it stays out of this recipe.
+
+# Each check runs where CI runs it.
+
+# Every CI check but the image scan.
+[group('Daily')]
+check: image
+    docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
+    docker compose -f docker-compose.test.yml run --rm ruff
+    docker compose -f docker-compose.test.yml run --rm docs
+    @python3 bin/check_prose.py
+    @python3 -m unittest discover -s bin/tests -v
+    docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
+      -c 'python manage.py makemigrations --check --dry-run'
+    docker compose -f docker-compose.test.yml down -v
+
+# Show this worktree's ports and database.
+[group('Daily')]
 info:
     @{{wt}} ; echo "worktree   $WORKTREE_SLUG" ; \
       echo "compose    $COMPOSE_PROJECT_NAME" ; \
@@ -28,21 +74,42 @@ info:
       echo "server     http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
       echo "client     http://$WORKTREE_SLUG.localhost:$CLIENT_PORT (reserved)"
 
-# Start Postgres and Redis for this worktree, waiting until they are healthy.
+# Check comments and docstrings against AGENTS.md.
+[group('Daily')]
+prose *args:
+    @python3 bin/check_prose.py {{args}}
+
+# Every step it calls is runnable on its own.
+
+# One-time setup.
+[group('Lifecycle')]
+init: env up sync migrate seed
+    pre-commit install
+    @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
+
+# Start Postgres and Redis, and wait for both.
+[group('Lifecycle')]
 up:
     @{{wt}} ; docker compose up -d --wait ; \
       echo "postgres localhost:$POSTGRES_HOST_PORT  redis localhost:$REDIS_HOST_PORT"
 
-# Stop them, keeping the data. `just down -v` drops this worktree's database.
-down *args:
-    @{{wt}} ; docker compose down {{args}}
+# Apply migrations.
+[group('Lifecycle')]
+migrate:
+    @{{wt}} ; cd api && uv run python manage.py migrate
+
+# Drop this database and build it again.
+[group('Lifecycle')]
+reset:
+    @{{wt}} ; docker compose down -v ; just up ; just migrate ; just seed-live
 
 # Also clears what an aborted `just check` left, under the compose
 # project that file uses. Its database is a tmpfs, so it holds nothing.
 # Add `-v` to drop this checkout's own database too.
 
-# Stop this checkout's containers and remove its networks.
-teardown *args:
+# Stop this checkout's containers.
+[group('Lifecycle')]
+clean *args:
     @{{wt}} ; DIR=$(basename "$PWD") ; \
       docker compose down --remove-orphans {{args}} ; \
       docker compose -p "$DIR" -f docker-compose.test.yml down -v --remove-orphans ; \
@@ -53,69 +120,28 @@ teardown *args:
           echo "[just]   git branch -d $(git rev-parse --abbrev-ref HEAD)" ; \
       fi
 
-# Install Python dependencies.
-sync:
-    cd api && uv sync
+# Fetches real status pages, so it needs the network. Fills an
+# empty database: admin, a small catalog, one tracked service.
 
-# Apply migrations to this worktree's database.
-migrate:
-    @{{wt}} ; cd api && uv run python manage.py migrate
-
-# Create the admin in this worktree's database, from .env.local. Never asks.
-seed:
-    @{{wt}} ; cd api && uv run python manage.py seed_admin
-
-# Fetches three real status pages, so it needs the network.
-
-# Fill an empty local database: admin, a small catalog, one tracked service.
-seed-dev:
+# Fill an empty database with real data.
+[group('Data')]
+seed-live:
     @{{wt}} ; cd api && uv run python manage.py seed_dev
 
-# Drop this worktree's database and build it again from nothing.
-reset:
-    @{{wt}} ; docker compose down -v ; just up ; just migrate ; just seed-dev
+# Reports any page that moved or broke.
 
-# Probe the recorded status pages and report any that moved or broke.
-check-pages *args:
+# Probe the recorded status pages.
+[group('Data')]
+probe-pages *args:
     @{{wt}} ; cd api && uv run python manage.py check_status_pages {{args}}
-
-# Run the test suite.
-test:
-    @{{wt}} ; cd api && uv run pytest -n auto
-
-# Run the test suite with the coverage gate.
-test-cov:
-    @{{wt}} ; cd api && uv run pytest -n auto --cov-fail-under=85
-
-# Fix lint and format the code.
-lint:
-    cd api && uv run ruff check --fix . && uv run ruff format .
-
-# Check comments and docstrings against AGENTS.md.
-prose *args:
-    @python3 bin/check_prose.py {{args}}
-
-# Slower than `just test`, and the answer that counts: it proves the
-# image rather than the host. Run it before opening a pull request.
-
-# Everything CI runs, in the containers CI runs it in.
-check: image
-    docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
-    docker compose -f docker-compose.test.yml run --rm ruff
-    docker compose -f docker-compose.test.yml run --rm docs
-    @python3 bin/check_prose.py
-    docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
-      -c 'python manage.py makemigrations --check --dry-run'
-    docker compose -f docker-compose.test.yml down -v
-
-# Build the deployment image. `check` runs against this.
-image:
-    docker build -t statusboard-api:test api
 
 # The tag triggers release.yml: build, sign, smoke test, deploy. A tag
 # left behind by a failed push is reused rather than duplicated.
 
-# Tag and push a release (v1.2.3, v1.2.3-rc.1). Ships to production.
+# Takes v1.2.3 or v1.2.3-rc.1.
+
+# Tag and push a release. Ships to production.
+[group('Release')]
 release VERSION:
     @set -e ; \
      VERSION="{{VERSION}}" ; \
@@ -164,7 +190,8 @@ release VERSION:
 # Credentials come from api/.env.local. No app argument, so this repo can
 # only ever deploy its own stack.
 
-# Redeploy the current image without cutting a release.
+# Redeploy without cutting a release.
+[group('Release')]
 deploy:
     @set -e ; \
      APP="${FORGEJO_DEPLOY_APP:-}" ; \
@@ -188,10 +215,29 @@ deploy:
      fi ; \
      echo "[deploy] queued. Watch: $HOST/${FORGEJO_REPO}/actions"
 
-# Run the app: server and poller together. Ctrl-C stops both.
-dev:
-    @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
-      echo "http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
-      cd api ; \
-      uv run celery -A api worker -B -l info & \
-      uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
+# Everything below is a step of `init` or `check`, not a command a
+# person reaches for. `just <name>` still runs each one directly.
+
+# Asks for the admin once. A worktree copies main's.
+
+# Write .env.local.
+[private]
+env:
+    @python3 bin/make-env.py
+
+# Install Python dependencies.
+[private]
+sync:
+    cd api && uv sync
+
+# Never asks: the values come from .env.local.
+
+# Create the admin.
+[private]
+seed:
+    @{{wt}} ; cd api && uv run python manage.py seed_admin
+
+# Build the deployment image. `check` runs against this.
+[private]
+image:
+    docker build -t statusboard-api:test api

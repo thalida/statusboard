@@ -2,7 +2,7 @@
 
 `ErrorSerializer` and the codes were declared and documented from the
 start, and nothing raised them. Three different shapes came back
-instead: DRF's `detail`, a field map from a serializer, and an
+instead. DRF's `detail`, a field map from a serializer, and an
 uncaught exception as a 500.
 
 A client is generated from the contract, so it looks for `code` and
@@ -49,8 +49,8 @@ def _code(exception):
         return exception.code
     if isinstance(exception, Throttled):
         return ErrorCode.THROTTLED
-    # Django raises its own 404 and DRF translates it, so the exception
-    # reaching here is `Http404` rather than DRF's `NotFound`.
+    # Django raises its own 404, and DRF translates it. The exception
+    # reaching here is `Http404`, not DRF's `NotFound`.
     if isinstance(exception, NotFound | Http404):
         return ErrorCode.NOT_FOUND
     return None

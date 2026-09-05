@@ -38,7 +38,7 @@ class ServiceRefSerializer(FieldsMixin, serializers.ModelSerializer):
         fields = ["id", "slug", "name", "logo"]
 
 
-class PathNodeSerializer(serializers.ModelSerializer):
+class PathNodeSerializer(FieldsMixin, serializers.ModelSerializer):
     """One step above a component, enough to link to it.
 
     A joined string named the ancestors and gave a client nothing to
@@ -54,7 +54,7 @@ class PathNodeSerializer(serializers.ModelSerializer):
 class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
-    child_count = serializers.SerializerMethodField()
+    descendant_count = serializers.SerializerMethodField()
     upcoming_maintenance = serializers.SerializerMethodField()
     upcoming_maintenance_count = serializers.SerializerMethodField()
     active_incident = serializers.SerializerMethodField()
@@ -69,7 +69,7 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
             "name",
             "path",
             "parent",
-            "child_count",
+            "descendant_count",
             "is_overall",
             "archived_at",
             "status",
@@ -103,13 +103,21 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         # `ancestors` walks the chain and guards the loop a self
         # referencing column allows. This walked it a second time and
         # did not.
+        #
+        # Archived steps are left out. Each node carries an id a client
+        # links to, and an archived component answers 404.
         if row.is_overall:
             return []
-        return PathNodeSerializer(row.ancestors, many=True).data
+        return PathNodeSerializer(
+            row.visible_ancestors,
+            many=True,
+            context=self.context,
+            fields_tree=self.child_tree("path"),
+        ).data
 
     @extend_schema_field(serializers.IntegerField())
-    def get_child_count(self, row):
-        return row.child_count()
+    def get_descendant_count(self, row):
+        return row.descendant_count
 
     @extend_schema_field(EventRefSerializer(allow_null=True))
     def get_upcoming_maintenance(self, row):
@@ -152,7 +160,7 @@ class ComponentSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer)
         return row.is_tracked_by(self.viewer)
 
 
-class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
+class ServiceSerializer(FieldsMixin, serializers.ModelSerializer):
     status_page = StatusPageSerializer(read_only=True)
     poller = PollerSerializer(read_only=True)
     overall_component = serializers.SerializerMethodField()
@@ -166,7 +174,6 @@ class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
             "id",
             "slug",
             "name",
-            "description",
             "homepage_url",
             "logo",
             "in_catalog_since",
@@ -192,18 +199,18 @@ class ServiceSerializer(ViewerMixin, FieldsMixin, serializers.ModelSerializer):
 
     @extend_schema_field(serializers.IntegerField())
     def get_component_count(self, service):
-        return service.component_count()
+        return service.component_count
 
     @extend_schema_field(serializers.IntegerField())
     def get_tracked_component_count(self, service):
-        return service.tracked_component_count(self.viewer)
+        return service.tracked_component_count
 
 
 class ImportRequestSerializer(serializers.Serializer):
     """The body of POST /catalog/import/.
 
-    Named `status_page_url`, not `url`, because that is what the contract
-    documents and the contract is what the client is written against.
+    Named `status_page_url`, not `url`. The contract names it that way,
+    and the client follows the contract.
     """
 
     status_page_url = serializers.URLField()
@@ -222,3 +229,9 @@ class ImportRequestSerializer(serializers.Serializer):
         except BlockedAddress as error:
             raise serializers.ValidationError(str(error)) from error
         return value
+
+
+class ServiceRequestSerializer(serializers.Serializer):
+    """The body of POST /catalog/requests/."""
+
+    url = serializers.URLField()

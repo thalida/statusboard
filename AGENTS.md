@@ -4,7 +4,7 @@
 
 Comments, docstrings, commit messages and documentation follow ASD-STE100.
 
-- One idea per sentence. Under 20 words.
+- One idea per sentence. 20 words or fewer.
 - Active voice. Present tense.
 - No em dashes. A qualifier goes in brackets: `GitHub (2026-08-30 15:32)`.
 - A standalone `—` is allowed as an empty-cell marker. It is a placeholder,
@@ -27,6 +27,9 @@ Delete a comment when the reason it recorded stops being true.
 - No sample output. It goes stale and nobody re-runs it.
 - No section nobody asked for.
 - A README describes the repository as it is now, not as it changed.
+- A spec describes the system, so it moves with the code. A plan
+  records what somebody intended, so it stays as written. That includes
+  the places where the plan turned out to be wrong.
 
 ## Engineering
 
@@ -53,6 +56,28 @@ edit that worked. Open the page. Read the value back.
 **Prefer the framework's own configuration** over a stylesheet or a
 template that overrides it. An override patches one instance of a
 problem; the setting fixes the class.
+
+## Layout
+
+Which file a piece of code goes in, by what it is.
+
+- An app keeps one `views.py` until it serves more than one resource.
+  Then it becomes `views/`, one module per resource or per long-lived
+  operation. `catalog` serves three resources, and `imports.py` is an
+  operation on `Service`. A sub-resource stays with its parent, so an
+  event's update log is not a second module.
+- A **queryset method** is chainable vocabulary. It lives on the
+  queryset in `models.py`, because a caller chains it onto a query.
+- A **bare expression** is handed to `annotate()`. It lives in
+  `queries.py`, because nothing chains it.
+- `queries.py` is row-scoped and `aggregates.py` is collection-scoped.
+  One lands in a serialized row. The other lands in the `aggregates`
+  key beside `results`.
+- `common` holds no expression that describes an app. `common/ordering.py`
+  records this as a scar. The domain subqueries lived there, and the base
+  layer imported the app it describes. Naming an app's choices to publish
+  them is another thing, and it is fine: `/meta/` lists every enum, and
+  one place has to.
 
 ## Settings
 
@@ -91,11 +116,45 @@ Every behaviour change carries a test. The suite runs with no network:
 adapters are tested against recorded fixtures.
 
 A test's comment says what would break if the assertion failed.
+If the answer is "nothing", the test does not earn its place.
+
+**Assert on behaviour, not arrangement.** Field order, section titles and
+`list_display` contents change for cosmetic reasons. A test that pins
+them fails on a harmless edit and catches no defect. One pinned the four
+component fieldsets in order. Moving two lines then cost a test edit, and
+it had never caught a bug.
+
+**A test fails only when something is broken.** A reasonable refactor
+breaks a wrong test and nothing else.
+
+**Never restate the implementation.** A test that computes its expected
+value the way the code does passes while both are wrong. Write the
+expected value out.
+
+**No test-only production code.** No argument, method, flag or branch
+exists so that a test can reach something. A path no caller reaches is a
+path the test should not reach either.
+
+**Enter through the front door.** Use the API client, the admin client or
+the management command. Call an internal directly only when no pathway
+reaches it.
+
+**Every assertion can fail.** Watch it fail once, before the code exists.
+`assert fieldsets[3] is not None` held on every possible input.
+
+**Test what this project decided.** Django and DRF are already tested.
+That a `CharField` stores a string is theirs. That a poller claims an
+incident inside the window is ours.
+
+**In the admin, test the logic, not the form.** Worth pinning: a
+read-only field the model maintains, a queryset the page filters, what
+`list_editable` writes, which user `created_by` records. Not which
+fields appear, or in what order.
 
 ```sh
-just test        # the suite
-just test-cov    # with the coverage gate
+just test        # the suite, host and bin/ scripts together
 just lint        # ruff check and format
+just check       # every check CI runs, coverage gate included
 ```
 
 ## Database
@@ -116,6 +175,31 @@ does not help answer it does not belong there.
 
 One theme, dark. `UNFOLD["THEME"]` forces it, so a class with no `dark:`
 variant still lands on the right ground.
+
+**The change view holds every field.** A model field missing from every
+fieldset is invisible and unreachable, and a changelist column with no
+place on the form makes opening a row answer less than the list did.
+`Service.source` recorded how a service arrived and reached no form at
+all. A value computed from related rows lands as a readonly field, not
+nowhere. So does provenance: a field recording how a row arrived is
+shown and never typed, because an editable one can be made to lie.
+
+**A column header is the name of its field.** The list and the form show
+the same data, so they use the same word. A column headed `State` over
+`is_archived` sent a reader looking for a field of that name. When the
+two disagree the header gives way: the field name is what the model, the
+API, the filters and every query already say.
+
+**A column that only redraws a field is the field.** Put the field name
+in `list_display`. Django draws a boolean as a tick, takes the header
+from the model and sorts the column, none of it asked for. Hand-rolling
+those three is where the header `State` came from. Keep a method only
+where it does what a field cannot: composing several, following a
+relation, or building a link.
+
+**A column the list shows, the list filters.** If it is worth a column,
+it is worth narrowing by. The converse does not hold: a filter may
+narrow by something no column shows.
 
 ## Commits
 

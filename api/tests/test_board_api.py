@@ -8,7 +8,6 @@ from dashboards.models import Dashboard, DashboardItem
 from status.choices import (
     EventKind,
     IncidentPhase,
-    MaintenancePhase,
     Severity,
     StatusSource,
 )
@@ -22,20 +21,11 @@ from tests.factories import (
 
 
 @pytest.fixture
-def board(db):
-    user = User.objects.create(email="a@b.com")
-    return user.default_dashboard
-
-
-@pytest.fixture
-def client(board):
-    from rest_framework_simplejwt.tokens import RefreshToken
-
-    api = APIClient()
-    api.credentials(
-        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(board.owner).access_token}"
-    )
-    return api
+def client(authenticated_client):
+    # Every test in this module reads or writes one board as its
+    # owner. The plain `client` fixture stays anonymous everywhere
+    # else, so this override is local to this module.
+    return authenticated_client
 
 
 def _track(board, severity=Severity.OPERATIONAL, slug=None):
@@ -81,85 +71,66 @@ def test_all_returns_every_tracked_component(client, board):
 
 
 @pytest.mark.django_db
-def test_the_incidents_tab_filters_on_event_kind(client, board):
-    with_incident = _track(board)
-    _event(with_incident, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
+def test_the_board_leaves_out_an_archived_component(client, board):
+    # The provider stopped publishing it, so no screen shows it. A board
+    # row that no other list holds would have nowhere to link to.
     _track(board)
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert len(client.get(url).json()["results"]) == 1
+    gone = _track(board)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
 
-
-@pytest.mark.django_db
-def test_a_resolved_incident_does_not_put_a_row_on_the_incidents_tab(client, board):
-    component = _track(board)
-    _event(
-        component, EventKind.INCIDENT, IncidentPhase.RESOLVED, ends_at=timezone.now()
-    )
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert client.get(url).json()["results"] == []
-
-
-@pytest.mark.django_db
-def test_the_event_filter_binds_both_conditions_to_the_same_event(client, board):
-    # `ServiceEvent` and `ServiceComponent` are many-to-many.
-    # Two parameters filter twice and can match two different events.
-    component = _track(board)
-    _event(
-        component, EventKind.INCIDENT, IncidentPhase.RESOLVED, ends_at=timezone.now()
-    )
-    _event(component, EventKind.MAINTENANCE, MaintenancePhase.IN_PROGRESS)
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=incident"
-    assert client.get(url).json()["results"] == []
-
-
-@pytest.mark.django_db
-def test_scheduled_maintenance_appears_on_the_maintenance_tab_while_reading_operational(
-    client, board
-):
-    # A window three days out leaves severity 5.
-    # Severity cannot select it, so the tab filters on the event.
-    component = _track(board, severity=Severity.OPERATIONAL)
-    _event(
-        component,
-        EventKind.MAINTENANCE,
-        MaintenancePhase.SCHEDULED,
-        starts_at=timezone.now() + timezone.timedelta(days=3),
-    )
-    url = reverse("board-components", kwargs={"uuid": board.id}) + "?event=maintenance"
-    rows = client.get(url).json()["results"]
-    assert len(rows) == 1
-    assert rows[0]["status"]["severity"] == Severity.OPERATIONAL
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    body = client.get(url).json()
+    assert body["aggregates"]["total"] == 1
+    assert str(gone.id) not in [r["id"] for r in body["results"]]
 
 
 @pytest.mark.django_db
 def test_one_fetch_fills_every_chip(client, board):
-    # One response must fill all three chips.
+    # One response must fill every chip on the board.
     # Otherwise the client makes a request per chip.
-    broken = _track(board, severity=Severity.MAJOR_OUTAGE)
-    _event(broken, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
-    planned = _track(board)
-    _event(planned, EventKind.MAINTENANCE, MaintenancePhase.SCHEDULED)
+    _track(board, severity=Severity.MAJOR_OUTAGE)
+    _track(board, severity=Severity.OPERATIONAL)
     aggregates = client.get(
         reverse("board-components", kwargs={"uuid": board.id})
     ).json()["aggregates"]
     assert aggregates["total"] == 2
-    assert aggregates["by_event_kind"]["incident"] == 1
-    assert aggregates["by_event_kind"]["maintenance"] == 1
+    assert aggregates["by_severity"][str(Severity.MAJOR_OUTAGE)] == 1
+    assert aggregates["by_severity"][str(Severity.OPERATIONAL)] == 1
     assert "next_refresh_at" in aggregates
     assert "oldest_refreshed_at" in aggregates
 
 
 @pytest.mark.django_db
-def test_severity_composes_with_a_tab(client, board):
-    down = _track(board, severity=Severity.MAJOR_OUTAGE)
-    _event(down, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
-    up = _track(board, severity=Severity.OPERATIONAL)
-    _event(up, EventKind.INCIDENT, IncidentPhase.MONITORING)
-    url = (
-        reverse("board-components", kwargs={"uuid": board.id})
-        + "?event=incident&status__severity__lte=3"
+def test_the_board_takes_several_severities_at_once(client, board):
+    # The Severity filter offers all six values. A single exact match
+    # could not express "everything that needs attention".
+    _track(board, severity=Severity.MAJOR_OUTAGE)
+    _track(board, severity=Severity.PARTIAL_OUTAGE)
+    _track(board, severity=Severity.OPERATIONAL)
+    response = client.get(
+        reverse("board-components", kwargs={"uuid": board.id}),
+        {"status__severity__in": "0,1,2"},
     )
-    assert len(client.get(url).json()["results"]) == 1
+    assert response.status_code == 200
+    severities = {r["status"]["severity"] for r in response.json()["results"]}
+    assert severities == {Severity.MAJOR_OUTAGE, Severity.PARTIAL_OUTAGE}
+
+
+@pytest.mark.django_db
+def test_the_event_parameter_is_gone(client, board):
+    # It named the Home Incidents and Maintenance tabs. Home is Board
+    # and Updates now, and Updates is `/events/?dashboard=`.
+    with_incident = _track(board)
+    _event(with_incident, EventKind.INCIDENT, IncidentPhase.INVESTIGATING)
+    _track(board)
+    body = client.get(
+        reverse("board-components", kwargs={"uuid": board.id}), {"event": "incident"}
+    ).json()
+    # django-filter ignores an unknown parameter rather than failing,
+    # so the proof is that it no longer narrows anything.
+    assert body["aggregates"]["total"] == 2
+    assert "by_event_kind" not in body["aggregates"]
 
 
 @pytest.mark.django_db
@@ -179,7 +150,21 @@ def test_tracking_a_component_adds_it_and_bumps_the_watcher_count(client, board)
     response = client.post(url, {"component_id": str(component.id)}, format="json")
     assert response.status_code == 201
     assert DashboardItem.objects.filter(dashboard=board, component=component).exists()
-    assert watchers(component.service) == 1
+    assert watchers(component) == 1
+
+
+@pytest.mark.django_db
+def test_the_tracked_component_comes_back_prepared(client, board):
+    # The write returns a component row. Its counts are annotations, so
+    # a fetch that skips `for_display` cannot fill them.
+    parent = ComponentFactory(service=ServiceFactory())
+    ComponentFactory(service=parent.service, parent=parent)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    body = client.post(url, {"component_id": str(parent.id)}, format="json").json()
+    assert body["descendant_count"] == 1
+    # Read after the write. The annotation is false until the item is
+    # there, so the order of the two matters.
+    assert body["is_tracked"] is True
 
 
 @pytest.mark.django_db
@@ -190,6 +175,18 @@ def test_tracking_the_same_component_twice_is_not_an_error(client, board):
     second = client.post(url, {"component_id": str(component.id)}, format="json")
     assert second.status_code in (200, 201)
     assert DashboardItem.objects.filter(dashboard=board).count() == 1
+
+
+@pytest.mark.django_db
+def test_tracking_an_archived_component_is_refused(client, board):
+    # `Service.overall_component` still hands a client an archived
+    # rollup, so this needs no stale id. Accepting it made a board row
+    # that no list renders and nothing can offer to untrack.
+    component = ComponentFactory(service=ServiceFactory(), is_archived=True)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    response = client.post(url, {"component_id": str(component.id)}, format="json")
+    assert response.status_code == 404
+    assert not DashboardItem.objects.filter(dashboard=board).exists()
 
 
 @pytest.mark.django_db
@@ -212,19 +209,19 @@ def test_a_board_belonging_to_someone_else_is_not_readable(client):
 
 @pytest.mark.django_db
 def test_watcher_count_is_distinct_users_not_tracked_items(client, board):
-    # Someone tracking five Twilio components is one watcher. Counting
-    # items would let one person outrank a crowd in the suggestion order.
-    service = ServiceFactory()
-    StatusPageFactory(service=service)
-    url = reverse("board-components", kwargs={"uuid": board.id})
-    for external_id in ("a", "b", "c"):
-        component = ComponentFactory(service=service, external_id=external_id)
+    # One person tracking a component from two boards is one watcher.
+    # Counting items would let one person outrank a crowd in the
+    # suggestion order.
+    component = ComponentFactory()
+    second_board = Dashboard.objects.create(owner=board.owner, name="Second")
+    for target in (board, second_board):
+        url = reverse("board-components", kwargs={"uuid": target.id})
         client.post(url, {"component_id": str(component.id)}, format="json")
-    assert watchers(service) == 1
+    assert watchers(component) == 1
 
 
 @pytest.mark.django_db
-def test_two_people_tracking_one_service_count_twice(client, board):
+def test_two_people_tracking_one_component_count_twice(client, board):
     service = ServiceFactory()
     StatusPageFactory(service=service)
     component = ComponentFactory(service=service)
@@ -233,21 +230,20 @@ def test_two_people_tracking_one_service_count_twice(client, board):
     other = Dashboard.objects.get(owner=User.objects.create(email="second@b.com"))
     DashboardItem.objects.create(dashboard=other, component=component)
 
-    assert watchers(service) == 2
+    assert watchers(component) == 2
 
 
 @pytest.mark.django_db
 def test_untracking_the_last_component_drops_the_watcher(client, board):
     component = _track(board)
-    service = component.service
-    assert watchers(service) == 1
+    assert watchers(component) == 1
     client.delete(
         reverse(
             "board-component-detail",
             kwargs={"uuid": board.id, "component_id": component.id},
         )
     )
-    assert watchers(service) == 0
+    assert watchers(component) == 0
 
 
 @pytest.mark.django_db
@@ -271,7 +267,7 @@ def test_the_watcher_count_is_right_however_a_row_arrives_or_goes(how):
     user = get_user_model().objects.create(email="watcher@b.com")
     board = Dashboard.objects.create(owner=user, name="B")
     DashboardItem.objects.create(dashboard=board, component=component)
-    assert watchers(service) == 1
+    assert watchers(component) == 1
 
     if how == "the admin":
         DashboardItem.objects.get(dashboard=board, component=component).delete()
@@ -283,4 +279,4 @@ def test_the_watcher_count_is_right_however_a_row_arrives_or_goes(how):
     else:
         DashboardItem.objects.all().delete()
 
-    assert watchers(service) == 0
+    assert watchers(component) == 0

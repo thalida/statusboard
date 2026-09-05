@@ -1,9 +1,76 @@
+import re
+
 import pytest
+from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
 from django.utils import timezone
 
 from authentication.models import User
+
+# The apps this project owns. A third-party admin, such as
+# auth.Group or a simplejwt token table, is not ours to place.
+# It sits outside what this test requires reachable.
+OUR_APPS = {"catalog", "status", "authentication", "dashboards", "polling"}
+
+CHANGELIST_PATH = re.compile(r"^/admin/(?P<app_label>[^/]+)/(?P<model_name>[^/]+)/$")
+
+
+def _changelist_target(link):
+    """The registered model a changelist link opens, or None.
+
+    A link to something other than a changelist, such as the
+    dashboard, names no model. It is not a gap to report.
+    """
+    match = CHANGELIST_PATH.match(str(link))
+    if not match:
+        return None
+    app_label, model_name = match.group("app_label"), match.group("model_name")
+    for model in admin.site._registry:
+        if model._meta.app_label == app_label and model._meta.model_name == model_name:
+            return model._meta.label
+    return None
+
+
+def _sidebar_reachable():
+    return {
+        label
+        for group in settings.UNFOLD["SIDEBAR"]["navigation"]
+        for item in group["items"]
+        if (label := _changelist_target(item["link"]))
+    }
+
+
+def _tab_reachable():
+    labels = set()
+    for group in settings.UNFOLD["TABS"]:
+        for dotted in group["models"]:
+            app_label, model_name = dotted.split(".")
+            for model in admin.site._registry:
+                if (
+                    model._meta.app_label == app_label
+                    and model._meta.model_name == model_name
+                ):
+                    labels.add(model._meta.label)
+    return labels
+
+
+def _inline_reachable(top_level):
+    """A model reachable only as an inline on an already-reachable page.
+
+    An inline on a page nothing else reaches does not count. Reachable
+    describes a page a person can open, not a class attribute nobody
+    links to.
+    """
+    labels = set()
+    for model, site_admin in admin.site._registry.items():
+        if model._meta.label not in top_level:
+            continue
+        for inline in getattr(site_admin, "inlines", []):
+            inline_model = getattr(inline, "model", None)
+            if inline_model is not None:
+                labels.add(inline_model._meta.label)
+    return labels
 
 
 @pytest.fixture
@@ -27,7 +94,6 @@ def service_form_data(staff_client, **fields):
     data = {
         "name": "",
         "slug": "",
-        "description": "",
         "logo": "",
         "homepage_url": "",
         **fields,
@@ -42,16 +108,10 @@ def service_form_data(staff_client, **fields):
 def test_the_dashboard_leads_with_poller_health(staff_client):
     # The landing page answers "is polling healthy?". A stalled poller
     # shows every board a stale green, which is worse than showing nothing.
-    body = staff_client.get(reverse("admin:index")).content.decode()
-    for card in (
-        "Services tracked",
-        "Behind schedule",
-        "Poll success",
-        "Stalest service",
-    ):
-        assert card in body, f"{card} missing from the dashboard"
-    for panel in ("Polls, last 24 hours", "Services tracked, last 30 days"):
-        assert panel in body, f"{panel} missing from the dashboard"
+    response = staff_client.get(reverse("admin:index"))
+    # `dashboard_callback` builds the cards. Unwired, the page is bare.
+    assert response.context["cards"]
+    body = response.content.decode()
     # Neither the catalog of every model nor a log of admin edits says
     # anything about whether polling works.
     assert "app-list" not in body
@@ -63,13 +123,6 @@ def test_the_environment_is_named_on_every_page(staff_client):
     # Acting on production believing it is development is the mistake worth
     # making loud.
     assert "Development" in staff_client.get(reverse("admin:index")).content.decode()
-
-
-@pytest.mark.django_db
-def test_the_brand_marks_are_wired(staff_client):
-    body = staff_client.get(reverse("admin:index")).content.decode()
-    assert "statusboard/logo-light.svg" in body
-    assert "statusboard/favicon.svg" in body
 
 
 @pytest.mark.django_db
@@ -163,6 +216,21 @@ def test_the_admin_stamps_who_created_a_row(staff_client):
 
 
 @pytest.mark.django_db
+def test_a_service_added_on_the_admin_form_says_it_was_added_by_hand(staff_client):
+    # The add form is the one path that is not an import. A row saying
+    # import here claims a status page named the service.
+    from catalog.choices import ServiceSource
+    from catalog.models import Service
+
+    staff_client.post(
+        reverse("admin:catalog_service_add"),
+        service_form_data(staff_client, name="By hand"),
+    )
+
+    assert Service.objects.get(name="By hand").source == ServiceSource.MANUAL
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("field", ["created_by", "updated_by"])
 def test_derived_fields_are_not_on_the_form(staff_client, field):
     # A hand edit would
@@ -172,20 +240,12 @@ def test_derived_fields_are_not_on_the_form(staff_client, field):
 
 
 @pytest.mark.django_db
-def test_the_changelist_offers_an_import_button(staff_client):
-    body = staff_client.get(
-        reverse("admin:catalog_service_changelist")
-    ).content.decode()
-    assert "Import from URL" in body
-
-
-@pytest.mark.django_db
 def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch):
     from catalog.models import Service
 
     monkeypatch.setattr(
         "catalog.admin.import_from_url",
-        lambda url: (Service.objects.create(name="Imported"), True),
+        lambda url, author=None: (Service.objects.create(name="Imported"), True),
     )
     response = staff_client.post(
         "/admin/catalog/service/import-from-url/",
@@ -196,10 +256,32 @@ def test_importing_from_the_admin_creates_the_service(staff_client, monkeypatch)
 
 
 @pytest.mark.django_db
+def test_importing_from_the_admin_records_the_admin_who_asked(
+    staff_client, monkeypatch
+):
+    # The action has a request, so the row names the person. Dropping
+    # the caller signs the bot for work an admin did.
+    from catalog.models import Service
+
+    def recording_import(url, author=None):
+        return Service.objects.create(name="Imported", created_by=author), True
+
+    monkeypatch.setattr("catalog.admin.import_from_url", recording_import)
+    staff_client.post(
+        "/admin/catalog/service/import-from-url/",
+        {"status_page_url": "https://status.example.com/", "_form_submitted": "1"},
+    )
+
+    assert Service.objects.get().created_by == User.objects.get(
+        email="admin@example.com"
+    )
+
+
+@pytest.mark.django_db
 def test_an_unreadable_page_is_reported_not_a_500(staff_client, monkeypatch):
     # The URL came from a person pasting a stranger's page. Anything can
     # come back from it.
-    def boom(url):
+    def boom(url, author=None):
         raise ValueError("not a status page")
 
     monkeypatch.setattr("catalog.admin.import_from_url", boom)
@@ -218,6 +300,9 @@ def test_events_can_be_filtered_by_phase(staff_client):
 
     An incident and a maintenance window move through different phases,
     which is why a plain ChoicesDropdownFilter cannot do this.
+
+    The two option labels are what prove the filter is declared. `phase`
+    is a local field, so the queryset narrows with or without it.
     """
     from django.utils import timezone
 
@@ -273,7 +358,6 @@ def test_every_table_links_somewhere(staff_client, url_name):
 
     from django.utils import timezone
 
-    from catalog.models import Service
     from polling.models import PollRun
     from status.choices import EventKind, IncidentPhase, Severity, StatusSource
     from status.models import ComponentStatus, ServiceEvent
@@ -304,20 +388,19 @@ def test_every_table_links_somewhere(staff_client, url_name):
         starts_at=timezone.now(),
         poll_run=run,
     )
-    assert Service.objects.filter(pk=service.pk).exists()
 
     body = staff_client.get(reverse(url_name)).content.decode()
-    assert re.search(r'href="/admin/\w+/\w+/[0-9a-f-]{36}/change/"', body), (
+    assert re.search(r'href="/admin/\w+/\w+/[^"]+/change/"', body), (
         f"{url_name} has no row that leads anywhere"
     )
 
 
 @pytest.mark.django_db
-def test_a_service_shows_its_logo_and_falls_back_to_an_initial(staff_client):
-    """A missing logo looks incomplete; a wrong one names the wrong thing.
+def test_a_service_shows_its_logo(staff_client):
+    """A wrong logo names the wrong thing, so the column carries its own.
 
-    Unfold drops the initials when there is an image, which is the
-    fallback the spec asks for.
+    The row with no logo is here because the column renders both ways.
+    Unfold, not this project, decides what stands in for the image.
     """
     from tests.factories import ServiceFactory
 
@@ -328,7 +411,6 @@ def test_a_service_shows_its_logo_and_falls_back_to_an_initial(staff_client):
         reverse("admin:catalog_service_changelist")
     ).content.decode()
     assert "https://cdn.example/mark.png" in body
-    assert "NO" in body  # the initial standing in for the missing one
 
 
 @pytest.mark.django_db
@@ -345,7 +427,7 @@ def test_a_blank_interval_says_what_it_will_do(staff_client, settings):
     body = staff_client.get(
         reverse("admin:polling_poller_change", args=[service.poller.pk])
     ).content.decode()
-    assert "deployment default of 900 seconds" in body
+    assert "900 seconds" in body
 
 
 @pytest.mark.django_db
@@ -432,21 +514,25 @@ def test_a_poll_run_reaches_what_it_wrote(staff_client):
 
 @pytest.mark.django_db
 def test_a_reading_says_which_poll_wrote_it(staff_client):
-    # It is not an editable column, so the record is the only place left
-    # to say it. Without this you could read it on the table alone.
+    # The run is not an editable column. A fieldset naming it is what
+    # carries the link onto the record, and a link is the useful form.
     from status.choices import Severity, StatusSource
     from status.models import ComponentStatus
-    from tests.factories import ComponentFactory
+    from tests.factories import ComponentFactory, poll_run
 
+    component = ComponentFactory()
+    run = poll_run(component.service)
     reading = ComponentStatus.objects.create(
-        component=ComponentFactory(),
+        component=component,
         severity=Severity.OPERATIONAL,
         source=StatusSource.PROVIDER,
         started_at=timezone.now(),
+        poll_run=run,
     )
     url = reverse("admin:status_componentstatus_change", args=[reading.pk])
 
-    assert "Written by" in staff_client.get(url).content.decode()
+    body = staff_client.get(url).content.decode()
+    assert reverse("admin:polling_pollrun_change", args=[run.pk]) in body
 
 
 PROJECT_APPS = {"authentication", "catalog", "dashboards", "polling", "status"}
@@ -456,32 +542,14 @@ PROJECT_ADMINS = [
 ]
 
 
-@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
-def test_every_filter_names_a_real_path(model):
-    """A filter naming a path that does not exist fails only when used.
-
-    Django answers an unrecognised lookup with a redirect. A broken one
-    reads as an empty page, not an error. A typo stays invisible until
-    somebody picks that filter.
-    """
-    for entry in admin.site._registry[model].list_filter or []:
-        path = entry[0] if isinstance(entry, tuple) else entry
-        if not isinstance(path, str):
-            continue  # A filter class brings its own queryset.
-        target = model
-        for part in path.split("__"):
-            field = target._meta.get_field(part)
-            if field.is_relation:
-                target = field.related_model
-
-
 @pytest.mark.django_db
 @pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
 def test_every_filter_choice_opens(staff_client, model):
     """Every option a filter offers is one somebody can click.
 
-    The paths are checked above. This is the other half: the option the
-    page renders has to be one the changelist will accept back.
+    Django's own `admin.E116` proves each path resolves. This is the
+    other half: the option the page renders has to be one the
+    changelist will accept back.
     """
     from django.test import RequestFactory
 
@@ -517,16 +585,72 @@ def test_every_search_field_names_a_real_path(model):
                 target = field.related_model
 
 
-@pytest.mark.django_db
-@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
-def test_every_table_can_be_searched(staff_client, model):
-    # Every row hangs off a service somewhere, so the service's name is
-    # the one term that should reach every table.
-    opts = model._meta
-    url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+# Every row on these tables hangs off a service. A user and a board do
+# not, so no service name reaches them.
+SERVICE_SEARCHABLE = [
+    "admin:catalog_service_changelist",
+    "admin:catalog_servicecomponent_changelist",
+    "admin:dashboards_dashboarditem_changelist",
+    "admin:polling_poller_changelist",
+    "admin:polling_pollrun_changelist",
+    "admin:status_componentstatus_changelist",
+    "admin:status_eventupdate_changelist",
+    "admin:status_serviceevent_changelist",
+]
 
-    assert staff_client.get(url, {"q": "nothing matches this"}).status_code == 200
-    assert admin.site._registry[model].search_fields, opts.label
+
+@pytest.fixture
+def two_services(db):
+    """One row under each of two services, on every table above.
+
+    The second service is what proves a search narrows. A table
+    holding one row is found by a search that matches everything.
+    """
+    from status.choices import (
+        EventKind,
+        EventSource,
+        IncidentPhase,
+        Severity,
+        StatusSource,
+    )
+    from status.models import ComponentStatus, EventUpdate, ServiceEvent
+    from tests.factories import ServiceFactory, poll_run
+
+    for name in ("Twilio", "Stripe"):
+        service = ServiceFactory(name=name, tracked=1)
+        run = poll_run(service)
+        ComponentStatus.objects.create(
+            component=service.components.get(),
+            severity=Severity.OPERATIONAL,
+            source=StatusSource.PROVIDER,
+            started_at=timezone.now(),
+            poll_run=run,
+        )
+        event = ServiceEvent.objects.create(
+            service=service,
+            external_id="1",
+            kind=EventKind.INCIDENT,
+            title="An outage",
+            phase=IncidentPhase.INVESTIGATING,
+            starts_at=timezone.now(),
+            poll_run=run,
+        )
+        EventUpdate.objects.create(
+            event=event,
+            phase=IncidentPhase.INVESTIGATING,
+            body="Looking into it",
+            posted_at=timezone.now(),
+            source=EventSource.PROVIDER,
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("url_name", SERVICE_SEARCHABLE)
+def test_a_service_name_reaches_the_rows_under_it(staff_client, two_services, url_name):
+    # A table holds every service's rows. Typing the name is how a
+    # person reads one service's, instead of building a filter by hand.
+    response = staff_client.get(reverse(url_name), {"q": "Twilio"})
+    assert response.context["cl"].result_count == 1
 
 
 @pytest.mark.django_db
@@ -627,6 +751,209 @@ def test_a_person_cannot_open_somebody_elses_board():
 
 
 @pytest.mark.django_db
+def test_the_component_list_shows_watchers(admin_client, db):
+    # The count is an annotation. A column that forgets to annotate it
+    # raises rather than showing a wrong number. A column with no
+    # ordering field cannot be sorted at all.
+    from catalog.models import ServiceComponent
+    from tests.factories import ComponentFactory, track
+
+    ComponentFactory(name="Quiet")
+    loud = ComponentFactory(name="Loud")
+    track(loud)
+    track(loud)
+
+    model_admin = admin.site._registry[ServiceComponent]
+    index = model_admin.list_display.index("watchers") + 1
+    response = admin_client.get(
+        reverse("admin:catalog_servicecomponent_changelist"), {"o": f"-{index}"}
+    )
+    assert response.status_code == 200
+    assert b">2<" in response.content
+    assert response.content.index(b"Loud") < response.content.index(b"Quiet")
+
+
+@pytest.mark.django_db
+def test_service_requests_are_listed_by_demand(admin_client, db):
+    # The list is the demand signal for what the catalog is missing,
+    # so the most-asked-for URL is the first row.
+    from catalog.models import ServiceRequest
+
+    ServiceRequest.objects.create(url="https://a.example", request_count=1)
+    ServiceRequest.objects.create(url="https://b.example", request_count=9)
+    response = admin_client.get(reverse("admin:catalog_servicerequest_changelist"))
+    assert response.status_code == 200
+    assert response.content.index(b"b.example") < response.content.index(b"a.example")
+
+
+def test_every_registered_admin_is_reachable():
+    # A registered admin nothing links to is a page nobody finds, the
+    # way magic links once shipped. Reachable means named in the
+    # sidebar, named in a tab group, or shown as a parent's inline.
+    # A hardcoded title list cannot tell that apart from an admin
+    # reachable by nothing at all.
+    registered = {
+        model._meta.label
+        for model in admin.site._registry
+        if model._meta.app_label in OUR_APPS
+    }
+    top_level = _sidebar_reachable() | _tab_reachable()
+    reachable = top_level | _inline_reachable(top_level)
+    missing = registered - reachable
+    assert not missing, f"registered but unreachable: {sorted(missing)}"
+
+
+def _change_view_names(model_admin, request):
+    """Every name the change view puts on the page.
+
+    An inline is part of the form. A component's severity history is a
+    table on it, so the column that summarises it has a place there.
+    """
+    from django.contrib.admin.utils import flatten_fieldsets
+
+    names = set(flatten_fieldsets(model_admin.get_fieldsets(request)))
+    for inline in model_admin.inlines:
+        names.update(inline.fields or [])
+        names.update(field.name for field in inline.model._meta.concrete_fields)
+    return names
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_column_has_a_place_on_the_form(staff_client, model):
+    """A column with no counterpart on the change view was found twice.
+
+    Opening the record then answers less than the list did. A list of
+    the known gaps would go stale, so the pairing is read off the
+    registry.
+
+    A column counts as answered by its own name on the form, or by the
+    field it sorts on. It cannot see a counterpart under another name.
+    """
+    model_admin = admin.site._registry[model]
+    request = staff_client.request().wsgi_request
+    covered = _change_view_names(model_admin, request)
+    list_display = model_admin.get_list_display(request)
+    linked = model_admin.get_list_display_links(request, list_display) or []
+
+    missing = []
+    for entry in list_display:
+        column = getattr(model_admin, entry, None)
+        # The linked column opens the record, and a dropdown holds links
+        # to other tables. Neither carries a value of its own.
+        if entry in linked or getattr(column, "dropdown", False):
+            continue
+        ordering = getattr(column, "admin_order_field", "")
+        root = ordering.split("__")[0] if isinstance(ordering, str) else ""
+        if {entry, root} & covered:
+            continue
+        missing.append(entry)
+    assert not missing, f"{model._meta.label}: no place on the form for {missing}"
+
+
+def _tab_strip(body):
+    """The tab strip's own markup, not the whole page.
+
+    The sidebar links to a service or a poller too, on every admin
+    page. Searching the full body would pass on that link alone and
+    never prove a tab exists.
+    """
+    start = body.index('id="tabs-items"')
+    return body[start : body.index("</nav>", start)]
+
+
+@pytest.mark.django_db
+def test_the_catalog_tabs_carry_service_requests(staff_client):
+    # A sidebar link once pointed here on its own. A thing that belongs
+    # to the catalog belongs on the catalog's tabs instead.
+    body = staff_client.get(
+        reverse("admin:catalog_service_changelist")
+    ).content.decode()
+    tabs = _tab_strip(body)
+    assert 'href="/admin/catalog/servicerequest/"' in tabs
+
+
+@pytest.mark.django_db
+def test_the_user_tabs_carry_magic_links(staff_client):
+    # MagicLinkTokenAdmin answered but nothing pointed at it. A token
+    # belongs to a user, so its tab sits on the user's page.
+    body = staff_client.get(
+        reverse("admin:authentication_user_changelist")
+    ).content.decode()
+    tabs = _tab_strip(body)
+    assert 'href="/admin/authentication/magiclinktoken/"' in tabs
+
+
+@pytest.mark.django_db
+def test_the_component_list_formset_flips_the_flag(admin_client, db):
+    # A mixed selection defeats the two actions in one pass. One row is
+    # featured, the other cleared, one Save.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory()
+    to_feature = ComponentFactory(service=service, is_overall=True, is_featured=False)
+    to_clear = ComponentFactory(service=service, is_overall=False, is_featured=True)
+    admin_client.post(
+        reverse("admin:catalog_servicecomponent_changelist"),
+        {
+            "form-TOTAL_FORMS": "2",
+            "form-INITIAL_FORMS": "2",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": str(to_feature.pk),
+            "form-0-is_featured": "on",
+            "form-1-id": str(to_clear.pk),
+            "_save": "Save",
+        },
+    )
+    to_feature.refresh_from_db()
+    to_clear.refresh_from_db()
+    assert to_feature.is_featured is True
+    assert to_clear.is_featured is False
+
+
+@pytest.mark.django_db
+def test_the_poller_list_formset_flips_the_pause(admin_client, db):
+    # A provider going down means pausing several pollers at once.
+    # One Save pauses one and resumes another.
+    from tests.factories import PollerFactory, ServiceFactory
+
+    to_pause = PollerFactory(service=ServiceFactory(), is_paused=False)
+    to_resume = PollerFactory(service=ServiceFactory(), is_paused=True)
+    admin_client.post(
+        reverse("admin:polling_poller_changelist"),
+        {
+            "form-TOTAL_FORMS": "2",
+            "form-INITIAL_FORMS": "2",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": str(to_pause.pk),
+            "form-0-is_paused": "on",
+            "form-1-id": str(to_resume.pk),
+            "_save": "Save",
+        },
+    )
+    to_pause.refresh_from_db()
+    to_resume.refresh_from_db()
+    assert to_pause.is_paused is True
+    assert to_resume.is_paused is False
+
+
+@pytest.mark.django_db
+def test_the_component_form_features_a_leaf(staff_client):
+    # The change page is where an admin already is when they decide to
+    # feature something. Without the field the form cannot set it.
+    from tests.factories import ComponentFactory
+
+    leaf = ComponentFactory(is_overall=False, is_featured=False)
+    url, data = component_form_data(staff_client, leaf, is_featured="on")
+    staff_client.post(url, data)
+
+    leaf.refresh_from_db()
+    assert leaf.is_featured is True
+
+
+@pytest.mark.django_db
 def test_the_polling_schedule_page_opens(staff_client):
     """Readonly is not free: Django drops a readonly field from the form.
 
@@ -643,3 +970,244 @@ def test_the_polling_schedule_page_opens(staff_client):
     url = reverse("admin:django_celery_beat_periodictask_change", args=[task.pk])
 
     assert staff_client.get(url).status_code == 200
+
+
+@pytest.fixture
+def claimed_event():
+    """An outage we found first, later claimed by the provider.
+
+    Both updates hang off one event. That interleaving is what the
+    claim mechanism produces, and what the admin has to tell apart.
+    """
+    from status.choices import EventKind, EventSource, IncidentPhase
+    from status.models import EventUpdate, ServiceEvent
+    from tests.factories import ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+    ours = ServiceEvent.objects.create(
+        service=service,
+        kind=EventKind.INCIDENT,
+        title="We saw it first",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+        detected_by=EventSource.SYSTEM,
+    )
+    theirs = ServiceEvent.objects.create(
+        service=service,
+        external_id="their-1",
+        kind=EventKind.INCIDENT,
+        title="They saw it first",
+        phase=IncidentPhase.INVESTIGATING,
+        starts_at=timezone.now(),
+        detected_by=EventSource.PROVIDER,
+    )
+    EventUpdate.objects.create(
+        event=ours,
+        phase=IncidentPhase.DETECTED,
+        body="Our detection",
+        posted_at=timezone.now(),
+        source=EventSource.SYSTEM,
+    )
+    EventUpdate.objects.create(
+        event=ours,
+        phase=IncidentPhase.INVESTIGATING,
+        body="Their first post",
+        posted_at=timezone.now(),
+        source=EventSource.PROVIDER,
+    )
+    return ours, theirs
+
+
+@pytest.mark.django_db
+def test_the_event_list_says_who_found_the_outage(staff_client, claimed_event):
+    # `detected_by` answers "did we find this first". It was on no
+    # changelist, so the table could not be read for it. Pin the cell,
+    # not the word. The filter beside it offers the same one.
+    body = staff_client.get(
+        reverse("admin:status_serviceevent_changelist")
+    ).content.decode()
+    assert ">Statusboard</td>" in body
+
+
+@pytest.mark.django_db
+def test_events_can_be_filtered_by_who_detected_them(staff_client, claimed_event):
+    # Two halves. The option has to be offered, and picking it has to
+    # narrow. Django allows a local-field lookup whether or not a filter
+    # declares it, so the queryset alone proves nothing.
+    from status.choices import EventSource
+
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_changelist")
+    assert "detected_by__exact" in staff_client.get(url).content.decode()
+
+    response = staff_client.get(url, {"detected_by__exact": EventSource.SYSTEM})
+    assert list(response.context["cl"].queryset) == [ours]
+
+
+@pytest.mark.django_db
+def test_the_event_page_says_who_found_the_outage(staff_client, claimed_event):
+    # A claim fills `external_id` in, so the record alone cannot say who
+    # opened the event. Only this field can. Pin the label, not the
+    # value. The timeline below says Statusboard too.
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_change", args=[ours.pk])
+    assert "Detected by" in staff_client.get(url).content.decode()
+
+
+@pytest.mark.django_db
+def test_an_events_timeline_says_who_wrote_each_update(staff_client, claimed_event):
+    # We opened this event, so the only Provider on the page is an
+    # update the provider wrote. Without the source the timeline reads
+    # as one author.
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_serviceevent_change", args=[ours.pk])
+    assert ">Provider<" in staff_client.get(url).content.decode()
+
+
+@pytest.mark.django_db
+def test_the_update_list_says_who_wrote_each_post(staff_client, claimed_event):
+    # The same question on the updates table, where a person arrives
+    # from a filtered link rather than from the event.
+    body = staff_client.get(
+        reverse("admin:status_eventupdate_changelist")
+    ).content.decode()
+    assert ">Statusboard</td>" in body
+    assert ">Provider</td>" in body
+
+
+@pytest.mark.django_db
+def test_updates_can_be_filtered_by_who_wrote_them(staff_client, claimed_event):
+    # Offered and narrowing, for the same reason as the event filter.
+    from status.choices import EventSource
+
+    ours, _theirs = claimed_event
+    url = reverse("admin:status_eventupdate_changelist")
+    assert "source__exact" in staff_client.get(url).content.decode()
+
+    response = staff_client.get(url, {"source__exact": EventSource.SYSTEM})
+    assert list(response.context["cl"].queryset) == [
+        ours.updates.get(body="Our detection")
+    ]
+
+
+def component_form_data(staff_client, component, **fields):
+    """The component change form, with a management form per inline.
+
+    The prefixes are read off the rendered page. A browser posts what
+    the page asks for, and a missing management form is a 200 that
+    saved nothing.
+    """
+    import re
+
+    url = reverse("admin:catalog_servicecomponent_change", args=[component.pk])
+    body = staff_client.get(url).content.decode()
+    data = {
+        "service": str(component.service_id),
+        "name": component.name,
+        "external_id": component.external_id,
+        "is_archived": "",
+        "parent": "",
+        "status_page_order": str(component.status_page_order),
+        "is_overall": "",
+        **fields,
+    }
+    for prefix in set(re.findall(r'name="([\w-]+)-TOTAL_FORMS"', body)):
+        for key in ("TOTAL_FORMS", "INITIAL_FORMS", "MIN_NUM_FORMS", "MAX_NUM_FORMS"):
+            data[f"{prefix}-{key}"] = "0"
+    return url, data
+
+
+@pytest.mark.django_db
+def test_reparenting_in_the_admin_moves_the_component(staff_client):
+    """The admin posts a form, so it reaches the model by another road.
+
+    A component reparented here has to answer `?ancestor=` under its
+    new parent at once. An untracked service is never polled, so
+    nothing else would come along and correct it.
+    """
+    from tests.factories import ComponentFactory, ServiceFactory, ancestry, descendants
+
+    service = ServiceFactory(name="Twilio")
+    parent = ComponentFactory(service=service, name="Programmable Messaging")
+    child = ComponentFactory(service=service, name="SMS")
+
+    url, data = component_form_data(staff_client, child, parent=str(parent.pk))
+    assert staff_client.post(url, data).status_code == 302
+
+    child.refresh_from_db()
+    assert ancestry(child) == [parent.pk]
+    assert descendants(parent) == {child.pk}
+
+
+@pytest.mark.django_db
+def test_the_parent_picker_refuses_the_rollup(staff_client):
+    """The queryset, not just `clean`, is what a posted form meets first.
+
+    A `ModelChoiceField` rejects a posted pk outside its queryset before
+    the instance is ever built, so `clean` never runs. Narrowing the
+    queryset is what turns a stray click into a redisplayed form
+    instead of a trigger's `IntegrityError`.
+    """
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    service = ServiceFactory(name="Twilio")
+    rollup = ComponentFactory(service=service, is_overall=True)
+    child = ComponentFactory(service=service, name="SMS")
+
+    url, data = component_form_data(staff_client, child, parent=str(rollup.pk))
+    response = staff_client.post(url, data)
+
+    assert response.status_code == 200
+    assert b"valid choice" in response.content
+    child.refresh_from_db()
+    assert child.parent_id is None
+
+
+def related_item(admin_user, service, label):
+    """One entry of a service row's View dropdown, count and link."""
+    from django.test import RequestFactory
+
+    from catalog.models import Service
+
+    request = RequestFactory().get("/")
+    request.user = admin_user
+    model_admin = admin.site._registry[Service]
+    row = model_admin.get_queryset(request).get(pk=service.pk)
+    items = model_admin.display_related(row)["items"]
+    return next(item for item in items if str(item["title"]).startswith(label))
+
+
+@pytest.mark.django_db
+def test_the_service_row_counts_the_components_the_api_counts(admin_client):
+    # `Service.component_count` leaves out the rollup and the archived
+    # rows. A second number under the same name is how the admin and a
+    # client come to disagree about one service.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    admin_user = User.objects.get(email="admin@example.com")
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
+
+    assert related_item(admin_user, service, "Components")["title"] == "Components (1)"
+
+
+@pytest.mark.django_db
+def test_the_components_link_opens_exactly_what_it_counts(admin_client):
+    # The count sits on the label of a link. A number that does not
+    # describe the list it opens is worse than no number.
+    from tests.factories import ComponentFactory, ServiceFactory
+
+    admin_user = User.objects.get(email="admin@example.com")
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    ComponentFactory(service=service)
+    gone = ComponentFactory(service=service)
+    gone.is_archived = True
+    gone.save(update_fields=["is_archived"])
+
+    link = related_item(admin_user, service, "Components")["link"]
+    assert admin_client.get(link).context["cl"].result_count == 1

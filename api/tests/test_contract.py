@@ -3,8 +3,17 @@ from pathlib import Path
 import pytest
 import yaml
 from django.urls import reverse
+from django.utils import timezone
 from drf_spectacular.drainage import GENERATOR_STATS, reset_generator_stats
 from drf_spectacular.generators import SchemaGenerator
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from authentication.models import User
+from dashboards.models import DashboardItem
+from status.choices import EventKind, IncidentPhase
+from status.models import EventUpdate, ServiceEvent
+from tests.factories import ComponentFactory, ServiceFactory, StatusPageFactory
 
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "api" / "openapi.yaml"
 
@@ -19,12 +28,25 @@ def generated():
     return SchemaGenerator().get_schema(request=None, public=True)
 
 
+VERBS = ("get", "post", "delete", "patch", "put")
+
+
 def _paths(schema):
     return {
         f"{verb.upper()} {path}"
         for path, ops in schema["paths"].items()
         for verb in ops
-        if verb in ("get", "post", "delete", "patch", "put")
+        if verb in VERBS
+    }
+
+
+def _responses(schema):
+    return {
+        f"{verb.upper()} {path} -> {code}"
+        for path, ops in schema["paths"].items()
+        for verb, operation in ops.items()
+        if verb in VERBS
+        for code in operation.get("responses", {})
     }
 
 
@@ -38,6 +60,23 @@ def test_no_operation_exists_that_the_contract_does_not_document(committed, gene
     assert not extra, f"implemented but undocumented: {sorted(extra)}"
 
 
+def test_every_documented_response_code_is_declared_in_the_code(committed, generated):
+    # The board endpoint documented a 409 no code path returned. The
+    # path check above passes on that, because the path exists. A
+    # client is generated from this file and branches on the code.
+    missing = _responses(committed) - _responses(generated)
+    assert not missing, f"documented but not returned: {sorted(missing)}"
+
+
+def test_no_response_code_is_declared_that_the_contract_does_not_document(
+    committed, generated
+):
+    # The other direction. A failure a client cannot see is one it
+    # cannot handle, so it falls through as an unexpected error.
+    extra = _responses(generated) - _responses(committed)
+    assert not extra, f"returned but undocumented: {sorted(extra)}"
+
+
 def test_every_endpoint_accepts_the_fields_parameter(generated):
     # ?fields= is baked in at the base layer, so it must appear on every
     # operation without a per-view annotation.
@@ -47,6 +86,150 @@ def test_every_endpoint_accepts_the_fields_parameter(generated):
                 continue
             names = {p["name"] for p in op.get("parameters", [])}
             assert "fields" in names, f"{verb.upper()} {path} does not accept ?fields="
+
+
+def _authed_client():
+    """A client bearing a fresh user's access token."""
+    user = User.objects.create(
+        email=f"fields-probe-{User.objects.count()}@example.test"
+    )
+    api = APIClient()
+    api.credentials(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}"
+    )
+    return api, user
+
+
+def _meta_probe():
+    return APIClient(), reverse("meta"), "max_page_size"
+
+
+def _me_probe():
+    api, _user = _authed_client()
+    return api, reverse("me"), "email"
+
+
+def _service_detail_probe():
+    service = ServiceFactory()
+    StatusPageFactory(service=service)
+    ComponentFactory(service=service, is_overall=True)
+    return APIClient(), reverse("service-detail", kwargs={"slug": service.slug}), "id"
+
+
+def _event_list_probe():
+    service = ServiceFactory()
+    ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    return APIClient(), reverse("event-list"), "id"
+
+
+def _event_detail_probe():
+    service = ServiceFactory()
+    event = ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    url = reverse("event-detail", kwargs={"uuid": event.id})
+    return APIClient(), url, "id"
+
+
+def _event_updates_probe():
+    service = ServiceFactory()
+    event = ServiceEvent.objects.create(
+        service=service,
+        external_id="probe",
+        kind=EventKind.INCIDENT,
+        title="x",
+        phase=IncidentPhase.DETECTED,
+        starts_at=timezone.now(),
+    )
+    EventUpdate.objects.create(
+        event=event,
+        phase=IncidentPhase.DETECTED,
+        body="x",
+        posted_at=timezone.now(),
+    )
+    url = reverse("event-updates", kwargs={"uuid": event.id})
+    return APIClient(), url, "phase"
+
+
+def _component_list_probe():
+    service = ServiceFactory()
+    ComponentFactory(service=service, is_overall=True)
+    return APIClient(), reverse("component-list"), "id"
+
+
+def _component_detail_probe():
+    service = ServiceFactory()
+    component = ComponentFactory(service=service, is_overall=True)
+    url = reverse("component-detail", kwargs={"uuid": component.id})
+    return APIClient(), url, "id"
+
+
+def _board_components_probe():
+    api, user = _authed_client()
+    board = user.default_dashboard
+    service = ServiceFactory()
+    component = ComponentFactory(service=service, is_overall=True)
+    DashboardItem.objects.create(dashboard=board, component=component)
+    url = reverse("board-components", kwargs={"uuid": board.id})
+    return api, url, "id"
+
+
+# One builder per documented GET path: a client, a live URL, and a field
+# to keep.
+FIELDS_PROBES = {
+    "/meta/": _meta_probe,
+    "/me/": _me_probe,
+    "/catalog/services/{slug}/": _service_detail_probe,
+    "/catalog/components/": _component_list_probe,
+    "/catalog/components/{uuid}/": _component_detail_probe,
+    "/dashboards/{uuid}/components/": _board_components_probe,
+    "/events/": _event_list_probe,
+    "/events/{uuid}/": _event_detail_probe,
+    "/events/{uuid}/updates/": _event_updates_probe,
+}
+
+
+def test_the_fields_probes_cover_every_documented_get(committed):
+    # A GET added later and left out here would ship unpruned and
+    # nothing would say so, the way /meta/ did.
+    documented = {path for path, ops in committed["paths"].items() if "get" in ops}
+    assert documented == set(FIELDS_PROBES)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("path", sorted(FIELDS_PROBES))
+def test_fields_prunes_the_response(path):
+    # Declaring ?fields= on a view is not the same as honouring it.
+    # /meta/ built its body by hand and never ran it through the
+    # serializer that prunes, so the parameter did nothing.
+    client, url, field = FIELDS_PROBES[path]()
+    body = client.get(url, {"fields": field}).json()
+    kept = body["results"][0] if isinstance(body, dict) and "results" in body else body
+    assert set(kept) == {field}, f"GET {path} ignored ?fields=: {sorted(kept)}"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("path", sorted(FIELDS_PROBES))
+def test_fields_refuses_a_name_that_is_no_field(path):
+    # Nothing checked that a name in the tree named a field. An unknown
+    # one popped them all and answered `200 {}`. The contract promises
+    # 400. A typo must not read as a server with nothing to say.
+    client, url, _field = FIELDS_PROBES[path]()
+    response = client.get(url, {"fields": "total_nonsense"})
+    assert response.status_code == 400, f"GET {path} answered {response.status_code}"
+    assert response.json() == {"fields": ["Unknown field: total_nonsense."]}
 
 
 @pytest.mark.django_db

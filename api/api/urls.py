@@ -17,4 +17,5 @@ urlpatterns = [
     path("", include("authentication.urls")),
     path("", include("catalog.urls")),
     path("", include("dashboards.urls")),
+    path("", include("status.urls")),
 ]

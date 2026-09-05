@@ -17,24 +17,36 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from catalog.choices import ServiceSource
 from catalog.models import Service, StatusPage
 from polling.adapters.registry import identify
 from polling.models import PollRun
 from polling.reconcile import apply_fetch
 
+# What `author` means when a caller passes nothing. A scheduled job
+# and a management command sign their rows with the system account.
+# `None` is a different answer: a person we cannot name.
+AUTOMATED = object()
 
-def import_from_url(url: str) -> tuple[Service, bool]:
+
+def import_from_url(url: str, author=AUTOMATED) -> tuple[Service, bool]:
     """Build a whole service from a status page URL.
 
     The provider, the name, the components and the event history all
     come from the page. Returns (service, created); importing a page
     that is already in the catalog returns the existing service.
 
+    `author` signs the service and its status page. A request path
+    passes the caller, so the admin who imported Twilio is on the row.
+    It falls back to the system account, which is true of a command.
+
     Reading and writing are two steps, and only the write is a
     transaction. A provider takes seconds to answer, and a database
     connection must not spend them waiting on one.
 
     """
+    if author is AUTOMATED:
+        author = get_user_model().objects.system()
     key = StatusPage.normalise_url(url)
     already = _imported(key)
     if already is not None:
@@ -51,7 +63,7 @@ def import_from_url(url: str) -> tuple[Service, bool]:
         "source": adapter.status_source,
         "started": started,
     }
-    return _import(key, adapter_class, fetch_url, fetched)
+    return _import(key, adapter_class, fetch_url, fetched, author)
 
 
 def _imported(key):
@@ -61,7 +73,7 @@ def _imported(key):
 
 
 @transaction.atomic
-def _import(key, adapter_class, fetch_url, fetched):
+def _import(key, adapter_class, fetch_url, fetched, author):
     """Write what the page said, in one transaction."""
     # Somebody may have imported the same page while we read it. The
     # fetch is outside the transaction now, so that window is
@@ -71,14 +83,11 @@ def _import(key, adapter_class, fetch_url, fetched):
         return already, False
 
     metadata = fetched["metadata"]
-    # Nobody typed these in, so they are signed by the system account
-    # rather than left blank.
-    author = get_user_model().objects.system()
     service = Service.objects.create(
         name=metadata["name"],
-        description=metadata.get("description", ""),
         homepage_url=metadata.get("homepage_url", ""),
         logo=fetched["logo"],
+        source=ServiceSource.IMPORT,
         created_by=author,
         updated_by=author,
     )
@@ -96,9 +105,8 @@ def _import(key, adapter_class, fetch_url, fetched):
     # the first reading has no provenance, and the log is missing
     # the request that made the rows.
     #
-    # Nothing above makes the poller. `create_poller` in
-    # polling.signals does, on the Service save. Making one here
-    # would trip the one-to-one column.
+    # Nothing above makes the poller. `Service.ensure_poller` does, on
+    # the save. Making one here would trip the one-to-one column.
     run = PollRun.open(
         service.poller, key, adapter_class.provider, at=fetched["started"]
     )
