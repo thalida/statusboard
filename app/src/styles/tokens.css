@@ -1,0 +1,102 @@
+/* The core palette. Every colour in the app is one of these.
+   Both decks carry an identical copy, so a change is made in three
+   places: this file, the mobile deck and the desktop deck.
+
+   The neutrals are one ultramarine ramp, so no theme is a grey. Each
+   status hue has three: the raw brand value for a dot or a fill, a
+   darkened one for type on light, a lifted one for type on dark. The
+   raw values fail contrast as text and are never used that way. */
+:root {
+  --u-0: #ffffff;
+  --u-50: #f3f3fb;
+  --u-100: #e9e9f6;
+  --u-200: #dedef0;
+  --u-300: #c6c5e4;
+  --u-400: #a9a7d6;
+  --u-500: #8a88b8;
+  --u-550: #6f6f92;
+  --u-600: #63628f;
+  --u-700: #3b3a66;
+  --u-800: #1a193f;
+  --u-850: #12123a;
+  --u-900: #0d0c2b;
+  --u-950: #06061f;
+
+  --green: #00e54d;
+  --green-ink: #1c7a3e;
+  --green-lift: #59ce87;
+  --amber: #e58900;
+  --amber-ink: #975800;
+  --amber-lift: #e0a33f;
+  --red: #e51f00;
+  --red-ink: #b3180b;
+  --red-lift: #f27967;
+  --blue: #00a0e5;
+  --blue-ink: #0b6c9d;
+  --blue-lift: #66b5ec;
+}
+
+/* The app layer, light. Built from the core, and every rule is built
+   from these. */
+:root {
+  --app-ground: var(--u-50);
+  --app-card: var(--u-0);
+  --app-edge: var(--u-200);
+  --app-ink: var(--u-850);
+  --app-ink-3: var(--u-550);
+  --app-nav: var(--u-800);
+  --app-nav-ink: var(--u-50);
+  --app-chip: var(--u-200);
+
+  /* Raw, for a fill or an indicator. */
+  --app-ok: var(--green);
+  --app-warn: var(--amber);
+  --app-crit: var(--red);
+  --app-maint: var(--blue);
+  --app-unknown: var(--u-500);
+
+  /* Darkened, for type. The raw values are about 1.8:1 on white. */
+  --ok: var(--green-ink);
+  --warn: var(--amber-ink);
+  --crit: var(--red-ink);
+  --maint: var(--blue-ink);
+  --unknown: var(--u-500);
+}
+
+/* The app layer, dark. The decks render the app in light only, so
+   these are derived rather than approved: the same swap the decks
+   apply to their own chrome. Read them on a real screen before the
+   theme control ships. */
+:root[data-theme="dark"] {
+  --app-ground: var(--u-950);
+  --app-card: var(--u-900);
+  --app-edge: var(--u-800);
+  --app-ink: var(--u-200);
+  --app-ink-3: var(--u-600);
+  --app-nav: var(--u-900);
+  --app-nav-ink: var(--u-200);
+  --app-chip: var(--u-800);
+
+  --ok: var(--green-lift);
+  --warn: var(--amber-lift);
+  --crit: var(--red-lift);
+  --maint: var(--blue-lift);
+  --unknown: var(--u-500);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --app-ground: var(--u-950);
+    --app-card: var(--u-900);
+    --app-edge: var(--u-800);
+    --app-ink: var(--u-200);
+    --app-ink-3: var(--u-600);
+    --app-nav: var(--u-900);
+    --app-nav-ink: var(--u-200);
+    --app-chip: var(--u-800);
+    --ok: var(--green-lift);
+    --warn: var(--amber-lift);
+    --crit: var(--red-lift);
+    --maint: var(--blue-lift);
+  }
+}

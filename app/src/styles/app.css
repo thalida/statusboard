@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Tailwind v4 builds its utilities from this block. `bg-app-card` and
+   `text-crit` exist because these names do. */
+@theme inline {
+  --color-app-ground: var(--app-ground);
+  --color-app-card: var(--app-card);
+  --color-app-edge: var(--app-edge);
+  --color-app-ink: var(--app-ink);
+  --color-app-ink-3: var(--app-ink-3);
+  --color-app-nav: var(--app-nav);
+  --color-app-nav-ink: var(--app-nav-ink);
+  --color-app-chip: var(--app-chip);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-crit: var(--crit);
+  --color-maint: var(--maint);
+  --color-unknown: var(--unknown);
+  --color-app-ok: var(--app-ok);
+  --color-app-warn: var(--app-warn);
+  --color-app-crit: var(--app-crit);
+  --color-app-maint: var(--app-maint);
+  --color-app-unknown: var(--app-unknown);
+}
+
+body {
+  background: var(--app-ground);
+  color: var(--app-ink);
+}
