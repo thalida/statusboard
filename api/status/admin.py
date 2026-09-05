@@ -59,7 +59,7 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "display_span",
-        "display_source",
+        "source",
         "display_poll_run",
     ]
     date_hierarchy = "started_at"
@@ -104,19 +104,6 @@ class ComponentStatusAdmin(PollerWrittenAdmin, ModelAdmin):
         # standing.
         return date_span(obj.started_at, obj.ended_at)
 
-    @display(description=_("Source"))
-    def display_source(self, obj):
-        # How the severity was arrived at, which is not the same question
-        # as what it is.
-        return obj.get_source_display()
-
-    def get_readonly_fields(self, request, obj=None):
-        # The run is not an editable column, so it reaches the record
-        # only this way. Without it you could see where a reading came
-        # from on the table and not on the reading itself.
-        fields = list(super().get_readonly_fields(request, obj))
-        return fields + ["display_poll_run"]
-
     @display(description=_("Severity"), label=SEVERITY_VARIANTS, ordering="severity")
     def display_severity(self, obj):
         return severity_label(obj.severity)
@@ -148,13 +135,9 @@ class EventUpdateInline(TabularInline):
     per_page = 10
     # A claimed event interleaves our updates with the provider's.
     # Without the source the timeline reads as one author.
-    fields = ["phase", "display_source", "body", "posted_at"]
+    fields = ["phase", "source", "body", "posted_at"]
     readonly_fields = fields
     ordering = ["-posted_at"]
-
-    @display(description=_("Source"))
-    def display_source(self, obj):
-        return obj.get_source_display()
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -168,7 +151,9 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_when",
         "display_kind",
         "display_phase",
-        "display_detected_by",
+        # `external_id IS NULL` cannot answer this. A claim fills the
+        # column in, which destroys the fact that we found it first.
+        "detected_by",
         "display_related",
     ]
     date_hierarchy = "starts_at"
@@ -330,12 +315,6 @@ class ServiceEventAdmin(PollerWrittenAdmin, ModelAdmin):
     def display_kind(self, obj):
         return EventKind(obj.kind).label
 
-    @display(description=_("Detected by"), ordering="detected_by")
-    def display_detected_by(self, obj):
-        # `external_id IS NULL` cannot answer this. A claim fills the
-        # column in, which destroys the fact that we found it first.
-        return obj.get_detected_by_display()
-
     @display(description=_("Phase"), label=True, ordering="phase")
     def display_phase(self, obj):
         # A closed phase means the event is over.
@@ -349,7 +328,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         "display_event",
         "display_service",
         "phase",
-        "display_source",
+        "source",
         "posted_at",
     ]
     display_update = record_column(_("Update"))
@@ -364,6 +343,7 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
     list_filter = [
         ("event__service", AutocompleteSelectFilter),
         ("event", AutocompleteSelectFilter),
+        PhaseFilter,
         ("source", ChoicesDropdownFilter),
         ("posted_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
@@ -372,11 +352,6 @@ class EventUpdateAdmin(PollerWrittenAdmin, ModelAdmin):
         (None, {"fields": ["event", "phase", "source", "posted_at", "body"]}),
         audit_section(),
     ]
-
-    @display(description=_("Source"), ordering="source")
-    def display_source(self, obj):
-        # Who wrote the post. A claimed event holds both, one per update.
-        return obj.get_source_display()
 
     @display(description=_("Service"), ordering="event__service__name")
     def display_service(self, obj):

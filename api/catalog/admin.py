@@ -288,6 +288,28 @@ class ServiceSeverityFilter(DropdownFilter):
         )
 
 
+class WatchedFilter(DropdownFilter):
+    """Whether anybody holds this component on a board.
+
+    The watcher count is a column and was not a filter. `boards` is the
+    relation the count reads, so this narrows on the same join.
+    """
+
+    title = _("Watched")
+    parameter_name = "watched"
+
+    def lookups(self, request, model_admin):
+        return [("1", _("Watched")), ("0", _("Unwatched"))]
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        watched = queryset.filter(boards__isnull=False)
+        if self.value() == "1":
+            return watched.distinct()
+        return queryset.exclude(pk__in=watched.values("pk"))
+
+
 class ComponentSeverityFilter(DropdownFilter):
     """Filter components by the status they are showing now.
 
@@ -515,7 +537,7 @@ class ServiceComponentAdmin(
         "display_service",
         "display_severity",
         "is_overall",
-        "display_archived",
+        "is_archived",
         "display_related",
         "watchers",
         # `suggested` reads this flag on every component. Ticking it on
@@ -542,13 +564,16 @@ class ServiceComponentAdmin(
         ("archived_at", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
         "is_featured",
+        WatchedFilter,
     ]
     autocomplete_fields = ["service", "parent"]
     ordering = ["service__name", "status_page_order"]
     # A parent is one of the same service's components.
     autocomplete_scope = ("service",)
     # The date follows the flag, so it is shown and never typed.
-    readonly_fields = ["archived_at"]
+    # The count is read from the boards, so it is shown and cannot be
+    # typed at all.
+    readonly_fields = ["archived_at", "watchers"]
     # A checkbox in the list, not an action. One Save flips any mix of
     # rollups and leaves, which a toggle action could never do at once.
     list_editable = ["is_featured"]
@@ -561,6 +586,7 @@ class ServiceComponentAdmin(
                     "name",
                     "external_id",
                     "is_featured",
+                    "watchers",
                 ]
             },
         ),
@@ -626,16 +652,6 @@ class ServiceComponentAdmin(
     def display_service(self, obj):
         return change_link(obj.service)
 
-    @display(
-        description=_("State"),
-        label={"Live": "success", "Archived": "default"},
-        ordering="is_archived",
-    )
-    def display_archived(self, obj):
-        # An archived component still reads on the table. Without this
-        # it looked like one the provider is still publishing.
-        return "Archived" if obj.is_archived else "Live"
-
     @display(description=_("View"), dropdown=True)
     def display_related(self, obj):
         return {
@@ -666,13 +682,25 @@ class ServiceComponentAdmin(
 
 
 @admin.register(ServiceRequest)
-class ServiceRequestAdmin(ModelAdmin):
+class ServiceRequestAdmin(BaseModelAdmin, ModelAdmin):
     """What the catalog is missing, most asked for first."""
 
     list_display = ["url", "request_count", "last_requested_at", "created_by"]
     ordering = ["-request_count", "-last_requested_at"]
     search_fields = ["url"]
+    # Who asked, then how many asked, then when the last one did. The
+    # URL is the row itself, and the search box reaches it.
+    list_filter = [
+        ("created_by", AutocompleteSelectFilter),
+        ("request_count", RangeNumericFilter),
+        ("last_requested_at", RangeDateTimeFilter),
+    ]
+    # The app writes all three. A hand-typed count is a demand nobody made.
     readonly_fields = ["url", "request_count", "last_requested_at"]
+    fieldsets = [
+        (None, {"fields": ["url", "request_count", "last_requested_at"]}),
+        audit_section(),
+    ]
 
     def has_add_permission(self, request):
         # A row arrives from the app, never from here.

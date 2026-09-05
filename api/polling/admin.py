@@ -67,14 +67,6 @@ class PollRunColumns:
     def display_ok(self, obj):
         return "OK" if obj.ok else "Failed"
 
-    @display(
-        description=_("Error type"),
-        ordering="error_type",
-        label={"Unrecorded": "warning"},
-    )
-    def display_error_type(self, obj):
-        return obj.error_type or "—"
-
     @display(description=_("Error"))
     def display_error(self, obj):
         return (obj.error or "—")[:90]
@@ -109,7 +101,7 @@ class PollRunInline(PollRunColumns, TabularInline):
         "provider",
         "started_at",
         "finished_at",
-        "display_error_type",
+        "error_type",
         "display_error",
     ]
     readonly_fields = fields
@@ -153,6 +145,9 @@ class PollerAdmin(
     autocomplete_fields = ["service"]
     ordering = ["-consecutive_failure_count", "next_at"]
     inlines = [PollRunInline]
+    # Read from the pause flag and the failure count, so it is shown
+    # and never typed.
+    readonly_fields = ["display_health"]
     fieldsets = [
         (None, {"fields": ["service", "is_paused", "note"]}),
         (
@@ -167,7 +162,14 @@ class PollerAdmin(
         ),
         (
             _("Health"),
-            {"fields": ["next_at", "last_success_at", "consecutive_failure_count"]},
+            {
+                "fields": [
+                    "display_health",
+                    "next_at",
+                    "last_success_at",
+                    "consecutive_failure_count",
+                ]
+            },
         ),
         audit_section(),
     ]
@@ -287,7 +289,7 @@ class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
         "provider",
         "started_at",
         "display_duration",
-        "display_error_type",
+        "error_type",
         "display_related",
     ]
     date_hierarchy = "started_at"

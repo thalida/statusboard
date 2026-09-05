@@ -31,6 +31,25 @@ IS_DEFAULT = ExpressionWrapper(
 )
 
 
+class HoldsItemsFilter(admin.SimpleListFilter):
+    """Whether a board holds anything.
+
+    The count is a column and was not a filter. An empty board is what
+    a person opens the list to find.
+    """
+
+    title = _("Tracked")
+    parameter_name = "holds"
+
+    def lookups(self, request, model_admin):
+        return [("1", _("Holds components")), ("0", _("Empty"))]
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        return queryset.filter(items__isnull=self.value() == "0").distinct()
+
+
 class DefaultBoardFilter(admin.SimpleListFilter):
     """Whether a board is the one its owner opens.
 
@@ -59,12 +78,16 @@ class DashboardAdmin(ScopedAutocompleteMixin, BaseModelAdmin, ModelAdmin):
     list_filter = [
         ("owner", AutocompleteSelectFilter),
         DefaultBoardFilter,
+        HoldsItemsFilter,
         ("created_at", RangeDateTimeFilter),
     ]
     autocomplete_fields = ["owner"]
     inlines = [DashboardItemInline]
+    # Both are read from elsewhere. The default is a pointer on the
+    # owner, and the count is the rows below.
+    readonly_fields = ["display_default", "item_count"]
     fieldsets = [
-        (None, {"fields": ["owner", "name"]}),
+        (None, {"fields": ["owner", "name", "display_default", "item_count"]}),
         audit_section(),
     ]
 
