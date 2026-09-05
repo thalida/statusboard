@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from api.defaults import email_backend
 from authentication.models import MagicLinkToken, User
 
 
@@ -213,3 +214,19 @@ def test_logging_out_answers_with_an_empty_object():
 
     assert response.status_code == 200
     assert response.json() == {}
+
+
+@pytest.mark.parametrize(
+    ("host", "console", "expected"),
+    [
+        ("smtp.fastmail.com", False, "smtp"),
+        ("smtp.fastmail.com", True, "console"),
+        ("", False, "console"),
+        ("", True, "console"),
+    ],
+)
+def test_the_console_toggle_beats_a_configured_host(host, console, expected):
+    # A developer with real credentials in .env.local has to be able to
+    # stop a test sign-in reaching a real inbox. Were the host to win,
+    # the only way to print a link would be to delete the password.
+    assert expected in email_backend(host, console)

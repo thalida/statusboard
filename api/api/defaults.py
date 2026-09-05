@@ -104,6 +104,34 @@ THROTTLE_RATES = {
 }
 
 
+# Print mail instead of sending it, even when a host is configured. The
+# local file carries real credentials, so this is how a sign-in link
+# reaches a terminal rather than an inbox.
+#
+# It is ours, not Django's, and it reads like Django's. That is the
+# price of sitting in the EMAIL_ family the rest of the file uses.
+EMAIL_USE_CONSOLE = os.environ.get("EMAIL_USE_CONSOLE", "").lower() not in (
+    "",
+    "0",
+    "false",
+    "no",
+)
+
+
+def email_backend(host, use_console):
+    """Which backend carries the mail.
+
+    A magic link is the only way to sign in, so a deployment that cannot
+    send cannot be used. A host is what says it can.
+
+    Here rather than inline in `settings.py`. A settings module computes
+    its values on import, and a test cannot call that twice.
+    """
+    if host and not use_console:
+        return "django.core.mail.backends.smtp.EmailBackend"
+    return "django.core.mail.backends.console.EmailBackend"
+
+
 # Cursor pagination. `/meta` publishes both, so a client can size a page
 # without guessing which values the server will accept.
 DEFAULT_PAGE_SIZE = 50

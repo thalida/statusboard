@@ -21,7 +21,15 @@ from getpass import getpass
 PROMPTS = {
     "DJANGO_SUPERUSER_EMAIL": ("admin email: ", input),
     "DJANGO_SUPERUSER_PASSWORD": ("admin password: ", getpass),
+    "EMAIL_HOST_USER": ("fastmail address: ", input),
+    "EMAIL_HOST_PASSWORD": ("fastmail app password: ", getpass),
 }
+
+# What makes a file filled in, which is not the same list. Mail is
+# optional: EMAIL_USE_CONSOLE prints a sign-in link instead. So it is
+# worth asking for once. Requiring it would re-ask on every init, and
+# copy the shared file over a worktree's own values.
+REQUIRED = ("DJANGO_SUPERUSER_EMAIL", "DJANGO_SUPERUSER_PASSWORD")
 
 # Anchored to the checkout, not the cwd: `just` recipes cd into api/.
 ROOT = pathlib.Path(
@@ -56,16 +64,24 @@ def values(text: str) -> dict[str, str]:
     return out
 
 
-def blanks(text: str) -> list[str]:
+def blanks(text: str, keys=None) -> list[str]:
     found = values(text)
-    return [key for key in PROMPTS if not found.get(key)]
+    return [key for key in (keys or PROMPTS) if not found.get(key)]
 
 
 def fill(text: str, key: str, value: str) -> str:
+    """Set a key, appending it when the file predates it.
+
+    A file written before the template grew a key does not hold it. The
+    rewrite went line by line. So an answer to a prompt for a missing
+    key went nowhere.
+    """
     lines = [
         f"{key}={value}" if line.startswith(f"{key}=") else line
         for line in text.splitlines()
     ]
+    if not any(line.startswith(f"{key}=") for line in lines):
+        lines.append(f"{key}={value}")
     return "\n".join(lines) + "\n"
 
 
@@ -88,7 +104,7 @@ def ensure(path: pathlib.Path) -> str:
     text = starting_text(path)
     missing = blanks(text)
     if missing and sys.stdin.isatty():
-        print(f"Setting the local admin in {path}. Press Enter to skip.")
+        print(f"Filling in {path}. Press Enter to skip any of them.")
         for key in missing:
             prompt, reader = PROMPTS[key]
             answer = reader(prompt).strip()
@@ -109,7 +125,7 @@ def main() -> None:
         return
 
     # A worktree. Copy the shared file unless this one already has values.
-    if local.exists() and not blanks(local.read_text()):
+    if local.exists() and not blanks(local.read_text(), REQUIRED):
         return
     local.write_text(text)
     print(f"copied api/.env.local from {shared.parent.parent}")
