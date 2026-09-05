@@ -315,7 +315,6 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         "display_service",
         "display_severity",
         "provider",
-        "source",
         "display_related",
     ]
     search_fields = [
@@ -336,8 +335,15 @@ class ServiceAdmin(BaseModelAdmin, SimpleHistoryAdmin, ModelAdmin):
         ("updated_at", RangeDateTimeFilter),
     ]
     ordering = ["name"]
+    # How the row arrived is written by the importer or by the add form.
+    # A person typing it makes the record claim a history it does not
+    # have.
+    readonly_fields = ["source"]
+    # `source` sits with the name, not in the collapsed trail. It was
+    # on no form for two releases, and a fold is the next place to lose
+    # it.
     fieldsets = [
-        (None, {"fields": ["name", "slug"]}),
+        (None, {"fields": ["name", "slug", "source"]}),
         (_("Presentation"), {"fields": ["logo", "homepage_url"]}),
         audit_section(),
     ]
