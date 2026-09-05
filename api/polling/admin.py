@@ -59,14 +59,6 @@ def humanise_seconds(seconds):
 class PollRunColumns:
     """How a run reads. The same on its own table and under a poller."""
 
-    @display(
-        description=_("Result"),
-        label={"OK": "success", "Failed": "danger"},
-        ordering="ok",
-    )
-    def display_ok(self, obj):
-        return "OK" if obj.ok else "Failed"
-
     @display(description=_("Error"))
     def display_error(self, obj):
         return (obj.error or "—")[:90]
@@ -97,7 +89,7 @@ class PollRunInline(PollRunColumns, TabularInline):
     show_change_link = True
     per_page = 20
     fields = [
-        "display_ok",
+        "ok",
         "provider",
         "started_at",
         "finished_at",
@@ -277,15 +269,15 @@ class PollerAdmin(
 class PollRunAdmin(PollRunColumns, PollerWrittenAdmin, ModelAdmin):
     """We are the thing that tells you when services break.
 
-    So we cannot quietly break ourselves. A failing poll is a labelled row
-    here, not a number to go looking for.
+    So we cannot quietly break ourselves. A failing poll is marked on its
+    own row here, not a number to go looking for.
     """
 
     list_display = [
         "display_run",
         "display_poller",
         "display_service",
-        "display_ok",
+        "ok",
         "provider",
         "started_at",
         "display_duration",
