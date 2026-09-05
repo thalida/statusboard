@@ -1,8 +1,6 @@
 import type { TokenPair } from "@/api/model";
 
-// No letter "a": a test checks that an access token value never
-// reaches storage by asserting the serialized store excludes "a".
-const KEY = "refresh_token";
+const KEY = "statusboard.refresh";
 
 /** The pair, and who to tell when it changes.
  *
