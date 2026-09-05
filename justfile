@@ -6,7 +6,9 @@ set dotenv-path := "api/.env.local"
 # then never share a port or a database. See bin/worktree-env.py.
 wt := 'eval "$(python3 bin/worktree-env.py)"'
 
-# List the recipes. Keep first: bare `just` runs whatever recipe comes first.
+# Keep first: bare `just` runs whatever recipe comes first.
+
+# List the recipes.
 default:
     @just --list --unsorted
 
@@ -14,7 +16,9 @@ default:
 # that also changes the database. The human asked for exactly this,
 # since a fresh worktree that only warns still fails unexplained.
 
-# Start Postgres and Redis, migrate, then run the server and the poller. Ctrl-C stops both.
+# Ctrl-C stops the server and the poller together.
+
+# Run the app: stores, migrations, server, poller.
 [group('Daily')]
 dev: up migrate
     @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
@@ -23,7 +27,9 @@ dev: up migrate
       uv run celery -A api worker -B -l info & \
       uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
 
-# Run the test suite, host and bin/ scripts together. Arguments pass to both, so `just test -k foo` filters each.
+# Arguments pass to both, so `just test -k foo` filters each.
+
+# Run the test suite, host and bin/ scripts.
 [group('Daily')]
 test *args:
     @{{wt}} ; cd api && uv run pytest -n auto {{args}}
@@ -44,7 +50,9 @@ lint:
 # CVEs and fails the merge on a hit. That needs the network and a
 # vulnerability database, so it stays out of this recipe.
 
-# Every CI check but the image scan, each where CI runs it.
+# Each check runs where CI runs it.
+
+# Every CI check but the image scan.
 [group('Daily')]
 check: image
     docker compose -f docker-compose.test.yml run --rm pytest -q -n auto --cov-fail-under=85
@@ -56,7 +64,7 @@ check: image
       -c 'python manage.py makemigrations --check --dry-run'
     docker compose -f docker-compose.test.yml down -v
 
-# Show this worktree's ports, database and compose project.
+# Show this worktree's ports and database.
 [group('Daily')]
 info:
     @{{wt}} ; echo "worktree   $WORKTREE_SLUG" ; \
@@ -71,24 +79,26 @@ info:
 prose *args:
     @python3 bin/check_prose.py {{args}}
 
-# One-time setup. Every step it calls is runnable on its own.
+# Every step it calls is runnable on its own.
+
+# One-time setup.
 [group('Lifecycle')]
 init: env up sync migrate seed
     pre-commit install
     @{{wt}} ; cd api && uv run python manage.py collectstatic --noinput
 
-# Start Postgres and Redis for this worktree, waiting until they are healthy.
+# Start Postgres and Redis, and wait for both.
 [group('Lifecycle')]
 up:
     @{{wt}} ; docker compose up -d --wait ; \
       echo "postgres localhost:$POSTGRES_HOST_PORT  redis localhost:$REDIS_HOST_PORT"
 
-# Apply migrations to this worktree's database.
+# Apply migrations.
 [group('Lifecycle')]
 migrate:
     @{{wt}} ; cd api && uv run python manage.py migrate
 
-# Drop this worktree's database and build it again from nothing.
+# Drop this database and build it again.
 [group('Lifecycle')]
 reset:
     @{{wt}} ; docker compose down -v ; just up ; just migrate ; just seed-live
@@ -97,7 +107,7 @@ reset:
 # project that file uses. Its database is a tmpfs, so it holds nothing.
 # Add `-v` to drop this checkout's own database too.
 
-# Stop this checkout's containers and remove its networks.
+# Stop this checkout's containers.
 [group('Lifecycle')]
 clean *args:
     @{{wt}} ; DIR=$(basename "$PWD") ; \
@@ -110,12 +120,17 @@ clean *args:
           echo "[just]   git branch -d $(git rev-parse --abbrev-ref HEAD)" ; \
       fi
 
-# Fetches real status pages, so it needs the network. Fills an empty database: admin, a small catalog, one tracked service.
+# Fetches real status pages, so it needs the network. Fills an
+# empty database: admin, a small catalog, one tracked service.
+
+# Fill an empty database with real data.
 [group('Data')]
 seed-live:
     @{{wt}} ; cd api && uv run python manage.py seed_dev
 
-# Probe the recorded status pages and report any that moved or broke.
+# Reports any page that moved or broke.
+
+# Probe the recorded status pages.
 [group('Data')]
 probe-pages *args:
     @{{wt}} ; cd api && uv run python manage.py check_status_pages {{args}}
@@ -123,7 +138,9 @@ probe-pages *args:
 # The tag triggers release.yml: build, sign, smoke test, deploy. A tag
 # left behind by a failed push is reused rather than duplicated.
 
-# Tag and push a release (v1.2.3, v1.2.3-rc.1). Ships to production.
+# Takes v1.2.3 or v1.2.3-rc.1.
+
+# Tag and push a release. Ships to production.
 [group('Release')]
 release VERSION:
     @set -e ; \
@@ -173,7 +190,7 @@ release VERSION:
 # Credentials come from api/.env.local. No app argument, so this repo can
 # only ever deploy its own stack.
 
-# Redeploy the current image without cutting a release.
+# Redeploy without cutting a release.
 [group('Release')]
 deploy:
     @set -e ; \
@@ -201,7 +218,9 @@ deploy:
 # Everything below is a step of `init` or `check`, not a command a
 # person reaches for. `just <name>` still runs each one directly.
 
-# Write .env.local, asking for the admin once. Worktrees copy main's.
+# Asks for the admin once. A worktree copies main's.
+
+# Write .env.local.
 [private]
 env:
     @python3 bin/make-env.py
@@ -211,7 +230,9 @@ env:
 sync:
     cd api && uv sync
 
-# Create the admin in this worktree's database, from .env.local. Never asks.
+# Never asks: the values come from .env.local.
+
+# Create the admin.
 [private]
 seed:
     @{{wt}} ; cd api && uv run python manage.py seed_admin
