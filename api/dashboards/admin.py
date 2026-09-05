@@ -73,7 +73,10 @@ class DefaultBoardFilter(admin.SimpleListFilter):
 class DashboardAdmin(ScopedAutocompleteMixin, BaseModelAdmin, ModelAdmin):
     # A person picking their default board is offered their own.
     autocomplete_scope = ("owner",)
-    list_display = ["display_board", "display_owner", "display_default", "item_count"]
+    # No `default` column. The pointer lives on the user, as
+    # `default_dashboard`. It is a fact about the owner, not the board.
+    # It stays on the form, and its filter stays.
+    list_display = ["display_board", "display_owner", "item_count"]
     search_fields = ["name", "owner__email"]
     list_filter = [
         ("owner", AutocompleteSelectFilter),
