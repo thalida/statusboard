@@ -32,6 +32,11 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 
+# Node
+node_modules/
+app/dist/
+app/*.tsbuildinfo
+
 # Editors / OS
 .DS_Store
 .idea/
