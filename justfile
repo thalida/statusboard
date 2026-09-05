@@ -25,13 +25,15 @@ dev: up migrate
       echo "api    http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
       echo "client http://$WORKTREE_SLUG.localhost:$CLIENT_PORT/" ; \
       (cd api && uv run celery -A api worker -B -l info) & \
-      (cd app && CLIENT_PORT=$CLIENT_PORT pnpm dev) & \
+      (cd app && CLIENT_PORT=$CLIENT_PORT \
+        VITE_API_URL="http://$WORKTREE_SLUG.localhost:$DJANGO_PORT" pnpm dev) & \
       cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
 
 # Run the client on this worktree's reserved port.
 [group('Daily')]
 app:
-    @{{wt}} ; cd app && CLIENT_PORT=$CLIENT_PORT pnpm dev
+    @{{wt}} ; cd app && CLIENT_PORT=$CLIENT_PORT \
+      VITE_API_URL="http://$WORKTREE_SLUG.localhost:$DJANGO_PORT" pnpm dev
 
 # Arguments pass to both, so `just test -k foo` filters each.
 
