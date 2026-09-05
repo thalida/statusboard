@@ -140,6 +140,10 @@ class PollerAdmin(
     # Read from the pause flag and the failure count, so it is shown
     # and never typed.
     readonly_fields = ["display_health"]
+    # A checkbox in the list, not an action. A provider going down means
+    # pausing several pollers, and one Save covers any mix of pausing
+    # and resuming.
+    list_editable = ["is_paused"]
     fieldsets = [
         (None, {"fields": ["service", "is_paused", "note"]}),
         (

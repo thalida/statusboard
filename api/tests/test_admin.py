@@ -913,6 +913,33 @@ def test_the_component_list_formset_flips_the_flag(admin_client, db):
 
 
 @pytest.mark.django_db
+def test_the_poller_list_formset_flips_the_pause(admin_client, db):
+    # A provider going down means pausing several pollers at once.
+    # One Save pauses one and resumes another.
+    from tests.factories import PollerFactory, ServiceFactory
+
+    to_pause = PollerFactory(service=ServiceFactory(), is_paused=False)
+    to_resume = PollerFactory(service=ServiceFactory(), is_paused=True)
+    admin_client.post(
+        reverse("admin:polling_poller_changelist"),
+        {
+            "form-TOTAL_FORMS": "2",
+            "form-INITIAL_FORMS": "2",
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "form-0-id": str(to_pause.pk),
+            "form-0-is_paused": "on",
+            "form-1-id": str(to_resume.pk),
+            "_save": "Save",
+        },
+    )
+    to_pause.refresh_from_db()
+    to_resume.refresh_from_db()
+    assert to_pause.is_paused is True
+    assert to_resume.is_paused is False
+
+
+@pytest.mark.django_db
 def test_the_component_form_features_a_leaf(staff_client):
     # The change page is where an admin already is when they decide to
     # feature something. Without the field the form cannot set it.
