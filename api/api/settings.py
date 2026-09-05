@@ -12,6 +12,7 @@ from api.defaults import (  # noqa: F401
     APP_MAGIC_LINK_PATH,
     APP_URL,
     DEFAULT_PAGE_SIZE,
+    EMAIL_USE_CONSOLE,
     ENVIRONMENT,
     EVENT_CLAIM_WINDOW,
     MAGIC_LINK_TTL,
@@ -23,6 +24,7 @@ from api.defaults import (  # noqa: F401
     SYSTEM_EMAIL,
     THROTTLE_RATES,
     debug,
+    email_backend,
     secret_key,
 )
 
@@ -422,22 +424,20 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-# A magic link is the only way to sign in, so a deployment that cannot
-# send mail cannot be used. EMAIL_HOST decides: set, the mail is sent;
-# unset, it is printed, which is what development wants.
+# EMAIL_HOST says a deployment can send. EMAIL_USE_CONSOLE overrides it
+# and prints instead. That one is ours, and `defaults.py` defines it and
+# `email_backend` beside it. Every other name here is Django's.
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
-EMAIL_BACKEND = (
-    "django.core.mail.backends.smtp.EmailBackend"
-    if EMAIL_HOST
-    else "django.core.mail.backends.console.EmailBackend"
-)
+EMAIL_BACKEND = email_backend(EMAIL_HOST, EMAIL_USE_CONSOLE)
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = EMAIL_PORT != 465
 EMAIL_USE_SSL = EMAIL_PORT == 465
+# Django's name, and Django reads it for every message. The variable
+# behind it is EMAIL_FROM, so the file it comes from has one prefix.
 DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL", "Statusboard <no-reply@statusboard.dev>"
+    "EMAIL_FROM", "Statusboard <no-reply@statusboard.dev>"
 )
 
 # The client app is on another origin, so the browser asks first. A

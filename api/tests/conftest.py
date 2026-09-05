@@ -73,3 +73,18 @@ def forget_throttles():
     from django.core.cache import cache
 
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def mail_takes_the_console_path(settings):
+    """Tests pick the backend the way a machine with no credentials does.
+
+    `.env.local` now carries a real Fastmail password, and `defaults.py`
+    loads that file on import. Without this, `just test` on the host
+    reads the SMTP branch while CI, which has no file, reads the other.
+
+    The inputs are pinned, not `EMAIL_BACKEND`. pytest-django swaps in
+    locmem on top, so `mail.outbox` still holds what was sent.
+    """
+    settings.EMAIL_HOST = ""
+    settings.EMAIL_USE_CONSOLE = True
