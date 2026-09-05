@@ -803,6 +803,54 @@ def test_every_registered_admin_is_reachable():
     assert not missing, f"registered but unreachable: {sorted(missing)}"
 
 
+def _change_view_names(model_admin, request):
+    """Every name the change view puts on the page.
+
+    An inline is part of the form. A component's severity history is a
+    table on it, so the column that summarises it has a place there.
+    """
+    from django.contrib.admin.utils import flatten_fieldsets
+
+    names = set(flatten_fieldsets(model_admin.get_fieldsets(request)))
+    for inline in model_admin.inlines:
+        names.update(inline.fields or [])
+        names.update(field.name for field in inline.model._meta.concrete_fields)
+    return names
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("model", PROJECT_ADMINS, ids=lambda m: m._meta.label)
+def test_every_column_has_a_place_on_the_form(staff_client, model):
+    """A column with no counterpart on the change view was found twice.
+
+    Opening the record then answers less than the list did. A list of
+    the known gaps would go stale, so the pairing is read off the
+    registry.
+
+    A column counts as answered by its own name on the form, or by the
+    field it sorts on. It cannot see a counterpart under another name.
+    """
+    model_admin = admin.site._registry[model]
+    request = staff_client.request().wsgi_request
+    covered = _change_view_names(model_admin, request)
+    list_display = model_admin.get_list_display(request)
+    linked = model_admin.get_list_display_links(request, list_display) or []
+
+    missing = []
+    for entry in list_display:
+        column = getattr(model_admin, entry, None)
+        # The linked column opens the record, and a dropdown holds links
+        # to other tables. Neither carries a value of its own.
+        if entry in linked or getattr(column, "dropdown", False):
+            continue
+        ordering = getattr(column, "admin_order_field", "")
+        root = ordering.split("__")[0] if isinstance(ordering, str) else ""
+        if {entry, root} & covered:
+            continue
+        missing.append(entry)
+    assert not missing, f"{model._meta.label}: no place on the form for {missing}"
+
+
 def _tab_strip(body):
     """The tab strip's own markup, not the whole page.
 
