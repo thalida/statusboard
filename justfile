@@ -68,6 +68,8 @@ check: image
     @python3 -m unittest discover -s bin/tests -v
     docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
       -c 'python manage.py makemigrations --check --dry-run'
+    cd app && pnpm install --frozen-lockfile && pnpm lint:ci && pnpm typecheck && pnpm test
+    cd app && pnpm codegen && git diff --exit-code src/api
     docker compose -f docker-compose.test.yml down -v
 
 # Show this worktree's ports and database.
@@ -84,6 +86,11 @@ info:
 [group('Daily')]
 prose *args:
     @python3 bin/check_prose.py {{args}}
+
+# Generate the API client from the contract.
+[group('Daily')]
+codegen:
+    cd app && pnpm codegen
 
 # Every step it calls is runnable on its own.
 

@@ -47,6 +47,13 @@ def commands():
         yield from recipe(called.group(1)) if called else [line]
 
 
+def pnpm_scripts(command):
+    """The pnpm scripts a `cd app` command runs, in order."""
+    if "cd app" not in command:
+        return []
+    return re.findall(r"pnpm ([\w:-]+)", command)
+
+
 def compose_services(command):
     """The service a `docker compose run` names, past its flags."""
     _, _, tail = command.partition("run --rm ")
@@ -92,6 +99,17 @@ class MergeGateTests(unittest.TestCase):
         wanted = [c for c in self.commands if "makemigrations" in c]
         self.assertTrue(wanted, "just check no longer checks for a missing migration")
         self.assertIn("makemigrations --check --dry-run", self.workflow)
+
+    def test_every_client_check_also_runs_in_ci(self):
+        # A `cd app` line runs outside Docker. Missing one from CI lets a
+        # broken client, or one the contract drifted from, merge unseen.
+        wanted = [c for c in self.commands if "cd app" in c]
+        self.assertTrue(wanted, "just check no longer checks the client")
+        for command in wanted:
+            for script in pnpm_scripts(command):
+                self.assertIn(
+                    f"pnpm {script}", self.workflow, f"CI skips pnpm {script}"
+                )
 
 
 if __name__ == "__main__":
