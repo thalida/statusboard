@@ -141,8 +141,8 @@ export type EventRef = {
   title?: string;
   /** Valid values depend on `kind`. Render from `/meta/` `enums.event_phase`. */
   phase?: string;
-  /** When it began */
+  /** When it began, or when the window opens. */
   starts_at?: string;
-  /** When it resolved */
+  /** When it resolved, or when the window closes. */
   ends_at?: string | null;
 } | null;

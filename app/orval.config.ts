@@ -4,29 +4,7 @@ export default defineConfig({
   statusboard: {
     // The contract, not the running server. A generator that needed
     // the API up could not run in CI or in the image build.
-    input: {
-      target: "../docs/api/openapi.yaml",
-      // A handful of parameter descriptions carry an unescaped comma in
-      // flow-style YAML, which splits into a bogus extra property. That
-      // fails strict spec validation. No name or type orval reads is
-      // affected, so validation is off here rather than the contract.
-      unsafeDisableValidation: true,
-      override: {
-        // `EventRef` is `type: object, nullable: true`. Orval emits
-        // `export interface EventRef {...} | null`, which is not valid
-        // TypeScript. The OpenAPI 3.1 form of the same schema generates
-        // correctly, so this rewrites the parsed spec in memory. The
-        // contract on disk is untouched.
-        transformer: (spec) => {
-          const eventRef = spec.components?.schemas?.EventRef;
-          if (eventRef && "nullable" in eventRef) {
-            delete eventRef.nullable;
-            eventRef.type = ["object", "null"];
-          }
-          return spec;
-        },
-      },
-    },
+    input: "../docs/api/openapi.yaml",
     output: {
       target: "./src/api/statusboard.ts",
       schemas: "./src/api/model",

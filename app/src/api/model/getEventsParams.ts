@@ -137,7 +137,7 @@ import type { PageSizeParameter } from "./pageSizeParameter";
 
 export type GetEventsParams = {
   /**
-   * Requires auth
+   * Requires auth, and must be your own
    */
   dashboard?: string;
   /**

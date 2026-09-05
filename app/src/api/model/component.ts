@@ -162,7 +162,7 @@ export interface Component {
    * is a guarantee, not just what the data happens to hold.
    */
   descendant_count?: number;
-  /** The component Statusboard creates per service */
+  /** The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. */
   is_overall?: boolean;
   /** When the provider stopped publishing the component. An archived component is not served, so this is null everywhere but `Service.overall_component`. */
   archived_at?: string | null;

@@ -140,7 +140,7 @@ export type GetCatalogComponentsParams = {
    */
   service?: string;
   /**
-   * Every descendant
+   * Every descendant, at any depth
    */
   ancestor?: string;
   /**

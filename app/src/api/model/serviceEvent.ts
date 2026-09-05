@@ -150,9 +150,9 @@ export interface ServiceEvent {
    * Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
    */
   phase?: string;
-  /** When it began */
+  /** When it began, or when the window opens. */
   starts_at?: string;
-  /** When it resolved */
+  /** When it resolved, or when the window closes. */
   ends_at?: string | null;
   /**
    * Who opened it: the provider's own page, or this deployment noticing a severity drop

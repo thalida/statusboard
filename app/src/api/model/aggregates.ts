@@ -134,6 +134,6 @@
  * without knowing the endpoint.
  */
 export interface Aggregates {
-  /** Size of the whole collection */
+  /** Size of the whole collection, not the page. */
   total?: number;
 }
