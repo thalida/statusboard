@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { Shell } from "@/components/Shell";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,4 +21,19 @@ export const Route = createRootRoute({
       <Outlet />
     </QueryClientProvider>
   ),
+  notFoundComponent: NotFound,
 });
+
+/** Every URL no route matches.
+ *
+ * On the root, so one screen covers them all: a typo, a dead link,
+ * and a parent path like `/services` that names no page. It wears the
+ * shell, because the way back is the nav.
+ */
+function NotFound() {
+  return (
+    <Shell title="Not found">
+      <p>That page doesn't exist.</p>
+    </Shell>
+  );
+}
