@@ -320,7 +320,7 @@ paths:
       parameters:
         - { name: q, in: query, schema: { type: string } }
         - { name: service, in: query, schema: { type: string }, description: Service slug }
-        - { name: ancestor, in: query, schema: { type: string, format: uuid }, description: Every descendant, at any depth }
+        - { name: ancestor, in: query, schema: { type: string, format: uuid }, description: 'Every descendant, at any depth' }
         - { name: event, in: query, schema: { type: string, format: uuid }, description: The components this event affects }
         - { name: is_overall, in: query, schema: { type: boolean }, description: '`true` is one row per service, which is signed-out Home.' }
         - { name: is_tracked, in: query, schema: { type: boolean }, description: 'Authenticated only. Drives Showing All / Tracked / Untracked.' }
@@ -384,7 +384,7 @@ paths:
         code, so a client never restates which phases are terminal.
       security: [{}, { bearer: [] }]
       parameters:
-        - { name: dashboard, in: query, schema: { type: string, format: uuid }, description: Requires auth, and must be your own }
+        - { name: dashboard, in: query, schema: { type: string, format: uuid }, description: 'Requires auth, and must be your own' }
         - { name: service, in: query, schema: { type: string }, description: Service slug }
         - { name: component, in: query, schema: { type: string, format: uuid } }
         - { name: kind, in: query, schema: { type: string, enum: [incident, maintenance] } }
@@ -666,7 +666,7 @@ components:
         The base every aggregate block shares. An endpoint extends it. Read `aggregates.total`
         without knowing the endpoint.
       properties:
-        total: { type: integer, description: Size of the whole collection, not the page. }
+        total: { type: integer, description: 'Size of the whole collection, not the page.' }
     StatusAggregates:
       allOf:
         - $ref: '#/components/schemas/Aggregates'
@@ -911,7 +911,7 @@ components:
             Always 0 on the overall component. It is a peer of the top-level components, not
             their parent. A database trigger refuses a component parented under it. The count
             is a guarantee, not just what the data happens to hold.
-        is_overall: { type: boolean, description: The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null. }
+        is_overall: { type: boolean, description: "The component Statusboard creates per service, carrying the provider's top-level indicator. Always first, parent is null." }
         archived_at: { type: string, format: date-time, nullable: true, description: 'When the provider stopped publishing the component. An archived component is not served, so this is null everywhere but `Service.overall_component`.' }
         status: { $ref: '#/components/schemas/Status' }
         upcoming_maintenance:
@@ -976,8 +976,7 @@ components:
             the same service. Pass `?fields=` to leave it out there.
         is_tracked: { type: boolean, nullable: true }
     EventRef:
-      type: object
-      nullable: true
+      type: [object, "null"]
       description: |
         A `ServiceEvent` as it appears on a component. A subset with no `updates` array, so a list
         row costs one title and not a log.
@@ -986,8 +985,8 @@ components:
         kind: { type: string, enum: [incident, maintenance] }
         title: { type: string }
         phase: { type: string, description: 'Valid values depend on `kind`. Render from `/meta/` `enums.event_phase`.' }
-        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
-        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
+        starts_at: { type: string, format: date-time, description: 'When it began, or when the window opens.' }
+        ends_at: { type: string, format: date-time, nullable: true, description: 'When it resolved, or when the window closes.' }
     ServiceEvent:
       type: object
       description: |
@@ -1009,8 +1008,8 @@ components:
             `scheduled, in_progress, verifying, completed` for maintenance.
 
             Render the label from `/meta/` `enums.event_phase`, keyed by `kind`.
-        starts_at: { type: string, format: date-time, description: When it began, or when the window opens. }
-        ends_at: { type: string, format: date-time, nullable: true, description: When it resolved, or when the window closes. }
+        starts_at: { type: string, format: date-time, description: 'When it began, or when the window opens.' }
+        ends_at: { type: string, format: date-time, nullable: true, description: 'When it resolved, or when the window closes.' }
         detected_by:
           type: string
           enum: [provider, system]

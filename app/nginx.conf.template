@@ -1,0 +1,36 @@
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+
+    # A CSP is what makes a refresh token in local storage acceptable.
+    # connect-src names the API's own origin, which the entrypoint
+    # also wrote into config.js. The two faces come from Google, so
+    # the font hosts are named there and nowhere else.
+    #
+    # Repeated in every location below. See the file itself.
+    include /etc/nginx/conf.d/security-headers;
+
+    # The build fingerprints its assets, so they never change under a
+    # name. index.html and config.js must not be cached: one carries
+    # the asset names and the other the deployment's own values.
+    location /assets/ {
+        include /etc/nginx/conf.d/security-headers;
+        # One header, not two. `expires` writes its own Cache-Control,
+        # so pairing it with an add_header serves the response twice.
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+    location = /config.js {
+        include /etc/nginx/conf.d/security-headers;
+        add_header Cache-Control "no-store";
+    }
+    location = /index.html {
+        include /etc/nginx/conf.d/security-headers;
+        add_header Cache-Control "no-store";
+    }
+
+    # A single page. Every unknown path is the app's own route.
+    location / {
+        include /etc/nginx/conf.d/security-headers;
+        try_files $uri $uri/ /index.html;
+    }
+}

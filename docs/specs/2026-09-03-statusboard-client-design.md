@@ -66,8 +66,12 @@ catalogue. Nothing is missing but menu, tabs, popover and dialog. Those are styl
 the tokens. A component library would add a second set of colour names beside the 26.
 
 **There is almost no client state.** Server state is Query. Filter state is the URL. What
-is left is the theme, the hidden state of Suggested, and the install banner's visit count.
-All three live in local storage. No store library ships until something needs one.
+is left is the hidden state of Suggested and the install banner's visit count. Both live
+in local storage. No store library ships until something needs one.
+
+The theme was a third. **The app is light, and there is no theme.** The decks draw it in
+light only, so a dark one was values nobody had approved applying from the reader's
+system. Dark is a design task before it is a code one.
 
 ### Tokens
 
@@ -97,23 +101,40 @@ client's prefetch safe.
 
 ## 4. Routes
 
-Nine. Tabs are a search parameter, not a path. A tabbed screen is one page: the header is
-shared and the body swaps, which is the decks' own rule.
+Fifteen. **A tab is a path. A filter is a search parameter.** A tab is a place you can
+link someone to, and a filter is state you carry while you are there.
 
-| Route | `tab` | Other search parameters |
-| --- | --- | --- |
-| `/` | `board`, `updates` | board: `severity`, `sort`. updates: `service`, `component`, `kind`, `phase`, `sort` |
-| `/discover` | none | `q`, `severity`, `sort` |
-| `/discover/add` | none | none |
-| `/services/$slug` | `components`, `updates`, `about` | components: `severity`, `tracking`, `sort`. updates: `component`, `kind`, `phase`, `sort` |
-| `/components/$id` | `components`, `updates` | as above, without `component` |
-| `/events/$id` | `timeline`, `affects`, `about` | none |
-| `/signin` | none | none |
-| `/verify` | none | `token` |
-| `/settings` | none | none |
+A tabbed screen is still one page: the header is shared and the body swaps, which is the
+decks' own rule. A tab link renders inside the screen's own header, so only the body
+changes. The path says which body.
 
-The first `tab` listed is the default. `cursor` is a search parameter on every list,
-because pagination is infinite scroll.
+| Route | Search parameters |
+| --- | --- |
+| `/` | `severity`, `sort` |
+| `/updates` | `service`, `component`, `kind`, `phase`, `sort` |
+| `/discover` | `q`, `severity`, `sort` |
+| `/discover/add` | none |
+| `/services/$slug` | `severity`, `tracking`, `sort` |
+| `/services/$slug/updates` | `component`, `kind`, `phase`, `sort` |
+| `/services/$slug/about` | none |
+| `/components/$id` | `severity`, `tracking`, `sort` |
+| `/components/$id/updates` | `kind`, `phase`, `sort` |
+| `/events/$id` | none |
+| `/events/$id/affects` | none |
+| `/events/$id/about` | none |
+| `/signin` | none |
+| `/verify` | `token` |
+| `/settings` | none |
+
+A bare screen path is its first tab, so `/services/twilio` is that service's components
+and needs no redirect. `/` is the board and `/updates` is the feed beside it: Home's two
+tabs are the only ones that are not under a screen of their own, because Home is the root.
+
+Each route validates the filters its own tab takes. The components tab therefore drops a
+`phase` a link copied from the updates tab, rather than sending the API a parameter it
+refuses.
+
+`cursor` is a search parameter on every list, because pagination is infinite scroll.
 
 Components keep UUID identity. Only `Service` carries a slug.
 
@@ -480,8 +501,8 @@ The service `search_fields` go with the service list.
 ## 9. Settings
 
 The Refresh row is removed. It rendered `meta.poll_interval_seconds` read-only, and it
-read as a control over something a user cannot set. Settings holds Theme, Suggested
-services and Account.
+read as a control over something a user cannot set. Settings holds Suggested services and
+Account. Theme is gone with the dark theme: see §2.
 
 `/meta/` stays. It publishes the severity labels and every other enum.
 

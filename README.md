@@ -20,7 +20,9 @@ Each worktree gets its own ports and database.
 | | |
 | --- | --- |
 | `just init` | services, dependencies, migrations, admin, hooks |
-| `just dev` | postgres, redis, migrations, then the server and poller |
+| `just dev` | postgres, redis, migrations, then the server, poller and client |
+| `just api` | the server alone, against the stores `just up` started |
+| `just app` | the client alone, against this worktree's server |
 | `just test` | the suite, on the host |
 | `just check` | everything CI runs, in the image CI runs it in |
 | `just lint` | fix and format |

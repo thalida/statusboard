@@ -16,16 +16,31 @@ default:
 # that also changes the database. The human asked for exactly this,
 # since a fresh worktree that only warns still fails unexplained.
 
-# Ctrl-C stops the server and the poller together.
+# Ctrl-C stops every process together.
 
-# Run the app: stores, migrations, server, poller.
+# Run the app: stores, migrations, server, poller, client.
 [group('Daily')]
 dev: up migrate
     @{{wt}} ; trap 'kill 0' EXIT INT TERM ; \
-      echo "http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
-      cd api ; \
-      uv run celery -A api worker -B -l info & \
-      uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
+      echo "api    http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
+      echo "client http://$WORKTREE_SLUG.localhost:$CLIENT_PORT/" ; \
+      (cd api && uv run celery -A api worker -B -l info) & \
+      just app & \
+      just api
+
+# This starts no stores and no poller. Run `just up` first.
+# For all of them together, run `just dev`.
+
+# Run the server on this worktree's reserved port.
+[group('Daily')]
+api:
+    @{{wt}} ; cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
+
+# Run the client on this worktree's reserved port.
+[group('Daily')]
+app:
+    @{{wt}} ; cd app && CLIENT_PORT=$CLIENT_PORT \
+      VITE_API_URL="http://$WORKTREE_SLUG.localhost:$DJANGO_PORT" pnpm dev
 
 # Arguments pass to both, so `just test -k foo` filters each.
 
@@ -62,6 +77,8 @@ check: image
     @python3 -m unittest discover -s bin/tests -v
     docker compose -f docker-compose.test.yml run --rm --entrypoint sh pytest \
       -c 'python manage.py makemigrations --check --dry-run'
+    cd app && pnpm install --frozen-lockfile && pnpm lint:ci && pnpm typecheck && pnpm test
+    cd app && pnpm codegen && git diff --exit-code src/api
     docker compose -f docker-compose.test.yml down -v
 
 # Show this worktree's ports and database.
@@ -78,6 +95,11 @@ info:
 [group('Daily')]
 prose *args:
     @python3 bin/check_prose.py {{args}}
+
+# Generate the API client from the contract.
+[group('Daily')]
+codegen:
+    cd app && pnpm codegen
 
 # Every step it calls is runnable on its own.
 
@@ -241,3 +263,4 @@ seed:
 [private]
 image:
     docker build -t statusboard-api:test api
+    docker build -t statusboard-app:test app
