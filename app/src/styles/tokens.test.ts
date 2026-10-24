@@ -5,9 +5,11 @@ import { readFileSync } from "node:fs";
 // origin, not the file. This test reads no DOM, so it runs in node.
 const css = readFileSync(new URL("./tokens.css", import.meta.url), "utf8");
 
-test("every core token the decks define is present", () => {
+test("every core token the app uses is present", () => {
   // The decks are the source. A token missing here is a rule that
   // falls back to an inherited colour and looks almost right.
+  // The decks' lifted hues are left out: they are for type on
+  // dark, and the app has no dark theme.
   const required = [
     "--u-0",
     "--u-50",
@@ -25,16 +27,12 @@ test("every core token the decks define is present", () => {
     "--u-950",
     "--green",
     "--green-ink",
-    "--green-lift",
     "--amber",
     "--amber-ink",
-    "--amber-lift",
     "--red",
     "--red-ink",
-    "--red-lift",
     "--blue",
     "--blue-ink",
-    "--blue-lift",
   ];
   for (const token of required) {
     expect(css).toContain(`${token}:`);
@@ -43,7 +41,16 @@ test("every core token the decks define is present", () => {
 
 test("the app layer names a token, never a hex", () => {
   // One hex outside the core block is a colour that no theme can
-  // change, and it is invisible until somebody switches to dark.
+  // change, and a colour no theme can change is the whole reason
+  // this layer exists.
   const appLayer = css.slice(css.indexOf("--app-ground"));
   expect(appLayer).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+});
+
+test("there is no dark theme", () => {
+  // The app is light, and the decks draw it that way. A derived dark
+  // theme nobody had approved used to apply from the system alone.
+  expect(css).not.toContain("data-theme");
+  expect(css).not.toMatch(/@media[^{]*prefers-color-scheme/);
+  expect(css).not.toContain("-lift");
 });

@@ -66,8 +66,12 @@ catalogue. Nothing is missing but menu, tabs, popover and dialog. Those are styl
 the tokens. A component library would add a second set of colour names beside the 26.
 
 **There is almost no client state.** Server state is Query. Filter state is the URL. What
-is left is the theme, the hidden state of Suggested, and the install banner's visit count.
-All three live in local storage. No store library ships until something needs one.
+is left is the hidden state of Suggested and the install banner's visit count. Both live
+in local storage. No store library ships until something needs one.
+
+The theme was a third. **The app is light, and there is no theme.** The decks draw it in
+light only, so a dark one was values nobody had approved applying from the reader's
+system. Dark is a design task before it is a code one.
 
 ### Tokens
 
@@ -497,8 +501,8 @@ The service `search_fields` go with the service list.
 ## 9. Settings
 
 The Refresh row is removed. It rendered `meta.poll_interval_seconds` read-only, and it
-read as a control over something a user cannot set. Settings holds Theme, Suggested
-services and Account.
+read as a control over something a user cannot set. Settings holds Suggested services and
+Account. Theme is gone with the dark theme: see §2.
 
 `/meta/` stays. It publishes the severity labels and every other enum.
 

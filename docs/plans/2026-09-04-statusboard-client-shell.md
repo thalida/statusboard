@@ -326,6 +326,12 @@ without touching either config."
 
 ## Task 2: The palette is 26 tokens and nothing writes a hex
 
+> **Amended after Task 9, on the human's call.** There is no dark theme. The decks draw
+> the app in light only, so the derived dark values were a theme nobody had approved,
+> applying from the reader's system. The `data-theme` block, the `prefers-color-scheme`
+> block and the four lifted hues are gone, and so is Theme in Settings. See spec §2. The
+> steps below describe what was built first.
+
 **Files:**
 - Create: `app/src/styles/tokens.css`, `app/src/styles/app.css`
 - Modify: `app/src/main.tsx`, `app/src/App.tsx`
