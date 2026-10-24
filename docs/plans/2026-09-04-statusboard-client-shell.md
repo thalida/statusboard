@@ -1078,7 +1078,7 @@ token does not bounce a signed-in reader to the sign-in page."
 Every filter is server-side, so every filter belongs in the URL. A bad value fails validation
 in one place rather than reaching the API.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/src/lib/search.test.ts`:
 
@@ -1114,12 +1114,12 @@ test("the service screen keeps its own three tabs", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `pnpm --dir app test search`
 Expected: FAIL. `./search` does not exist.
 
-- [ ] **Step 3: Write the schemas**
+- [x] **Step 3: Write the schemas**
 
 `app/src/lib/search.ts`:
 
@@ -1201,7 +1201,7 @@ export function eventSearch(raw: Raw) {
 `validateSearch` as a routing error, and a stale bookmark should show the default screen
 rather than an error page.
 
-- [ ] **Step 4: Write the root route**
+- [x] **Step 4: Write the root route**
 
 `app/src/routes/__root.tsx`:
 
@@ -1231,7 +1231,7 @@ export const Route = createRootRoute({
 });
 ```
 
-- [ ] **Step 5: Write the nine routes**
+- [x] **Step 5: Write the nine routes**
 
 Each is a file under `app/src/routes/`. The plugin builds the tree from the names.
 
@@ -1281,7 +1281,7 @@ export const Route = createFileRoute("/verify")({
 });
 ```
 
-- [ ] **Step 6: Mount the router**
+- [x] **Step 6: Mount the router**
 
 `app/src/main.tsx`:
 
@@ -1317,12 +1317,12 @@ the plugin.
 Delete `app/src/App.tsx` and its test. The router replaced them, and a component nothing
 renders is a second front door.
 
-- [ ] **Step 7: Run everything**
+- [x] **Step 7: Run everything**
 
 Run: `pnpm --dir app test && pnpm --dir app typecheck && pnpm --dir app build`
 Expected: PASS.
 
-- [ ] **Step 8: Read the URLs back**
+- [x] **Step 8: Read the URLs back**
 
 Run `just app` and open, in order:
 
@@ -1334,7 +1334,7 @@ Run `just app` and open, in order:
 The third is the one worth checking by hand. A schema that throws would show an error page
 here, and a stale bookmark is the case it exists for.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app
