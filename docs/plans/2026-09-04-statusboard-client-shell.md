@@ -1362,7 +1362,7 @@ each screen, and an unknown tab falls back instead of erroring."
 Three destinations. The third is Sign in when signed out and Settings when signed in. Signed
 out and signed in are the same screens; only the buttons differ.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/src/components/Nav.test.tsx`:
 
@@ -1417,12 +1417,12 @@ export function routerWrapper({ children }: { children: ReactNode }) {
 }
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `pnpm --dir app test Nav`
 Expected: FAIL. `./Nav` does not exist.
 
-- [ ] **Step 3: Write the nav**
+- [x] **Step 3: Write the nav**
 
 `app/src/components/Nav.tsx`:
 
@@ -1481,7 +1481,7 @@ export function Nav() {
 `useSyncExternalStore` is why `auth.subscribe` exists. Reading `auth.tokens()` in render
 would not re-render the nav when a sign-in completes on another screen.
 
-- [ ] **Step 4: Write the header and the shell**
+- [x] **Step 4: Write the header and the shell**
 
 `app/src/components/Header.tsx`:
 
@@ -1541,19 +1541,19 @@ export function Shell({
 `pb-24` is the phone's bottom pill. Without it the last row sits under the nav, which is
 the kind of thing only a real screen shows.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `pnpm --dir app test && pnpm --dir app typecheck`
 Expected: PASS.
 
-- [ ] **Step 6: Read both layouts back**
+- [ ] **Step 6: Read both layouts back**  <!-- deferred: no screen renders Shell until Task 8 -->
 
 Run `just app`. In the browser's device toolbar, look at 390px and at 1280px.
 
 Expected: a rounded pill inset from the bottom on the phone, and a row at the top on the
 desktop. Both are the same three items.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app
