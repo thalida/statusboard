@@ -2343,7 +2343,7 @@ effect twice."
 One image per component, built from that component's own directory. One image, any
 environment: the entrypoint writes the configuration at start.
 
-- [ ] **Step 1: Write the image**
+- [x] **Step 1: Write the image**
 
 `app/Dockerfile`:
 
@@ -2439,7 +2439,7 @@ dist
 .env*
 ```
 
-- [ ] **Step 2: Prove the image serves the page and the config**
+- [x] **Step 2: Prove the image serves the page and the config**
 
 Run:
 ```bash
@@ -2455,7 +2455,7 @@ docker rm -f app-smoke
 Expected: the HTML, then `window.STATUSBOARD_CONFIG = { apiUrl: "https://api.example.test" };`,
 then `200` for the deep link. The third proves the SPA fallback.
 
-- [ ] **Step 3: Add the client to `just check`**
+- [x] **Step 3: Add the client to `just check`**
 
 The two `cd app` lines from Task 3 are already there. Add the image build so the gate
 proves what ships:
@@ -2468,7 +2468,7 @@ image:
     docker build -t statusboard-app:test app
 ```
 
-- [ ] **Step 4: Add the CI job**
+- [x] **Step 4: Add the CI job**
 
 In `.github/workflows/ci.yml`, after the API steps:
 
@@ -2509,7 +2509,7 @@ In `.github/workflows/ci.yml`, after the API steps:
 Add `statusboard-app:ci` to the Trivy step, or add a second Trivy step for it. An unscanned
 image is the half of the deployment nobody is watching.
 
-- [ ] **Step 5: Hold the merge gate together**
+- [x] **Step 5: Hold the merge gate together**
 
 Run: `python3 -m unittest discover -s bin/tests`
 
@@ -2517,7 +2517,7 @@ Expected: PASS. Task 3 left this failing on purpose, and the CI job above is wha
 it. If it still fails, the wording of a `just check` line and its CI counterpart differ,
 and the test names which.
 
-- [ ] **Step 6: Release the image beside the API**
+- [x] **Step 6: Release the image beside the API**
 
 In `.github/workflows/release.yml`, add an `app` job mirroring `api`: the same tag set with
 `statusboard-app` in place of `statusboard-api`, the same cosign signing, and
@@ -2526,7 +2526,7 @@ In `.github/workflows/release.yml`, add an `app` job mirroring `api`: the same t
 Change the deploy job to `needs: [api, app]`. The image has to exist before the deploy
 pulls it, and now there are two.
 
-- [ ] **Step 7: Ship it on every green main**
+- [x] **Step 7: Ship it on every green main**
 
 A new job in `ci.yml`, so a deploy during development needs no version bump:
 
@@ -2557,7 +2557,7 @@ A new job in `ci.yml`, so a deploy during development needs no version bump:
 
 `needs: [build-and-test]` is what stops a red main becoming a deployable image.
 
-- [ ] **Step 8: Add the client to the stack**
+- [ ] **Step 8: Add the client to the stack**  <!-- not this repo: deploy-pipeline/ is its own checkout -->
 
 In `deploy-pipeline/app-statusboard/compose.yml`, replace the placeholder comment with a
 service, and make every image tag a variable:
@@ -2592,7 +2592,7 @@ Change the four API services to `${API_TAG:-latest}`, and add both names to
 
 `app` joins no link to the API. The browser calls it, not this network.
 
-- [ ] **Step 9: Deploy without a version bump**
+- [ ] **Step 9: Deploy without a version bump**  <!-- deploys production, and needs the human to say so -->
 
 On the server, set `APP_TAG=edge` and `API_TAG=edge` in the stack's `.env`, then:
 
@@ -2603,7 +2603,7 @@ just deploy
 Expected: the Forgejo run pulls the images main last built and recreates the stack. Unset
 both to return to tag-gated releases.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add app justfile .github

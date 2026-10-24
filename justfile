@@ -263,3 +263,4 @@ seed:
 [private]
 image:
     docker build -t statusboard-api:test api
+    docker build -t statusboard-app:test app

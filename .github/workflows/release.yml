@@ -129,9 +129,99 @@ jobs:
               ghcr.io/${{ github.repository_owner }}/statusboard-api:${{ steps.tag.outputs.tag }}
             ```
 
+  app:
+    name: Build and publish the client image
+    runs-on: ubuntu-latest
+    # Same guard as the API's, for the same reason.
+    if: github.actor == github.repository_owner
+    permissions:
+      contents: read # the release itself is the API job's to create
+      packages: write # to push to GHCR
+      id-token: write # for cosign keyless signing over OIDC
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tag info
+        id: tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          MAJOR=${VERSION%%.*}
+          MINOR_AND_PATCH=${VERSION#${MAJOR}.}
+          MINOR=${MINOR_AND_PATCH%%.*}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          provenance: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/statusboard-app:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-app:v${{ steps.tag.outputs.major }}.${{ steps.tag.outputs.minor }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-app:v${{ steps.tag.outputs.major }}
+            ghcr.io/${{ github.repository_owner }}/statusboard-app:latest
+            ghcr.io/${{ github.repository_owner }}/statusboard-app:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless over OIDC)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository_owner }}/statusboard-app@${{ steps.build.outputs.digest }}
+
+      # The published image, serving. It needs no database: what can
+      # break here is the page, the written config and the fallback
+      # every deep link depends on.
+      - name: Smoke test the published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/statusboard-app:${{ steps.tag.outputs.tag }}
+        run: |
+          docker pull "$IMAGE"
+          docker run -d --name smoke-app --init -p 18080:8080 \
+            -e API_URL=https://api.statusboard.dev "$IMAGE"
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{ .State.Health.Status }}' smoke-app 2>/dev/null)
+            if [ "$status" = "healthy" ]; then break; fi
+            if [ "$status" = "unhealthy" ]; then docker logs smoke-app; exit 1; fi
+            sleep 2
+          done
+          curl -sf http://localhost:18080/ > /dev/null
+          # The entrypoint wrote the deployment's own API origin.
+          curl -sf http://localhost:18080/config.js | grep -q 'api.statusboard.dev'
+          # A deep link is the app's own route, not a 404.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/services/twilio)" = 200
+          # The CSP has to survive the cache rules on index.html.
+          curl -sI http://localhost:18080/ | grep -qi 'content-security-policy'
+          docker rm -f smoke-app
+
   deploy:
     name: Deploy to production
-    needs: [api]
+    needs: [api, app]
     runs-on: ubuntu-latest
     # The image has to exist before the deploy pulls it, so this waits on
     # the release job. Skipped when the Forgejo target is not configured,

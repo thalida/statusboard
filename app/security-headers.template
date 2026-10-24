@@ -1,0 +1,13 @@
+# Every location that sets a header of its own must include this.
+#
+# nginx's add_header does not merge: a location carrying one drops
+# every header inherited from the server. The cache rules below each
+# set one, so without this the CSP is absent from exactly the
+# responses that matter.
+#
+# It renders beside the server config but is named without .conf, so
+# nginx's own conf.d glob leaves it alone and only an include pulls
+# it in.
+add_header Content-Security-Policy "default-src 'self'; connect-src 'self' ${API_URL}; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; frame-ancestors 'none'; base-uri 'self'" always;
+add_header X-Content-Type-Options nosniff always;
+add_header Referrer-Policy strict-origin-when-cross-origin always;
