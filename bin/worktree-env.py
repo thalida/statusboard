@@ -26,8 +26,10 @@ The client app is a separate origin, so CORS and CSRF follow that host. A
 value already in the environment wins, because someone may be running a
 client this cannot see.
 
-APP_URL is left alone. A sign-in link should fail rather than mail an
-address nothing serves. See api/.env.local.example.
+APP_URL follows the same host. A sign-in link is built from it, and
+every worktree serves its client somewhere only this script knows. A
+value already in the environment wins, so api/.env.local can still
+point a branch at a client running elsewhere.
 """
 
 import json
@@ -37,9 +39,8 @@ import re
 import socket
 import subprocess
 
-# The services this worktree needs a private host port for. No client app
-# exists yet. Its port is reserved anyway, so the origins below never move
-# when it arrives.
+# The services this worktree needs a private host port for. The client's
+# port is saved like the rest, so the origins below never move.
 KNOWN_KEYS = ("postgres", "redis", "django", "client")
 
 DB_USER = DB_PASSWORD = DB_NAME = "statusboard"
@@ -118,9 +119,13 @@ def main() -> None:
     # Settings read both as plain environment variables, so a worktree
     # needs no edit to answer its own client.
     client = f"http://{name}.localhost:{picked['client']}"
-    for key in ("CORS_ALLOWED_ORIGINS", "CSRF_TRUSTED_ORIGINS"):
+    for key in ("CORS_ALLOWED_ORIGINS", "CSRF_TRUSTED_ORIGINS", "APP_URL"):
         if not os.environ.get(key):
             exports[key] = client
+    # The client's verify route. It is the client's to name, and the
+    # API only joins it to APP_URL.
+    if not os.environ.get("APP_MAGIC_LINK_PATH"):
+        exports["APP_MAGIC_LINK_PATH"] = "/verify"
     for key, value in exports.items():
         print(f"export {key}={value}")
 
