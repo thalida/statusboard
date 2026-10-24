@@ -4,7 +4,7 @@ import { Tabs } from "@/components/Tabs";
 import { updatesSearch } from "@/lib/search";
 import { HOME_TABS } from "@/lib/tabs";
 
-export const Route = createFileRoute("/updates")({
+export const Route = createFileRoute("/updates/")({
   validateSearch: updatesSearch,
   component: Updates,
 });

@@ -4,7 +4,7 @@ import { usePostAuthVerify } from "@/api/statusboard";
 import { Shell } from "@/components/Shell";
 import { auth } from "@/lib/auth";
 
-export const Route = createFileRoute("/verify")({
+export const Route = createFileRoute("/verify/")({
   validateSearch: (raw: Record<string, unknown>) => ({
     token: String(raw.token ?? ""),
   }),

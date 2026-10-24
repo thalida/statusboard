@@ -3,7 +3,7 @@ import { useState } from "react";
 import { usePostAuthMagicLink } from "@/api/statusboard";
 import { Shell } from "@/components/Shell";
 
-export const Route = createFileRoute("/signin")({ component: SignIn });
+export const Route = createFileRoute("/signin/")({ component: SignIn });
 
 function SignIn() {
   const [email, setEmail] = useState("");

@@ -10,12 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SigninRouteImport } from './routes/signin'
-import { Route as UpdatesRouteImport } from './routes/updates'
-import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as DiscoverIndexRouteImport } from './routes/discover/index'
 import { Route as DiscoverAddRouteImport } from './routes/discover/add'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as SigninIndexRouteImport } from './routes/signin/index'
+import { Route as UpdatesIndexRouteImport } from './routes/updates/index'
+import { Route as VerifyIndexRouteImport } from './routes/verify/index'
 import { Route as ComponentsIdIndexRouteImport } from './routes/components/$id/index'
 import { Route as ComponentsIdUpdatesRouteImport } from './routes/components/$id/updates'
 import { Route as EventsIdIndexRouteImport } from './routes/events/$id/index'
@@ -30,26 +30,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SigninRoute = SigninRouteImport.update({
-  id: '/signin',
-  path: '/signin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UpdatesRoute = UpdatesRouteImport.update({
-  id: '/updates',
-  path: '/updates',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const VerifyRoute = VerifyRouteImport.update({
-  id: '/verify',
-  path: '/verify',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DiscoverIndexRoute = DiscoverIndexRouteImport.update({
   id: '/discover/',
   path: '/discover/',
@@ -58,6 +38,26 @@ const DiscoverIndexRoute = DiscoverIndexRouteImport.update({
 const DiscoverAddRoute = DiscoverAddRouteImport.update({
   id: '/discover/add',
   path: '/discover/add',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SigninIndexRoute = SigninIndexRouteImport.update({
+  id: '/signin/',
+  path: '/signin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpdatesIndexRoute = UpdatesIndexRouteImport.update({
+  id: '/updates/',
+  path: '/updates/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyIndexRoute = VerifyIndexRouteImport.update({
+  id: '/verify/',
+  path: '/verify/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComponentsIdIndexRoute = ComponentsIdIndexRouteImport.update({
@@ -103,12 +103,12 @@ const ServicesSlugUpdatesRoute = ServicesSlugUpdatesRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/signin': typeof SigninRoute
-  '/updates': typeof UpdatesRoute
-  '/verify': typeof VerifyRoute
   '/discover/add': typeof DiscoverAddRoute
   '/discover/': typeof DiscoverIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/signin/': typeof SigninIndexRoute
+  '/updates/': typeof UpdatesIndexRoute
+  '/verify/': typeof VerifyIndexRoute
   '/components/$id/updates': typeof ComponentsIdUpdatesRoute
   '/events/$id/about': typeof EventsIdAboutRoute
   '/events/$id/affects': typeof EventsIdAffectsRoute
@@ -120,12 +120,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/signin': typeof SigninRoute
-  '/updates': typeof UpdatesRoute
-  '/verify': typeof VerifyRoute
   '/discover/add': typeof DiscoverAddRoute
   '/discover': typeof DiscoverIndexRoute
+  '/settings': typeof SettingsIndexRoute
+  '/signin': typeof SigninIndexRoute
+  '/updates': typeof UpdatesIndexRoute
+  '/verify': typeof VerifyIndexRoute
   '/components/$id/updates': typeof ComponentsIdUpdatesRoute
   '/events/$id/about': typeof EventsIdAboutRoute
   '/events/$id/affects': typeof EventsIdAffectsRoute
@@ -138,12 +138,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/settings': typeof SettingsRoute
-  '/signin': typeof SigninRoute
-  '/updates': typeof UpdatesRoute
-  '/verify': typeof VerifyRoute
   '/discover/add': typeof DiscoverAddRoute
   '/discover/': typeof DiscoverIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/signin/': typeof SigninIndexRoute
+  '/updates/': typeof UpdatesIndexRoute
+  '/verify/': typeof VerifyIndexRoute
   '/components/$id/updates': typeof ComponentsIdUpdatesRoute
   '/events/$id/about': typeof EventsIdAboutRoute
   '/events/$id/affects': typeof EventsIdAffectsRoute
@@ -157,12 +157,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/settings'
-    | '/signin'
-    | '/updates'
-    | '/verify'
     | '/discover/add'
     | '/discover/'
+    | '/settings/'
+    | '/signin/'
+    | '/updates/'
+    | '/verify/'
     | '/components/$id/updates'
     | '/events/$id/about'
     | '/events/$id/affects'
@@ -174,12 +174,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/discover/add'
+    | '/discover'
     | '/settings'
     | '/signin'
     | '/updates'
     | '/verify'
-    | '/discover/add'
-    | '/discover'
     | '/components/$id/updates'
     | '/events/$id/about'
     | '/events/$id/affects'
@@ -191,12 +191,12 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/settings'
-    | '/signin'
-    | '/updates'
-    | '/verify'
     | '/discover/add'
     | '/discover/'
+    | '/settings/'
+    | '/signin/'
+    | '/updates/'
+    | '/verify/'
     | '/components/$id/updates'
     | '/events/$id/about'
     | '/events/$id/affects'
@@ -209,12 +209,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  SettingsRoute: typeof SettingsRoute
-  SigninRoute: typeof SigninRoute
-  UpdatesRoute: typeof UpdatesRoute
-  VerifyRoute: typeof VerifyRoute
   DiscoverAddRoute: typeof DiscoverAddRoute
   DiscoverIndexRoute: typeof DiscoverIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+  SigninIndexRoute: typeof SigninIndexRoute
+  UpdatesIndexRoute: typeof UpdatesIndexRoute
+  VerifyIndexRoute: typeof VerifyIndexRoute
   ComponentsIdUpdatesRoute: typeof ComponentsIdUpdatesRoute
   EventsIdAboutRoute: typeof EventsIdAboutRoute
   EventsIdAffectsRoute: typeof EventsIdAffectsRoute
@@ -234,34 +234,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signin': {
-      id: '/signin'
-      path: '/signin'
-      fullPath: '/signin'
-      preLoaderRoute: typeof SigninRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/updates': {
-      id: '/updates'
-      path: '/updates'
-      fullPath: '/updates'
-      preLoaderRoute: typeof UpdatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/verify': {
-      id: '/verify'
-      path: '/verify'
-      fullPath: '/verify'
-      preLoaderRoute: typeof VerifyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/discover/': {
       id: '/discover/'
       path: '/discover'
@@ -274,6 +246,34 @@ declare module '@tanstack/react-router' {
       path: '/discover/add'
       fullPath: '/discover/add'
       preLoaderRoute: typeof DiscoverAddRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signin/': {
+      id: '/signin/'
+      path: '/signin'
+      fullPath: '/signin/'
+      preLoaderRoute: typeof SigninIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/updates/': {
+      id: '/updates/'
+      path: '/updates'
+      fullPath: '/updates/'
+      preLoaderRoute: typeof UpdatesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify/': {
+      id: '/verify/'
+      path: '/verify'
+      fullPath: '/verify/'
+      preLoaderRoute: typeof VerifyIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/components/$id/': {
@@ -337,12 +337,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  SettingsRoute: SettingsRoute,
-  SigninRoute: SigninRoute,
-  UpdatesRoute: UpdatesRoute,
-  VerifyRoute: VerifyRoute,
   DiscoverAddRoute: DiscoverAddRoute,
   DiscoverIndexRoute: DiscoverIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+  SigninIndexRoute: SigninIndexRoute,
+  UpdatesIndexRoute: UpdatesIndexRoute,
+  VerifyIndexRoute: VerifyIndexRoute,
   ComponentsIdUpdatesRoute: ComponentsIdUpdatesRoute,
   EventsIdAboutRoute: EventsIdAboutRoute,
   EventsIdAffectsRoute: EventsIdAffectsRoute,
