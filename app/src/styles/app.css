@@ -3,6 +3,13 @@
 
 /* Tailwind v4 builds its utilities from this block. `bg-app-card` and
    `text-crit` exist because these names do. */
+/* The two faces, as Tailwind's own families. `font-mono` is then DM
+   Mono everywhere, which is what a duration and a stamp are set in. */
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+}
+
 @theme inline {
   --color-app-ground: var(--app-ground);
   --color-app-card: var(--app-card);
@@ -27,4 +34,5 @@
 body {
   background: var(--app-ground);
   color: var(--app-ink);
+  font-family: var(--font-sans);
 }
