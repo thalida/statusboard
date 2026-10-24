@@ -2097,7 +2097,7 @@ comes from /meta/, so a label change needs no client release."
 The backend builds `{APP_URL}{APP_MAGIC_LINK_PATH}?token=…`, so `/verify` is not ours to
 name. `MagicLinkToken` is single use.
 
-- [ ] **Step 1: Point the API at the client**
+- [x] **Step 1: Point the API at the client**
 
 In `api/.env.local`, fill the two values `just info` prints:
 
@@ -2109,7 +2109,7 @@ APP_MAGIC_LINK_PATH=/verify
 Without `APP_URL` the API refuses to send a link rather than mailing an address nothing
 serves. That refusal is deliberate, and this is the change that clears it.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `app/src/routes/verify.test.tsx`:
 
@@ -2163,12 +2163,12 @@ test("a page load with no token posts nothing", async () => {
 });
 ```
 
-- [ ] **Step 3: Run them to make sure they fail**
+- [x] **Step 3: Run them to make sure they fail**
 
 Run: `pnpm --dir app test verify`
 Expected: FAIL. The route renders a stub.
 
-- [ ] **Step 4: Write sign in**
+- [x] **Step 4: Write sign in**
 
 `app/src/routes/signin.tsx`:
 
@@ -2229,7 +2229,7 @@ function SignIn() {
 }
 ```
 
-- [ ] **Step 5: Write verify**
+- [x] **Step 5: Write verify**
 
 `app/src/routes/verify.tsx`:
 
@@ -2296,12 +2296,12 @@ function Verify() {
 The page load itself spends nothing, which is what makes an email client's prefetch safe.
 Only the post burns the token.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `pnpm --dir app test && pnpm --dir app typecheck`
 Expected: PASS.
 
-- [ ] **Step 7: Sign in for real**
+- [x] **Step 7: Sign in for real**
 
 Run `just dev`. With `EMAIL_USE_CONSOLE=1` the link prints to the terminal:
 
@@ -2315,7 +2315,7 @@ same link a second time and expect "no longer valid".
 
 That second open is the whole point of the guard. Check it by hand.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app api/.env.local.example
