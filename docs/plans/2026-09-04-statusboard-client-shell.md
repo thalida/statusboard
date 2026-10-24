@@ -16,6 +16,56 @@ v4, Radix Primitives, Lucide, Biome, Vitest, MSW.
 **Second half:** Discover, Add by URL, Service, Component, Event, Settings and the PWA are a
 following plan. They are written against the components this one creates.
 
+## Open work
+
+Every task is done. Four things are not, and each says why. Nothing here blocks the
+second-half plan.
+
+**Not in this repository**
+
+- **Task 10, step 8.** The client service in `deploy-pipeline/app-statusboard/compose.yml`,
+  and `APP_TAG` beside `API_TAG` in that stack's `.env.example`. `deploy-pipeline` is its
+  own checkout. The step holds the YAML to paste.
+
+**The human's to run**
+
+- **Task 10, step 9.** `just deploy`, which recreates production. Set `APP_TAG=edge` and
+  `API_TAG=edge` in the stack's `.env` first, or leave both unset for the tagged release.
+
+**Needs eyes, or a browser driver**
+
+- **Task 6, step 6**, and the phone half of every screen since. The desktop header was read
+  back and corrected. The 390px pill has been read by nobody: jsdom computes no layout, and
+  this repo installs no browser driver. Either look at `just app` in a device toolbar, or
+  add one and screenshot it. The same gap covers the row's 232px width, which Task 7's
+  comments cite but nothing measures.
+
+**Obsolete, left unticked rather than rewritten**
+
+- **Task 2, step 6** read the dark ground back. There is no dark theme. See the amendment
+  on Task 2.
+
+## Where the shape changed
+
+Three decisions landed after the plan was approved, each on the human's call. The spec is
+amended; these are the pointers.
+
+| Change | Spec | Code |
+| --- | --- | --- |
+| A tab is a path, a filter is a search parameter | §4 | `src/lib/search.ts`, `src/lib/tabs.ts`, `src/components/Tabs.tsx` |
+| There is no dark theme, and no Theme in Settings | §2 | `src/styles/tokens.css` |
+| Every screen is a folder | — | `src/routes/` |
+
+Two things the plan never owned, now in the code and unowned by any task:
+
+- **Typography.** `index.html` fetches Outfit and DM Mono, and `app.css` names them as
+  Tailwind families. No task covers type, so the scale and the row densities the decks
+  specify are still unmatched: the decks set a row's name at 12.5px and its state at 11px,
+  and the app uses Tailwind's defaults.
+- **A URL no route matches.** `__root.tsx` carries a `notFoundComponent`, because
+  `/services` and `/components` name no page and TanStack's own fallback is two unstyled
+  words.
+
 ## Global Constraints
 
 - The API is live at 18 operations. `docs/api/openapi.yaml` is the contract, and
@@ -89,7 +139,7 @@ following plan. They are written against the components this one creates.
   - `pnpm --dir app dev`, `build`, `test`, `lint`, `typecheck`
   - `just app` runs the dev server on this worktree's `CLIENT_PORT`
 
-- [ ] **Step 1: Create the package**
+- [x] **Step 1: Create the package**
 
 `app/package.json`:
 
@@ -124,7 +174,7 @@ pnpm add -D vitest jsdom @testing-library/react @testing-library/user-event msw
 pnpm add -D tailwindcss @tailwindcss/vite orval
 ```
 
-- [ ] **Step 2: Configure the build**
+- [x] **Step 2: Configure the build**
 
 `app/vite.config.ts`:
 
@@ -195,7 +245,7 @@ import "@testing-library/jest-dom/vitest";
 
 Add `@testing-library/jest-dom` to the dev dependencies.
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 `app/src/App.test.tsx`:
 
@@ -211,12 +261,12 @@ test("the app renders its name", () => {
 });
 ```
 
-- [ ] **Step 4: Run it to make sure it fails**
+- [x] **Step 4: Run it to make sure it fails**
 
 Run: `pnpm --dir app test`
 Expected: FAIL. `./App` does not exist.
 
-- [ ] **Step 5: Write the minimum that passes**
+- [x] **Step 5: Write the minimum that passes**
 
 `app/src/App.tsx`:
 
@@ -264,12 +314,12 @@ createRoot(root).render(
 `config.js` is written by the container entrypoint in Task 10. In development it does not
 exist, and Task 4's config module falls back. A missing script tag is not an error.
 
-- [ ] **Step 6: Run the test and the build**
+- [x] **Step 6: Run the test and the build**
 
 Run: `pnpm --dir app test && pnpm --dir app build && pnpm --dir app lint`
 Expected: PASS, a `dist/` directory, and no lint findings.
 
-- [ ] **Step 7: Add the recipes**
+- [x] **Step 7: Add the recipes**
 
 In `justfile`, in the `Daily` group:
 
@@ -302,7 +352,7 @@ node_modules/
 app/dist/
 ```
 
-- [ ] **Step 8: Prove it runs on the reserved port**
+- [x] **Step 8: Prove it runs on the reserved port**
 
 Run: `just app`, then open the URL `just info` prints for the client.
 
@@ -311,7 +361,7 @@ Expected: the page says Statusboard. The port matches `just info`, and the host 
 
 An edit that ran without error is not an edit that worked. Open the page.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app justfile .gitignore
@@ -345,7 +395,7 @@ without touching either config."
 
 Both decks carry an identical core block. A change to it must be made in both, and here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/src/styles/tokens.test.ts`:
 
@@ -379,12 +429,12 @@ test("the app layer names a token, never a hex", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `pnpm --dir app test tokens`
 Expected: FAIL. `tokens.css` does not exist.
 
-- [ ] **Step 3: Write the tokens**
+- [x] **Step 3: Write the tokens**
 
 `app/src/styles/tokens.css`. These values are the decks' core block, copied exactly:
 
@@ -497,7 +547,7 @@ Theme has three states. An explicit choice stamps `data-theme` on the root. The 
 System, stamps nothing, so `prefers-color-scheme` decides. That is why the values appear
 twice.
 
-- [ ] **Step 4: Name them to Tailwind**
+- [x] **Step 4: Name them to Tailwind**
 
 `app/src/styles/app.css`:
 
@@ -540,19 +590,19 @@ Import it from `app/src/main.tsx`:
 import "./styles/app.css";
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `pnpm --dir app test && pnpm --dir app build`
 Expected: PASS.
 
-- [ ] **Step 6: Read the result back on a screen**
+- [ ] **Step 6: Read the result back on a screen**  <!-- obsolete: it read the dark ground back, and dark is gone -->
 
 Run `just app`. In the browser's device toolbar, switch the emulated colour scheme to dark.
 
 Expected: the ground goes to `#06061F` and the type stays legible. The derived dark values
 are the one part of this file the decks never showed, so look at it rather than trusting it.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app
@@ -583,7 +633,7 @@ than every rule. Dark is derived: the decks render the app in light."
 The contract is generated from the code and `api/tests/test_contract.py` holds the two
 together. Hand-writing a type here would be a third answer to one question.
 
-- [ ] **Step 1: Write the config**
+- [x] **Step 1: Write the config**
 
 `app/orval.config.ts`:
 
@@ -613,7 +663,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `app/src/api/generated.test.ts`:
 
@@ -655,12 +705,12 @@ test("the component model carries the fields the row reads", () => {
 
 If a field was renamed in the API, `tsc` fails here rather than a screen rendering blank.
 
-- [ ] **Step 3: Run it to make sure it fails**
+- [x] **Step 3: Run it to make sure it fails**
 
 Run: `pnpm --dir app test generated`
 Expected: FAIL. `src/api` does not exist.
 
-- [ ] **Step 4: Generate, and commit the output**
+- [x] **Step 4: Generate, and commit the output**
 
 `app/src/lib/fetcher.ts` has to exist before generation. Write a stub, and Task 4 fills it:
 
@@ -682,7 +732,7 @@ Expected: PASS.
 The generated tree is **committed**. A contract change then shows what it did to the client
 in a reviewable diff.
 
-- [ ] **Step 5: Fail CI on drift**
+- [x] **Step 5: Fail CI on drift**
 
 In `justfile`, in the `Daily` group:
 
@@ -714,7 +764,7 @@ check: image
 `git diff --exit-code` is the whole check. Regenerating and finding a change means the
 committed client no longer matches the contract.
 
-- [ ] **Step 6: Prove the drift check catches a change**
+- [x] **Step 6: Prove the drift check catches a change**
 
 Run:
 ```bash
@@ -725,7 +775,7 @@ git checkout src/api
 
 Expected: a non-zero exit. A check nobody has seen fail proves nothing.
 
-- [ ] **Step 7: Hold the merge gate together**
+- [x] **Step 7: Hold the merge gate together**
 
 `bin/tests/test_merge_gate.py` fails when `just check` runs a command CI does not. Task 10
 adds the CI job. Run it now and expect a failure naming the client commands:
@@ -734,7 +784,7 @@ Run: `python3 -m unittest discover -s bin/tests`
 Expected: FAIL, naming the two `cd app` lines. That failure is the reminder, and Task 10
 clears it.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app justfile
@@ -765,7 +815,7 @@ answer to one question. CI regenerates and fails on a diff."
 The access token lives in memory. The refresh token lives in local storage. A strict CSP is
 what makes that acceptable, and Task 10 sets it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `app/src/lib/auth.test.ts`:
 
@@ -869,12 +919,12 @@ test("a signed-out read carries no header", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 Run: `pnpm --dir app test lib`
 Expected: FAIL. `./auth` does not exist and `fetcher` throws.
 
-- [ ] **Step 3: Write the config reader**
+- [x] **Step 3: Write the config reader**
 
 `app/src/lib/config.ts`:
 
@@ -920,7 +970,7 @@ app:
 A `VITE_` value is acceptable here because it never reaches the image. `config.js` wins
 whenever it exists, which is every deployment.
 
-- [ ] **Step 4: Write the token store**
+- [x] **Step 4: Write the token store**
 
 `app/src/lib/auth.ts`:
 
@@ -974,7 +1024,7 @@ export const auth = {
 };
 ```
 
-- [ ] **Step 5: Write the mutator**
+- [x] **Step 5: Write the mutator**
 
 `app/src/lib/fetcher.ts`:
 
@@ -1051,12 +1101,12 @@ export async function fetcher<T>(call: Call): Promise<T> {
 }
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `pnpm --dir app test lib && pnpm --dir app typecheck`
 Expected: PASS, all six.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app justfile
