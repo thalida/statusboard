@@ -25,9 +25,16 @@ dev: up migrate
       echo "api    http://$WORKTREE_SLUG.localhost:$DJANGO_PORT/" ; \
       echo "client http://$WORKTREE_SLUG.localhost:$CLIENT_PORT/" ; \
       (cd api && uv run celery -A api worker -B -l info) & \
-      (cd app && CLIENT_PORT=$CLIENT_PORT \
-        VITE_API_URL="http://$WORKTREE_SLUG.localhost:$DJANGO_PORT" pnpm dev) & \
-      cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
+      just app & \
+      just api
+
+# This starts no stores and no poller. Run `just up` first.
+# For all of them together, run `just dev`.
+
+# Run the server on this worktree's reserved port.
+[group('Daily')]
+api:
+    @{{wt}} ; cd api && uv run python manage.py runserver 0.0.0.0:$DJANGO_PORT
 
 # Run the client on this worktree's reserved port.
 [group('Daily')]
