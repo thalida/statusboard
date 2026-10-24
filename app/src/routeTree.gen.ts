@@ -12,12 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SigninRouteImport } from './routes/signin'
+import { Route as UpdatesRouteImport } from './routes/updates'
 import { Route as VerifyRouteImport } from './routes/verify'
-import { Route as ComponentsIdRouteImport } from './routes/components.$id'
-import { Route as DiscoverIndexRouteImport } from './routes/discover.index'
-import { Route as DiscoverAddRouteImport } from './routes/discover.add'
-import { Route as EventsIdRouteImport } from './routes/events.$id'
-import { Route as ServicesSlugRouteImport } from './routes/services.$slug'
+import { Route as DiscoverIndexRouteImport } from './routes/discover/index'
+import { Route as DiscoverAddRouteImport } from './routes/discover/add'
+import { Route as ComponentsIdIndexRouteImport } from './routes/components/$id/index'
+import { Route as ComponentsIdUpdatesRouteImport } from './routes/components/$id/updates'
+import { Route as EventsIdIndexRouteImport } from './routes/events/$id/index'
+import { Route as EventsIdAboutRouteImport } from './routes/events/$id/about'
+import { Route as EventsIdAffectsRouteImport } from './routes/events/$id/affects'
+import { Route as ServicesSlugIndexRouteImport } from './routes/services/$slug/index'
+import { Route as ServicesSlugAboutRouteImport } from './routes/services/$slug/about'
+import { Route as ServicesSlugUpdatesRouteImport } from './routes/services/$slug/updates'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,14 +40,14 @@ const SigninRoute = SigninRouteImport.update({
   path: '/signin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UpdatesRoute = UpdatesRouteImport.update({
+  id: '/updates',
+  path: '/updates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyRoute = VerifyRouteImport.update({
   id: '/verify',
   path: '/verify',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ComponentsIdRoute = ComponentsIdRouteImport.update({
-  id: '/components/$id',
-  path: '/components/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DiscoverIndexRoute = DiscoverIndexRouteImport.update({
@@ -54,14 +60,44 @@ const DiscoverAddRoute = DiscoverAddRouteImport.update({
   path: '/discover/add',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EventsIdRoute = EventsIdRouteImport.update({
-  id: '/events/$id',
-  path: '/events/$id',
+const ComponentsIdIndexRoute = ComponentsIdIndexRouteImport.update({
+  id: '/components/$id/',
+  path: '/components/$id/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ServicesSlugRoute = ServicesSlugRouteImport.update({
-  id: '/services/$slug',
-  path: '/services/$slug',
+const ComponentsIdUpdatesRoute = ComponentsIdUpdatesRouteImport.update({
+  id: '/components/$id/updates',
+  path: '/components/$id/updates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsIdIndexRoute = EventsIdIndexRouteImport.update({
+  id: '/events/$id/',
+  path: '/events/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsIdAboutRoute = EventsIdAboutRouteImport.update({
+  id: '/events/$id/about',
+  path: '/events/$id/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsIdAffectsRoute = EventsIdAffectsRouteImport.update({
+  id: '/events/$id/affects',
+  path: '/events/$id/affects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesSlugIndexRoute = ServicesSlugIndexRouteImport.update({
+  id: '/services/$slug/',
+  path: '/services/$slug/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesSlugAboutRoute = ServicesSlugAboutRouteImport.update({
+  id: '/services/$slug/about',
+  path: '/services/$slug/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicesSlugUpdatesRoute = ServicesSlugUpdatesRouteImport.update({
+  id: '/services/$slug/updates',
+  path: '/services/$slug/updates',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -69,35 +105,53 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
+  '/updates': typeof UpdatesRoute
   '/verify': typeof VerifyRoute
-  '/components/$id': typeof ComponentsIdRoute
   '/discover/add': typeof DiscoverAddRoute
-  '/events/$id': typeof EventsIdRoute
-  '/services/$slug': typeof ServicesSlugRoute
   '/discover/': typeof DiscoverIndexRoute
+  '/components/$id/updates': typeof ComponentsIdUpdatesRoute
+  '/events/$id/about': typeof EventsIdAboutRoute
+  '/events/$id/affects': typeof EventsIdAffectsRoute
+  '/services/$slug/about': typeof ServicesSlugAboutRoute
+  '/services/$slug/updates': typeof ServicesSlugUpdatesRoute
+  '/components/$id/': typeof ComponentsIdIndexRoute
+  '/events/$id/': typeof EventsIdIndexRoute
+  '/services/$slug/': typeof ServicesSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
+  '/updates': typeof UpdatesRoute
   '/verify': typeof VerifyRoute
-  '/components/$id': typeof ComponentsIdRoute
   '/discover/add': typeof DiscoverAddRoute
-  '/events/$id': typeof EventsIdRoute
-  '/services/$slug': typeof ServicesSlugRoute
   '/discover': typeof DiscoverIndexRoute
+  '/components/$id/updates': typeof ComponentsIdUpdatesRoute
+  '/events/$id/about': typeof EventsIdAboutRoute
+  '/events/$id/affects': typeof EventsIdAffectsRoute
+  '/services/$slug/about': typeof ServicesSlugAboutRoute
+  '/services/$slug/updates': typeof ServicesSlugUpdatesRoute
+  '/components/$id': typeof ComponentsIdIndexRoute
+  '/events/$id': typeof EventsIdIndexRoute
+  '/services/$slug': typeof ServicesSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/signin': typeof SigninRoute
+  '/updates': typeof UpdatesRoute
   '/verify': typeof VerifyRoute
-  '/components/$id': typeof ComponentsIdRoute
   '/discover/add': typeof DiscoverAddRoute
-  '/events/$id': typeof EventsIdRoute
-  '/services/$slug': typeof ServicesSlugRoute
   '/discover/': typeof DiscoverIndexRoute
+  '/components/$id/updates': typeof ComponentsIdUpdatesRoute
+  '/events/$id/about': typeof EventsIdAboutRoute
+  '/events/$id/affects': typeof EventsIdAffectsRoute
+  '/services/$slug/about': typeof ServicesSlugAboutRoute
+  '/services/$slug/updates': typeof ServicesSlugUpdatesRoute
+  '/components/$id/': typeof ComponentsIdIndexRoute
+  '/events/$id/': typeof EventsIdIndexRoute
+  '/services/$slug/': typeof ServicesSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -105,46 +159,70 @@ export interface FileRouteTypes {
     | '/'
     | '/settings'
     | '/signin'
+    | '/updates'
     | '/verify'
-    | '/components/$id'
     | '/discover/add'
-    | '/events/$id'
-    | '/services/$slug'
     | '/discover/'
+    | '/components/$id/updates'
+    | '/events/$id/about'
+    | '/events/$id/affects'
+    | '/services/$slug/about'
+    | '/services/$slug/updates'
+    | '/components/$id/'
+    | '/events/$id/'
+    | '/services/$slug/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/settings'
     | '/signin'
+    | '/updates'
     | '/verify'
-    | '/components/$id'
     | '/discover/add'
+    | '/discover'
+    | '/components/$id/updates'
+    | '/events/$id/about'
+    | '/events/$id/affects'
+    | '/services/$slug/about'
+    | '/services/$slug/updates'
+    | '/components/$id'
     | '/events/$id'
     | '/services/$slug'
-    | '/discover'
   id:
     | '__root__'
     | '/'
     | '/settings'
     | '/signin'
+    | '/updates'
     | '/verify'
-    | '/components/$id'
     | '/discover/add'
-    | '/events/$id'
-    | '/services/$slug'
     | '/discover/'
+    | '/components/$id/updates'
+    | '/events/$id/about'
+    | '/events/$id/affects'
+    | '/services/$slug/about'
+    | '/services/$slug/updates'
+    | '/components/$id/'
+    | '/events/$id/'
+    | '/services/$slug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRoute: typeof SettingsRoute
   SigninRoute: typeof SigninRoute
+  UpdatesRoute: typeof UpdatesRoute
   VerifyRoute: typeof VerifyRoute
-  ComponentsIdRoute: typeof ComponentsIdRoute
   DiscoverAddRoute: typeof DiscoverAddRoute
-  EventsIdRoute: typeof EventsIdRoute
-  ServicesSlugRoute: typeof ServicesSlugRoute
   DiscoverIndexRoute: typeof DiscoverIndexRoute
+  ComponentsIdUpdatesRoute: typeof ComponentsIdUpdatesRoute
+  EventsIdAboutRoute: typeof EventsIdAboutRoute
+  EventsIdAffectsRoute: typeof EventsIdAffectsRoute
+  ServicesSlugAboutRoute: typeof ServicesSlugAboutRoute
+  ServicesSlugUpdatesRoute: typeof ServicesSlugUpdatesRoute
+  ComponentsIdIndexRoute: typeof ComponentsIdIndexRoute
+  EventsIdIndexRoute: typeof EventsIdIndexRoute
+  ServicesSlugIndexRoute: typeof ServicesSlugIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -170,18 +248,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SigninRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/updates': {
+      id: '/updates'
+      path: '/updates'
+      fullPath: '/updates'
+      preLoaderRoute: typeof UpdatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify': {
       id: '/verify'
       path: '/verify'
       fullPath: '/verify'
       preLoaderRoute: typeof VerifyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/components/$id': {
-      id: '/components/$id'
-      path: '/components/$id'
-      fullPath: '/components/$id'
-      preLoaderRoute: typeof ComponentsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/discover/': {
@@ -198,18 +276,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DiscoverAddRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/events/$id': {
-      id: '/events/$id'
-      path: '/events/$id'
-      fullPath: '/events/$id'
-      preLoaderRoute: typeof EventsIdRouteImport
+    '/components/$id/': {
+      id: '/components/$id/'
+      path: '/components/$id'
+      fullPath: '/components/$id/'
+      preLoaderRoute: typeof ComponentsIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/services/$slug': {
-      id: '/services/$slug'
+    '/components/$id/updates': {
+      id: '/components/$id/updates'
+      path: '/components/$id/updates'
+      fullPath: '/components/$id/updates'
+      preLoaderRoute: typeof ComponentsIdUpdatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/$id/': {
+      id: '/events/$id/'
+      path: '/events/$id'
+      fullPath: '/events/$id/'
+      preLoaderRoute: typeof EventsIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/$id/about': {
+      id: '/events/$id/about'
+      path: '/events/$id/about'
+      fullPath: '/events/$id/about'
+      preLoaderRoute: typeof EventsIdAboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/$id/affects': {
+      id: '/events/$id/affects'
+      path: '/events/$id/affects'
+      fullPath: '/events/$id/affects'
+      preLoaderRoute: typeof EventsIdAffectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services/$slug/': {
+      id: '/services/$slug/'
       path: '/services/$slug'
-      fullPath: '/services/$slug'
-      preLoaderRoute: typeof ServicesSlugRouteImport
+      fullPath: '/services/$slug/'
+      preLoaderRoute: typeof ServicesSlugIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services/$slug/about': {
+      id: '/services/$slug/about'
+      path: '/services/$slug/about'
+      fullPath: '/services/$slug/about'
+      preLoaderRoute: typeof ServicesSlugAboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/services/$slug/updates': {
+      id: '/services/$slug/updates'
+      path: '/services/$slug/updates'
+      fullPath: '/services/$slug/updates'
+      preLoaderRoute: typeof ServicesSlugUpdatesRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -219,12 +339,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRoute: SettingsRoute,
   SigninRoute: SigninRoute,
+  UpdatesRoute: UpdatesRoute,
   VerifyRoute: VerifyRoute,
-  ComponentsIdRoute: ComponentsIdRoute,
   DiscoverAddRoute: DiscoverAddRoute,
-  EventsIdRoute: EventsIdRoute,
-  ServicesSlugRoute: ServicesSlugRoute,
   DiscoverIndexRoute: DiscoverIndexRoute,
+  ComponentsIdUpdatesRoute: ComponentsIdUpdatesRoute,
+  EventsIdAboutRoute: EventsIdAboutRoute,
+  EventsIdAffectsRoute: EventsIdAffectsRoute,
+  ServicesSlugAboutRoute: ServicesSlugAboutRoute,
+  ServicesSlugUpdatesRoute: ServicesSlugUpdatesRoute,
+  ComponentsIdIndexRoute: ComponentsIdIndexRoute,
+  EventsIdIndexRoute: EventsIdIndexRoute,
+  ServicesSlugIndexRoute: ServicesSlugIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

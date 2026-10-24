@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import type { ReactNode } from "react";
+import { type ReactNode, StrictMode } from "react";
 import { queryClient } from "./routes/__root";
 import { routeTree } from "./routeTree.gen";
 
@@ -49,11 +49,14 @@ export function errorHandlerFor(path: string) {
   return http.get(`*${path}`, () => new HttpResponse(null, { status: 500 }));
 }
 
-/** Renders the real route tree at one path.
+/** Renders the real route tree at one path, inside StrictMode.
  *
  * A screen reads its search parameters from its own route. Rendering
  * the component alone leaves `useSearch` empty, and the screen then
  * renders its default branch rather than the one under test.
+ *
+ * StrictMode because main.tsx mounts in it. It invokes an effect
+ * twice, which is the case /verify guards against.
  */
 export function renderRoute(path: string) {
   const router = createRouter({
@@ -61,5 +64,9 @@ export function renderRoute(path: string) {
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   queryClient.clear();
-  return render(<RouterProvider router={router} />);
+  return render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
 }

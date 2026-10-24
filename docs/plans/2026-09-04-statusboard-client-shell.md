@@ -52,9 +52,11 @@ following plan. They are written against the components this one creates.
 | `app/src/lib/config.ts` | reads what the entrypoint wrote |
 | `app/src/lib/auth.ts` | the token pair, and the refresh |
 | `app/src/lib/fetcher.ts` | Orval's mutator |
-| `app/src/lib/search.ts` | the search-parameter schemas every route shares |
+| `app/src/lib/search.ts` | the filter schemas, one per tab |
+| `app/src/lib/tabs.ts` | which tabs a screen has, and their paths |
 | `app/src/api/` | generated. Committed, and CI fails on a diff. |
-| `app/src/routes/` | TanStack Router file routes |
+| `app/src/routes/` | TanStack Router file routes, a folder per screen |
+| `app/src/components/Tabs.tsx` | a screen's tabs, as links |
 | `app/src/components/Row.tsx` | the deck's card, used by every list |
 | `app/src/components/Nav.tsx` | bottom pill on mobile, top bar on desktop |
 | `app/src/components/Header.tsx` | brand, the refresh stamp, the page title |
@@ -1062,6 +1064,11 @@ token does not bounce a signed-in reader to the sign-in page."
 ---
 
 ## Task 5: A URL is the whole of a screen's state
+
+> **Amended after Task 8, on the human's call.** A tab is a path now, not a `tab` search
+> parameter. See spec §4. The nine routes became fifteen, grouped in a folder per screen,
+> and each schema carries that tab's filters only. Home's two tabs are `/` and `/updates`.
+> The steps below describe what was built first; the code is the amended shape.
 
 **Files:**
 - Create: `app/src/lib/search.ts`, `app/src/routes/__root.tsx`, `app/src/routes/index.tsx`,

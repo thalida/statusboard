@@ -7,18 +7,20 @@ import {
 } from "@/api/statusboard";
 import { Row } from "@/components/Row";
 import { Shell } from "@/components/Shell";
+import { Tabs } from "@/components/Tabs";
 import { auth } from "@/lib/auth";
 import { since } from "@/lib/duration";
 import { useSeverityLabels } from "@/lib/meta";
-import { homeSearch } from "@/lib/search";
+import { boardSearch } from "@/lib/search";
+import { HOME_TABS } from "@/lib/tabs";
 
 export const Route = createFileRoute("/")({
-  validateSearch: homeSearch,
-  component: Home,
+  validateSearch: boardSearch,
+  component: Board,
 });
 
-function Home() {
-  const { tab, severity } = Route.useSearch();
+function Board() {
+  const { severity } = Route.useSearch();
   const signedIn = useSyncExternalStore(
     auth.subscribe,
     () => auth.tokens() !== null,
@@ -41,17 +43,16 @@ function Home() {
   );
 
   const list = signedIn ? mine : catalog;
-
-  if (list.isError) return <Unreachable onRetry={() => list.refetch()} />;
-
-  const rows = list.data?.results ?? [];
   const checked = list.data?.aggregates?.oldest_refreshed_at;
 
   return (
     <Shell title="Home" checkedAt={checked ? `${since(checked)} ago` : null}>
-      {tab === "board" ? (
+      <Tabs tabs={HOME_TABS} />
+      {list.isError ? (
+        <Unreachable onRetry={() => list.refetch()} />
+      ) : (
         <ul className="grid gap-2 md:grid-cols-[repeat(auto-fill,minmax(212px,1fr))]">
-          {rows.map((component) => (
+          {(list.data?.results ?? []).map((component) => (
             <li key={component.id}>
               <Row
                 component={component}
@@ -61,8 +62,6 @@ function Home() {
             </li>
           ))}
         </ul>
-      ) : (
-        <p>Updates arrives with the next plan.</p>
       )}
     </Shell>
   );
@@ -70,11 +69,11 @@ function Home() {
 
 function Unreachable({ onRetry }: { onRetry: () => void }) {
   return (
-    <Shell title="Home">
+    <>
       <p>Can't reach statusboard.</p>
       <button type="button" onClick={onRetry} className="mt-3 underline">
         Retry
       </button>
-    </Shell>
+    </>
   );
 }

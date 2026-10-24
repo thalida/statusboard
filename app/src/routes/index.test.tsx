@@ -57,12 +57,22 @@ test("the severity word comes from /meta/, not from the client", async () => {
   expect(await screen.findByText(/Thoroughly bemused/)).toBeInTheDocument();
 });
 
-test("the updates tab is a URL away", async () => {
-  // A URL is the whole of a screen's state, so the tab is readable
-  // and shareable rather than held in the component.
+test("the updates tab is its own path", async () => {
+  // A tab is a place, so it is readable and shareable rather than a
+  // parameter on the board.
   server.use(...board("Operational", 5));
-  renderRoute("/?tab=updates");
+  renderRoute("/updates");
   expect(await screen.findByText(/Updates arrives/)).toBeInTheDocument();
+});
+
+test("the board and the updates feed share one header", async () => {
+  // A tabbed screen is one page: the header stays and the body
+  // swaps. Both tabs therefore read "Home".
+  server.use(...board("Operational", 5));
+  renderRoute("/updates");
+  expect(
+    await screen.findByRole("heading", { name: "Home" }),
+  ).toBeInTheDocument();
 });
 
 test("an unreachable API says so and offers a retry", async () => {
