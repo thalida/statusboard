@@ -1583,7 +1583,7 @@ Lucide throughout: one nav cannot carry two weights."
 Home, Discover and the service screen render the same card. The row carries its state as a
 tint, and there is no dot.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `app/src/lib/duration.test.ts`:
 
@@ -1664,12 +1664,12 @@ test("operational carries no tint", () => {
 });
 ```
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 Run: `pnpm --dir app test Row duration`
 Expected: FAIL. Neither module exists.
 
-- [ ] **Step 3: Write the helpers**
+- [x] **Step 3: Write the helpers**
 
 `app/src/lib/duration.ts`:
 
@@ -1729,7 +1729,7 @@ export function severityTone(severity: number | undefined): Tone {
 Severity 0 and 1 are both red. The deck gives major and partial outage one colour and two
 words, and the word comes from `/meta/`.
 
-- [ ] **Step 4: Write the row**
+- [x] **Step 4: Write the row**
 
 `app/src/components/Row.tsx`:
 
@@ -1840,12 +1840,12 @@ Every class is then a literal Tailwind can find.
 `label` is the severity word, which the caller reads from `/meta/`. The row spells no
 state, so a label change ships without touching this file.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `pnpm --dir app test && pnpm --dir app typecheck`
 Expected: PASS, all seven.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app
