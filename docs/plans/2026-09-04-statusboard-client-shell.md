@@ -1872,7 +1872,7 @@ no state."
 
 Signed out, Home is one row per service. Signed in, it is your board. Same screen, same row.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/src/routes/index.test.tsx`, driven by Orval's generated MSW handlers:
 
@@ -1922,12 +1922,12 @@ test("an unreachable API says so and offers a retry", async () => {
 `errorHandlerFor` is an MSW handler returning 500 for one path. Write it beside
 `appWrapper`.
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `pnpm --dir app test index`
 Expected: FAIL. The route renders its tab name and nothing else.
 
-- [ ] **Step 3: Read the labels once**
+- [x] **Step 3: Read the labels once**
 
 `app/src/lib/meta.ts`:
 
@@ -1950,7 +1950,7 @@ export function useSeverityLabels(): Record<string, string> {
 `/meta/` is the one query that is cached forever. It is deployment-wide configuration, not
 status, so the no-stale-cache rule does not apply to it.
 
-- [ ] **Step 4: Write the screen**
+- [x] **Step 4: Write the screen**
 
 `app/src/routes/index.tsx`:
 
@@ -2042,12 +2042,12 @@ of `src/api/statusboard.ts` after Task 3 and correct them here.
 
 There is no stale cache and no offline banner. A failed request says so plainly.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `pnpm --dir app test && pnpm --dir app typecheck`
 Expected: PASS.
 
-- [ ] **Step 6: Read a real board back**
+- [x] **Step 6: Read a real board back**
 
 Run `just dev`, then `just seed-live` in another terminal to fill the catalog.
 
@@ -2057,7 +2057,7 @@ its colour and a duration beside it. An operational row carries no tint.
 This is the first screen that reads the live API. A shape the tests mocked wrong shows up
 here and nowhere earlier.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app
