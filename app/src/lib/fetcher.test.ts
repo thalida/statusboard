@@ -64,3 +64,19 @@ test("a signed-out read carries no header", async () => {
   const headers = new Headers(seen[0]?.headers);
   expect(headers.has("Authorization")).toBe(false);
 });
+
+test("an accepted response can have no body", async () => {
+  // The API accepts requests with 202 and sends no JSON body.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 202 })),
+  );
+
+  await expect(
+    fetcher({
+      url: "/catalog/requests/",
+      method: "POST",
+      data: { url: "https://example.test" },
+    }),
+  ).resolves.toBeUndefined();
+});

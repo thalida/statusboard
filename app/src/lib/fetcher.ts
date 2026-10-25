@@ -66,5 +66,7 @@ export async function fetcher<T>(call: Call): Promise<T> {
     if (response.status === 401) auth.signOut();
     throw new Error(`${call.method} ${call.url} answered ${response.status}`);
   }
-  return response.status === 204 ? (undefined as T) : await response.json();
+  return response.status === 202 || response.status === 204
+    ? (undefined as T)
+    : await response.json();
 }

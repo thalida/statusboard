@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/Shell";
-import { Tabs } from "@/components/Tabs";
+import { ServiceScreen } from "@/components/ServiceScreen";
 import { serviceUpdatesSearch } from "@/lib/search";
-import { SERVICE_TABS } from "@/lib/tabs";
 
 export const Route = createFileRoute("/services/$slug/updates")({
   validateSearch: serviceUpdatesSearch,
@@ -11,10 +9,34 @@ export const Route = createFileRoute("/services/$slug/updates")({
 
 function Screen() {
   const { slug } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   return (
-    <Shell title="Service">
-      <Tabs tabs={SERVICE_TABS(slug)} />
-      <p>Updates arrives with the next plan.</p>
-    </Shell>
+    <ServiceScreen
+      slug={slug}
+      tab="updates"
+      componentParams={{}}
+      eventParams={{
+        service: slug,
+        component: search.component,
+        kind: search.kind,
+        phase: search.phase,
+        cursor: search.cursor,
+      }}
+      onEventCursor={(cursor) =>
+        void navigate({ search: (old) => ({ ...old, cursor }) })
+      }
+      onEventTextFilter={(value) =>
+        void navigate({
+          search: (old) => ({ ...old, component: value, cursor: undefined }),
+        })
+      }
+      onComponentFilter={() => {}}
+      onEventFilter={(name, value) =>
+        void navigate({
+          search: (old) => ({ ...old, [name]: value, cursor: undefined }),
+        })
+      }
+    />
   );
 }

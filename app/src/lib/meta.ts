@@ -1,3 +1,4 @@
+import type { MetaEnums } from "@/api/model";
 import { useGetMeta } from "@/api/statusboard";
 
 /** The labels every screen renders, fetched once at app start.
@@ -17,4 +18,15 @@ export function useSeverityLabels(): Record<string, string> {
     },
   });
   return data?.enums?.severity ?? {};
+}
+
+export function eventPhaseLabel(
+  enums: MetaEnums | undefined,
+  kind: string | undefined,
+  phase: string | undefined,
+): string {
+  const phases = enums?.event_phase as unknown as
+    | Record<string, Record<string, string>>
+    | undefined;
+  return phases?.[kind ?? ""]?.[phase ?? ""] ?? phase ?? "";
 }

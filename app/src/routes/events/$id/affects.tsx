@@ -1,18 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/Shell";
-import { Tabs } from "@/components/Tabs";
-import { EVENT_TABS } from "@/lib/tabs";
+import { EventScreen } from "@/components/EventScreen";
+import { eventListSearch } from "@/lib/search";
 
 export const Route = createFileRoute("/events/$id/affects")({
+  validateSearch: eventListSearch,
   component: Screen,
 });
 
 function Screen() {
   const { id } = Route.useParams();
+  const { cursor } = Route.useSearch();
+  const navigate = Route.useNavigate();
   return (
-    <Shell title="Event">
-      <Tabs tabs={EVENT_TABS(id)} />
-      <p>Affects arrives with the next plan.</p>
-    </Shell>
+    <EventScreen
+      id={id}
+      tab="affects"
+      cursor={cursor}
+      onCursor={(cursor) =>
+        void navigate({ search: (old) => ({ ...old, cursor }) })
+      }
+    />
   );
 }

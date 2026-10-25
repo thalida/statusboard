@@ -54,7 +54,7 @@ const tracking = oneOf(["all", "tracked", "untracked"] as const, "all");
 
 /** `/` — the board. */
 export function boardSearch(raw: Raw) {
-  return set({ severity: severity(raw.severity) });
+  return set({ severity: severity(raw.severity), cursor: text(raw.cursor) });
 }
 
 /** `/updates` — every update across your board. */
@@ -64,12 +64,17 @@ export function updatesSearch(raw: Raw) {
     component: text(raw.component),
     kind: kind(raw.kind),
     phase: phase(raw.phase),
+    cursor: text(raw.cursor),
   });
 }
 
 /** `/discover` — one body, no tabs. */
 export function discoverSearch(raw: Raw) {
-  return set({ q: text(raw.q), severity: severity(raw.severity) });
+  return set({
+    q: text(raw.q),
+    severity: severity(raw.severity),
+    cursor: text(raw.cursor),
+  });
 }
 
 /** `/services/$slug` — the components tab. */
@@ -77,6 +82,7 @@ export function serviceComponentsSearch(raw: Raw) {
   return set({
     severity: severity(raw.severity),
     tracking: tracking(raw.tracking),
+    cursor: text(raw.cursor),
   });
 }
 
@@ -86,6 +92,7 @@ export function serviceUpdatesSearch(raw: Raw) {
     component: text(raw.component),
     kind: kind(raw.kind),
     phase: phase(raw.phase),
+    cursor: text(raw.cursor),
   });
 }
 
@@ -94,5 +101,14 @@ export const componentComponentsSearch = serviceComponentsSearch;
 
 /** `/components/$id/updates`. A component is the filter, so it takes none. */
 export function componentUpdatesSearch(raw: Raw) {
-  return set({ kind: kind(raw.kind), phase: phase(raw.phase) });
+  return set({
+    kind: kind(raw.kind),
+    phase: phase(raw.phase),
+    cursor: text(raw.cursor),
+  });
+}
+
+/** Event lists carry their page cursor and no filters. */
+export function eventListSearch(raw: Raw) {
+  return set({ cursor: text(raw.cursor) });
 }

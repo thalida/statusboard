@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/Shell";
-import { Tabs } from "@/components/Tabs";
+import { ComponentScreen } from "@/components/ComponentScreen";
 import { componentComponentsSearch } from "@/lib/search";
-import { COMPONENT_TABS } from "@/lib/tabs";
 
 export const Route = createFileRoute("/components/$id/")({
   validateSearch: componentComponentsSearch,
@@ -11,10 +9,40 @@ export const Route = createFileRoute("/components/$id/")({
 
 function Screen() {
   const { id } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   return (
-    <Shell title="Component">
-      <Tabs tabs={COMPONENT_TABS(id)} />
-      <p>Components arrives with the next plan.</p>
-    </Shell>
+    <ComponentScreen
+      id={id}
+      tab="components"
+      severity={search.severity}
+      tracking={search.tracking}
+      cursor={search.cursor}
+      eventParams={{}}
+      onComponentCursor={(cursor) =>
+        void navigate({ search: (old) => ({ ...old, cursor }) })
+      }
+      onComponentFilter={(name, value) =>
+        void navigate({
+          search: (old) => ({
+            ...old,
+            severity:
+              name === "severity"
+                ? value === undefined
+                  ? undefined
+                  : Number(value)
+                : old.severity,
+            tracking:
+              name === "tracking"
+                ? (value as ReturnType<
+                    typeof componentComponentsSearch
+                  >["tracking"])
+                : old.tracking,
+            cursor: undefined,
+          }),
+        })
+      }
+      onEventFilter={() => {}}
+    />
   );
 }

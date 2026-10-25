@@ -1,7 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/Shell";
-import { Tabs } from "@/components/Tabs";
-import { SERVICE_TABS } from "@/lib/tabs";
+import { ServiceScreen } from "@/components/ServiceScreen";
 
 export const Route = createFileRoute("/services/$slug/about")({
   component: Screen,
@@ -10,9 +8,13 @@ export const Route = createFileRoute("/services/$slug/about")({
 function Screen() {
   const { slug } = Route.useParams();
   return (
-    <Shell title="Service">
-      <Tabs tabs={SERVICE_TABS(slug)} />
-      <p>About arrives with the next plan.</p>
-    </Shell>
+    <ServiceScreen
+      slug={slug}
+      tab="about"
+      componentParams={{}}
+      eventParams={{}}
+      onComponentFilter={() => {}}
+      onEventFilter={() => {}}
+    />
   );
 }

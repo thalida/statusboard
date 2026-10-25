@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { Shell } from "@/components/Shell";
 
 export const queryClient = new QueryClient({
@@ -18,6 +19,7 @@ export const queryClient = new QueryClient({
 export const Route = createRootRoute({
   component: () => (
     <QueryClientProvider client={queryClient}>
+      <InstallPrompt />
       <Outlet />
     </QueryClientProvider>
   ),

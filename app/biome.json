@@ -17,6 +17,14 @@
           }
         }
       }
+    },
+    {
+      "includes": ["src/api/statusboard.faker.ts"],
+      "linter": {
+        "rules": {
+          "style": { "useTemplate": "off" }
+        }
+      }
     }
   ]
 }

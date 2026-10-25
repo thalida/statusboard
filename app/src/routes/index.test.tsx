@@ -54,7 +54,9 @@ test("the severity word comes from /meta/, not from the client", async () => {
   // without a client release. No client could spell this one.
   server.use(...board("Thoroughly bemused", 2));
   renderRoute("/");
-  expect(await screen.findByText(/Thoroughly bemused/)).toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: /SMS Thoroughly bemused/ }),
+  ).toBeInTheDocument();
 });
 
 test("the updates tab is its own path", async () => {
@@ -62,12 +64,13 @@ test("the updates tab is its own path", async () => {
   // parameter on the board.
   server.use(...board("Operational", 5));
   renderRoute("/updates");
-  expect(await screen.findByText(/Updates arrives/)).toBeInTheDocument();
+  expect(
+    await screen.findByText("to see updates from your board."),
+  ).toBeInTheDocument();
 });
 
 test("the board and the updates feed share one header", async () => {
-  // A tabbed screen is one page: the header stays and the body
-  // swaps. Both tabs therefore read "Home".
+  // A tabbed screen is one page: the header stays while its body swaps.
   server.use(...board("Operational", 5));
   renderRoute("/updates");
   expect(
