@@ -1,3 +1,4 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Link } from "@tanstack/react-router";
 import { MoreVertical, Plus } from "lucide-react";
 import type { Component } from "@/api/model";
@@ -54,7 +55,7 @@ export function Row({
     <div
       data-tone={tone}
       data-tinted={tinted}
-      className={`relative rounded-2xl border bg-app-card p-3 ${classes.edge} ${classes.fill}`}
+      className={`relative min-w-0 rounded-2xl border bg-app-card p-3 ${classes.edge} ${classes.fill}`}
     >
       <Link to={href} className="block">
         <div className="flex items-start gap-2">
@@ -76,18 +77,40 @@ export function Row({
         </div>
       </Link>
 
-      {onTrack ? (
+      {onTrack && component.is_tracked ? (
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label="Row menu"
+              className="absolute right-3 bottom-3 rounded-full border border-app-edge p-1"
+            >
+              <MoreVertical size={16} />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              className="z-50 rounded-xl border border-app-edge bg-app-card p-1 shadow-lg"
+            >
+              <DropdownMenu.Item
+                onSelect={() => onTrack(component)}
+                className="cursor-pointer rounded-lg px-3 py-2 text-sm outline-none focus:bg-app-chip"
+              >
+                Stop tracking
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      ) : null}
+      {onTrack && !component.is_tracked ? (
         <button
           type="button"
-          aria-label={component.is_tracked ? "Row menu" : "Track"}
+          aria-label="Track"
           onClick={() => onTrack(component)}
           className="absolute right-3 bottom-3 rounded-full border border-app-edge p-1"
         >
-          {component.is_tracked ? (
-            <MoreVertical size={16} />
-          ) : (
-            <Plus size={16} />
-          )}
+          <Plus size={16} />
         </button>
       ) : null}
     </div>

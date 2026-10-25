@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/Shell";
-import { Tabs } from "@/components/Tabs";
+import { ServiceScreen } from "@/components/ServiceScreen";
 import { serviceComponentsSearch } from "@/lib/search";
-import { SERVICE_TABS } from "@/lib/tabs";
 
 export const Route = createFileRoute("/services/$slug/")({
   validateSearch: serviceComponentsSearch,
@@ -11,10 +9,42 @@ export const Route = createFileRoute("/services/$slug/")({
 
 function Screen() {
   const { slug } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   return (
-    <Shell title="Service">
-      <Tabs tabs={SERVICE_TABS(slug)} />
-      <p>Components arrives with the next plan.</p>
-    </Shell>
+    <ServiceScreen
+      slug={slug}
+      tab="components"
+      componentParams={{
+        status__severity: search.severity,
+        tracking: search.tracking,
+        cursor: search.cursor,
+      }}
+      eventParams={{}}
+      onComponentCursor={(cursor) =>
+        void navigate({ search: (old) => ({ ...old, cursor }) })
+      }
+      onComponentFilter={(name, value) =>
+        void navigate({
+          search: (old) => ({
+            ...old,
+            severity:
+              name === "severity"
+                ? value === undefined
+                  ? undefined
+                  : Number(value)
+                : old.severity,
+            tracking:
+              name === "tracking"
+                ? (value as ReturnType<
+                    typeof serviceComponentsSearch
+                  >["tracking"])
+                : old.tracking,
+            cursor: undefined,
+          }),
+        })
+      }
+      onEventFilter={() => {}}
+    />
   );
 }

@@ -15,6 +15,7 @@ venv/
 **/.env
 **/.env.*
 !**/.env.local.example
+!api/.env.test
 
 # Django
 api/staticfiles/

@@ -9,11 +9,11 @@ import { Link } from "@tanstack/react-router";
 export function Tabs({
   tabs,
 }: {
-  tabs: readonly { to: string; label: string }[];
+  tabs: readonly { to: string; label: string; badge?: number }[];
 }) {
   return (
     <nav aria-label="Tabs" className="mb-3 flex gap-2">
-      {tabs.map(({ to, label }) => (
+      {tabs.map(({ to, label, badge }) => (
         <Link
           key={to}
           to={to}
@@ -26,6 +26,7 @@ export function Tabs({
           activeOptions={{ exact: true }}
         >
           {label}
+          {badge !== undefined ? ` ${badge}` : ""}
         </Link>
       ))}
     </nav>
